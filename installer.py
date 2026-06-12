@@ -1,0 +1,120 @@
+# -*- coding: utf-8 -*-
+"""
+UltrON — Bootstrapper Installer
+Downloads the latest production release of UltrON.exe from GitHub Releases,
+installs it locally in AppData, creates a desktop shortcut, and runs it.
+"""
+
+import os
+import sys
+import urllib.request
+import json
+import subprocess
+from pathlib import Path
+import time
+
+# Config — change this to match your repository
+GITHUB_REPO = "bitraneerajbabu/UltronPC"
+APP_NAME = "UltrON"
+
+def get_latest_release_url(repo):
+    """Fetch the browser download URL for UltrON.exe from the latest GitHub release."""
+    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) UltrONInstaller/1.0"}
+    )
+    try:
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            tag_name = data.get("tag_name", "unknown")
+            # Look for the asset named 'UltrON.exe'
+            for asset in data.get("assets", []):
+                if asset.get("name") == "UltrON.exe":
+                    return asset.get("browser_download_url"), tag_name
+    except Exception as e:
+        print(f"[ERROR] Failed to query GitHub Releases API: {e}")
+    return None, None
+
+
+def create_desktop_shortcut(target_exe: str, shortcut_path: str):
+    """Creates a desktop shortcut natively using Windows Script Host via PowerShell."""
+    working_dir = os.path.dirname(target_exe)
+    ps_command = (
+        f"$wsh = New-Object -ComObject WScript.Shell; "
+        f"$shortcut = $wsh.CreateShortcut('{shortcut_path}'); "
+        f"$shortcut.TargetPath = '{target_exe}'; "
+        f"$shortcut.WorkingDirectory = '{working_dir}'; "
+        f"$shortcut.Save()"
+    )
+    try:
+        subprocess.run(["powershell", "-Command", ps_command], capture_output=True, check=True)
+    except Exception as e:
+        print(f"[WARNING] Could not create desktop shortcut: {e}")
+
+
+def main():
+    print("==========================================================")
+    print(f"       {APP_NAME} Bootstrapper Installer")
+    print("==========================================================")
+    print()
+
+    # 1. Fetch latest version info
+    print("Checking for the latest release on GitHub...")
+    download_url, version = get_latest_release_url(GITHUB_REPO)
+    
+    if not download_url:
+        print("\n[ERROR] Could not find UltrON.exe in the latest GitHub release.")
+        print(f"Please verify that a release exists in the repository '{GITHUB_REPO}'")
+        print("and 'UltrON.exe' has been uploaded as a release asset.")
+        print()
+        input("Press Enter to exit...")
+        sys.exit(1)
+
+    print(f"[OK] Found version: {version}")
+
+    # 2. Determine installation paths
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if not local_app_data:
+        local_app_data = os.path.expanduser("~\\AppData\\Local")
+        
+    install_dir = Path(local_app_data) / APP_NAME
+    install_dir.mkdir(parents=True, exist_ok=True)
+    target_exe = install_dir / "UltrON.exe"
+
+    print(f"Installing to: {install_dir}")
+
+    # 3. Download the executable
+    print(f"Downloading {APP_NAME}.exe ({version}) ...")
+    try:
+        # Custom user agent for download retrieval
+        opener = urllib.request.build_opener()
+        opener.addheaders = [("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")]
+        urllib.request.install_opener(opener)
+        
+        urllib.request.urlretrieve(download_url, str(target_exe))
+        print("[OK] Download complete!")
+    except Exception as e:
+        print(f"\n[ERROR] Failed to download application: {e}")
+        input("Press Enter to exit...")
+        sys.exit(1)
+
+    # 4. Create Desktop Shortcut
+    desktop = Path(os.path.expanduser("~\\Desktop"))
+    shortcut_path = desktop / f"{APP_NAME}.lnk"
+    print("Creating Desktop shortcut...")
+    create_desktop_shortcut(str(target_exe), str(shortcut_path))
+
+    # 5. Launch the application
+    print(f"\n[OK] Installation complete! Launching {APP_NAME}...")
+    try:
+        subprocess.Popen([str(target_exe)], cwd=str(install_dir))
+    except Exception as e:
+        print(f"[ERROR] Failed to launch application: {e}")
+
+    # Small delay so they can read the success message
+    time.sleep(3)
+
+
+if __name__ == "__main__":
+    main()

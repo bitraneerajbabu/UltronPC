@@ -145,7 +145,64 @@ def main():
     parser.add_argument("--force-build", action="store_true", help="Force full frontend rebuild")
     parser.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
+    parser.add_argument("--encrypt-env", action="store_true", help="Encrypt .env to .env.enc and rename .env to .env.bak")
+    parser.add_argument("--decrypt-env", action="store_true", help="Decrypt .env.enc back to .env")
     args = parser.parse_args()
+
+    if args.encrypt_env:
+        try:
+            from app.core.config_crypt import encrypt_file, secure_delete_file, decrypt_file_to_string
+            plain_file = BACKEND_DIR / ".env"
+            enc_file = BACKEND_DIR / ".env.enc"
+            if not plain_file.is_file():
+                log(f"Plaintext file {plain_file.name} not found!", "ERR")
+                sys.exit(1)
+            log(f"Encrypting {plain_file.name} to {enc_file.name} ...")
+            encrypt_file(str(plain_file), str(enc_file))
+            
+            # Verify the newly encrypted file is valid and can be decrypted
+            try:
+                decrypted_content = decrypt_file_to_string(str(enc_file))
+                if not decrypted_content:
+                    raise ValueError("Decrypted content is empty")
+            except Exception as verify_err:
+                raise RuntimeError(f"Verification of encrypted file failed: {verify_err}")
+            
+            is_frozen = getattr(sys, "frozen", False)
+            if is_frozen:
+                secure_delete_file(str(plain_file))
+                secure_delete_file(str(plain_file.parent / ".env.bak"))
+                log("Encryption successful! Plaintext config securely removed.", "OK")
+            else:
+                # In development source mode, keep a backup for safety
+                bak_file = plain_file.parent / ".env.bak"
+                if bak_file.exists():
+                    os.remove(str(bak_file))
+                os.rename(str(plain_file), str(bak_file))
+                log(f"Encryption successful! Plaintext config renamed to {bak_file.name}.", "OK")
+        except Exception as e:
+            log(f"Failed to encrypt config: {e}", "ERR")
+            sys.exit(1)
+        sys.exit(0)
+
+
+    if args.decrypt_env:
+        try:
+            from app.core.config_crypt import decrypt_file_to_string
+            plain_file = BACKEND_DIR / ".env"
+            enc_file = BACKEND_DIR / ".env.enc"
+            if not enc_file.is_file():
+                log(f"Encrypted file {enc_file.name} not found!", "ERR")
+                sys.exit(1)
+            log(f"Decrypting {enc_file.name} to {plain_file.name} ...")
+            decrypted = decrypt_file_to_string(str(enc_file))
+            with open(plain_file, "w", encoding="utf-8") as f:
+                f.write(decrypted)
+            log(f"Decryption successful! Plaintext config written to {plain_file.name}.", "OK")
+        except Exception as e:
+            log(f"Failed to decrypt config: {e}", "ERR")
+            sys.exit(1)
+        sys.exit(0)
 
     print()
     print("  +======================================+")

@@ -1,8 +1,7 @@
 """
 UltrON — Database Engine
 Supports:
-  • SQLite (aiosqlite) for local development
-  • TimescaleDB (PostgreSQL) async integration via asyncpg for production
+  • SQLite (aiosqlite) embedded database
 """
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -14,20 +13,12 @@ log = get_logger("ultron.database")
 
 # ─── Connection Pool ──────────────────────────────────────────────────────────
 # SQLite uses StaticPool (single connection) — pool_size/max_overflow not valid
-if settings.DB_TYPE == "sqlite":
-    from sqlalchemy.pool import StaticPool
-    engine_kwargs: dict = {
-        "echo": False,
-        "connect_args": {"check_same_thread": False},
-        "poolclass": StaticPool,
-    }
-else:
-    engine_kwargs: dict = {
-        "echo": False,
-        "pool_size": 20,
-        "max_overflow": 10,
-        "pool_pre_ping": True,
-    }
+from sqlalchemy.pool import StaticPool
+engine_kwargs: dict = {
+    "echo": False,
+    "connect_args": {"check_same_thread": False},
+    "poolclass": StaticPool,
+}
 
 engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 
@@ -102,27 +93,6 @@ async def init_db():
         except Exception as mig_err:
             log.warning(f"server_parameter_mapping migration skipped: {mig_err}")
 
-        # 3. Enable TimescaleDB extension
-        try:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"))
-            log.info("TimescaleDB extension verified.")
-        except Exception as ext_err:
-            log.warning(f"Could not verify or install TimescaleDB extension: {ext_err}")
-
-        # 3. Convert time-series tables to hypertables partitioned by timestamp
-        for table_name in ["live_data", "historical_data", "averages"]:
-            try:
-                # Check if already a hypertable
-                res = await conn.execute(text(
-                    f"SELECT 1 FROM timescaledb_information.hypertables WHERE hypertable_name = '{table_name}';"
-                ))
-                if not res.scalar():
-                    log.info(f"Converting '{table_name}' table to TimescaleDB hypertable …")
-                    await conn.execute(text(
-                        f"SELECT create_hypertable('{table_name}', 'timestamp', if_not_exists => TRUE);"
-                    ))
-                    log.info(f"'{table_name}' hypertable created ✓")
-            except Exception as hyper_err:
-                log.warning(f"Skipped hypertable conversion for '{table_name}' (database might be standard PG): {hyper_err}")
+        pass
 
     log.info("Database ready ✓")

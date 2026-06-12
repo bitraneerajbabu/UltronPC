@@ -1,4 +1,4 @@
-"""UltrON — Telemetry + Alarm ORM Models (TimescaleDB Hypertables)"""
+"""UltrON — Telemetry + Alarm ORM Models"""
 
 from datetime import datetime
 from sqlalchemy import (
@@ -36,7 +36,6 @@ class AverageType(str, enum.Enum):
 class LiveData(Base):
     """
     Stores the most recent raw reading per parameter.
-    TimescaleDB hypertable partitioned by timestamp.
     """
     __tablename__ = "live_data"
 
@@ -71,7 +70,6 @@ class LiveData(Base):
 class HistoricalData(Base):
     """
     Stores full historical raw telemetry time-series points.
-    TimescaleDB hypertable partitioned by timestamp.
     """
     __tablename__ = "historical_data"
 
@@ -106,7 +104,6 @@ class HistoricalData(Base):
 class Averages(Base):
     """
     Stores computed averages (1min, 5min, 15min, 1hr, 8hr, daily).
-    TimescaleDB hypertable partitioned by timestamp.
     """
     __tablename__ = "averages"
 

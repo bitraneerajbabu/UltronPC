@@ -194,26 +194,9 @@ Reads the **last row** of the CSV on each poll. Column 0-based index set via `re
 | `discrete_input` | FC02 | Discrete Input (1x) — digital input |
 
 ---
-
 ## Database
 
-By default, UltrON uses **SQLite** (zero config) → creates `ultron.db` automatically.
-
-### Switch to PostgreSQL / TimescaleDB (Production)
-
-1. Install PostgreSQL + TimescaleDB extension
-2. Create database and user:
-   ```sql
-   CREATE DATABASE ultron_db;
-   CREATE USER ultron WITH PASSWORD 'ultron';
-   GRANT ALL ON DATABASE ultron_db TO ultron;
-   ```
-3. Edit `.env`:
-   ```env
-   DATABASE_URL=postgresql+asyncpg://ultron:ultron@localhost:5432/ultron_db
-   DB_TYPE=postgresql
-   ```
-4. Restart the server — tables and hypertables are created automatically.
+UltrON uses **SQLite** (zero config) → creates `ultron.db` automatically.
 
 ---
 
@@ -358,9 +341,7 @@ Backend Services
     ├── Data Quality Engine  (range, NaN, frozen sensor detection)
     ├── Alarm Engine         (4-level thresholds, hysteresis deadband)
     ├── Averaging Engine     (APScheduler: 1min/5min/15min/1hr/8hr/daily)
-    └── Database
-            ├── SQLite       (development / embedded)
-            └── TimescaleDB  (production / high-frequency)
+    └── Database        SQLite (embedded database)
 ```
 
 ---
@@ -400,7 +381,7 @@ ultron_backend/
 | Variable | Default | Description |
 |---|---|---|
 | `DATABASE_URL` | `sqlite+aiosqlite:///./ultron.db` | Database connection string |
-| `DB_TYPE` | `sqlite` | `sqlite` or `postgresql` |
+| `DB_TYPE` | `sqlite` | Embedded database type |
 | `APP_NAME` | `UltrON` | Application display name |
 | `APP_VERSION` | `1.0.0` | Version string |
 | `DEBUG` | `false` | Enable debug logging |

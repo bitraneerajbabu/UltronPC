@@ -44,16 +44,11 @@ hidden = [
     "sqlalchemy.dialects.sqlite",
     "sqlalchemy.dialects.sqlite.pysqlite",
     "sqlalchemy.dialects.sqlite.aiosqlite",
-    "sqlalchemy.dialects.postgresql",
-    "sqlalchemy.dialects.postgresql.asyncpg",
-    "sqlalchemy.dialects.postgresql.psycopg2",
     "sqlalchemy.pool",
     "sqlalchemy.pool.impl",
     # aiosqlite (async SQLite driver)
     "aiosqlite",
-    # asyncpg (PostgreSQL async driver — C extension + pure Python)
-    "asyncpg",
-    "asyncpg.pgproto",
+
     # APScheduler
     "apscheduler.schedulers.asyncio",
     "apscheduler.executors.asyncio",
@@ -139,8 +134,11 @@ if UI_DIST.is_dir():
 else:
     print("WARNING: ui_dist/ not found — run 'npm run build' before packaging!")
 
-# 2. .env file (ships a production-ready template; real secrets should be injected)
-if ENV_FILE.is_file():
+# 2. Config files (.env.enc or fallback to .env)
+ENV_ENC_FILE = HERE / ".env.enc"
+if ENV_ENC_FILE.is_file():
+    datas.append((str(ENV_ENC_FILE), "."))
+elif ENV_FILE.is_file():
     datas.append((str(ENV_FILE), "."))
 
 # 3. fpdf2 ships font & image data inside its package
@@ -189,12 +187,14 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
-# ── EXE ───────────────────────────────────────────────────────────────────────
+# ─── EXE (One-File Bundle) ────────────────────────────────────────────────────
 exe = EXE(
     pyz,
     a.scripts,
-    [],
-    exclude_binaries=True,   # one-dir mode (faster startup, easier debugging)
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    exclude_binaries=False,   # one-file mode (self-contained executable)
     name="UltrON",
     debug=False,
     bootloader_ignore_signals=False,
@@ -208,16 +208,4 @@ exe = EXE(
     entitlements_file=None,
     icon="ultron.ico",       # place ultron.ico next to this .spec file
     version=None,            # replace with a version_info.txt for Windows metadata
-)
-
-# ── COLLECT (one-dir bundle) ──────────────────────────────────────────────────
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name="UltrON",           # output folder: dist/UltrON/
 )

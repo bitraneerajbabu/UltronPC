@@ -668,6 +668,8 @@ export const DashboardScreen = () => {
           }} onClick={e => e.stopPropagation()}>
             <button 
               onClick={() => setIsTrendsModalOpen(false)}
+              title="Close modal"
+              aria-label="Close modal"
               style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: T.textFaint }}
             >
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>

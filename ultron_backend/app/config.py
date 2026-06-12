@@ -1,12 +1,87 @@
 """
 UltrON — Application Configuration
 Loads from .env and provides typed settings for the entire app.
+
+WARNING: This encryption is obfuscation only; the derivation key is bundled.
+Only the public anon key and non-sensitive settings may be stored here.
+Never store the service_role key or other true secrets.
 """
 
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
 from typing import Optional
 import os
+import sys
+import io
+from pathlib import Path
+import dotenv
+
+# ─── Load Encrypted Settings if Present ──────────────────────────────────────
+IS_FROZEN = getattr(sys, "frozen", False)
+
+# Resolve execution directory containing config files
+if IS_FROZEN:
+    APP_DIR = Path(sys.executable).parent.resolve()
+else:
+    # Use parent of the app package (ultron_backend/)
+    APP_DIR = Path(__file__).parent.parent.resolve()
+
+ENV_FILE = APP_DIR / ".env"
+ENV_ENC_FILE = APP_DIR / ".env.enc"
+
+# If frozen, a default .env.enc is bundled inside _MEIPASS (the _internal/ folder)
+if IS_FROZEN:
+    BUNDLE_DIR = Path(sys._MEIPASS).resolve()
+    BUNDLE_ENV_ENC = BUNDLE_DIR / ".env.enc"
+    
+    # If no config files exist next to the executable, copy the bundled one as default
+    if not ENV_ENC_FILE.is_file() and not ENV_FILE.is_file() and BUNDLE_ENV_ENC.is_file():
+        try:
+            import shutil
+            shutil.copy2(str(BUNDLE_ENV_ENC), str(ENV_ENC_FILE))
+            print(f"[UltrON] Copied default template configuration to {ENV_ENC_FILE.name}", file=sys.stderr)
+        except Exception as copy_err:
+            print(f"[UltrON] Failed to copy template configuration: {copy_err}", file=sys.stderr)
+
+if ENV_FILE.is_file() and IS_FROZEN:
+    # Auto-encrypt unencrypted .env in packaged mode for security
+    try:
+        from app.core.config_crypt import encrypt_file, secure_delete_file, decrypt_file_to_string
+        print(f"[UltrON] Auto-encrypting plaintext configuration file {ENV_FILE.name}...", file=sys.stderr)
+        encrypt_file(str(ENV_FILE), str(ENV_ENC_FILE))
+        
+        # Verify the newly encrypted file is valid and can be decrypted
+        try:
+            decrypted_content = decrypt_file_to_string(str(ENV_ENC_FILE))
+            if not decrypted_content:
+                raise ValueError("Decrypted content is empty")
+        except Exception as verify_err:
+            raise RuntimeError(f"Verification of encrypted file failed: {verify_err}")
+            
+        # Securely delete the original plain file and any existing .env.bak
+        secure_delete_file(str(ENV_FILE))
+        secure_delete_file(str(ENV_FILE.parent / ".env.bak"))
+        print(f"[UltrON] Secured configuration! Plaintext file has been securely overwritten and removed.", file=sys.stderr)
+        
+        # Load from the newly encrypted file
+        config_dict = dotenv.dotenv_values(stream=io.StringIO(decrypted_content))
+        for k, v in config_dict.items():
+            if v is not None:
+                os.environ[k] = v
+    except Exception as e:
+        print(f"[UltrON] Error during auto-encryption of .env: {e}", file=sys.stderr)
+elif ENV_ENC_FILE.is_file():
+    try:
+        from app.core.config_crypt import decrypt_file_to_string
+        decrypted_content = decrypt_file_to_string(str(ENV_ENC_FILE))
+        # Parse and inject into os.environ
+        config_dict = dotenv.dotenv_values(stream=io.StringIO(decrypted_content))
+        for k, v in config_dict.items():
+            if v is not None:
+                os.environ[k] = v
+    except Exception as e:
+        print(f"[UltrON] Error loading/decrypting .env.enc: {e}", file=sys.stderr)
+
 
 
 class Settings(BaseSettings):
@@ -16,28 +91,17 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-
     # ─── Database ─────────────────────────────────
-    DB_TYPE: str = "sqlite"   # 'sqlite' | 'postgresql'
-    DB_PATH: str = "./ultron.db"  # used when DB_TYPE=sqlite
-    DB_USER: str = "ultron"
-    DB_PASSWORD: str = "ultron"
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
-    DB_NAME: str = "ultron_db"
+    DB_TYPE: str = "sqlite"
+    DB_PATH: str = "./ultron.db"
 
     @property
     def DATABASE_URL(self) -> str:
-        if self.DB_TYPE == "sqlite":
-            # aiosqlite uses 3 slashes for relative path, 4 for absolute
-            return f"sqlite+aiosqlite:///{self.DB_PATH}"
-        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-
+        # aiosqlite uses 3 slashes for relative path, 4 for absolute
+        return f"sqlite+aiosqlite:///{self.DB_PATH}"
     @property
     def SYNC_DATABASE_URL(self) -> str:
-        if self.DB_TYPE == "sqlite":
-            return f"sqlite:///{self.DB_PATH}"
-        return f"postgresql+psycopg2://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        return f"sqlite:///{self.DB_PATH}"
 
     # ─── Security ─────────────────────────────────────────────
     SECRET_KEY: str = "ultron-super-secret-key-change-in-production"
@@ -80,7 +144,8 @@ class Settings(BaseSettings):
     ALERT_RECIPIENTS: str = ""
 
     class Config:
-        env_file = ".env"
+        # Overrides loading of unencrypted .env if .env.enc exists and was already loaded
+        env_file = None if os.path.exists(str(APP_DIR / ".env.enc")) else ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
 

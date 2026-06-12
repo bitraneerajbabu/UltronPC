@@ -262,13 +262,7 @@ export const SettingsScreen = () => {
 
           <div className="settings-section-title" style={{ marginTop: '20px' }}>Database &amp; Retention</div>
 
-          <div className="form-group">
-            <label className="form-label">Database Engine</label>
-            <select className="form-select" name="dbType" value={formData.dbType} onChange={handleChange}>
-              <option value="sqlite">SQLite (Embedded File)</option>
-              <option value="postgresql">PostgreSQL / TimescaleDB</option>
-            </select>
-          </div>
+
 
           <div className="form-group">
             <label className="form-label">Data Retention (Days)</label>

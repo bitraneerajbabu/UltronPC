@@ -28,10 +28,8 @@ hidden = [
     "uvicorn.lifespan", "uvicorn.lifespan.on", "uvicorn.lifespan.off",
     "sqlalchemy.dialects.sqlite", "sqlalchemy.dialects.sqlite.pysqlite",
     "sqlalchemy.dialects.sqlite.aiosqlite",
-    "sqlalchemy.dialects.postgresql", "sqlalchemy.dialects.postgresql.asyncpg",
-    "sqlalchemy.dialects.postgresql.psycopg2",
     "sqlalchemy.pool", "sqlalchemy.pool.impl",
-    "aiosqlite", "asyncpg", "asyncpg.pgproto",
+    "aiosqlite",
     "apscheduler.schedulers.asyncio", "apscheduler.executors.asyncio",
     "apscheduler.jobstores.memory",
     "apscheduler.triggers.cron", "apscheduler.triggers.interval",
@@ -67,7 +65,10 @@ hidden = [
 datas = []
 if UI_DIST.is_dir():
     datas.append((str(UI_DIST), "ui_dist"))
-if ENV_FILE.is_file():
+ENV_ENC_FILE = HERE / ".env.enc"
+if ENV_ENC_FILE.is_file():
+    datas.append((str(ENV_ENC_FILE), "."))
+elif ENV_FILE.is_file():
     datas.append((str(ENV_FILE), "."))
 datas += collect_data_files("fpdf")
 datas += collect_data_files("openpyxl")
@@ -93,8 +94,10 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    [],
-    exclude_binaries=True,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    exclude_binaries=False,   # one-file mode (self-contained executable)
     name="UltrON_debug",
     debug=True,          # ← verbose PyInstaller boot messages
     bootloader_ignore_signals=False,
@@ -103,14 +106,4 @@ exe = EXE(
     console=True,        # ← CONSOLE WINDOW ON — see all errors
     icon="ultron.ico",   # place ultron.ico next to this .spec file
     disable_windowed_traceback=False,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
-    name="UltrON_debug",
 )

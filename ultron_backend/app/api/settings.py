@@ -77,7 +77,7 @@ async def reset_all_data(db: AsyncSession = Depends(get_db)):
 async def health_check(db: AsyncSession = Depends(get_db)):
     """Liveness / readiness probe endpoint."""
     try:
-        await db.execute(select(func.now()) if settings.DB_TYPE != "sqlite" else text("SELECT 1"))
+        await db.execute(text("SELECT 1"))
         db_ok = True
     except Exception:
         db_ok = False
