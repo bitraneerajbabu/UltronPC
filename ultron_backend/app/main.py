@@ -1,0 +1,263 @@
+"""
+UltrON — FastAPI Application Entry Point
+Registers all routers, WebSocket endpoint, startup/shutdown lifecycle,
+CORS for the frontend, and APScheduler for averaging + heartbeat.
+"""
+
+import asyncio
+import os
+from contextlib import asynccontextmanager
+from datetime import datetime
+from pathlib import Path
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+
+
+from app.config import settings
+from app.database import init_db
+from app.websocket_manager import ws_manager
+from app.services import polling_engine
+from app.services.averaging_engine import run_averaging_for_all_parameters
+from app.core.logger import get_logger
+
+# ─── API Routers ──────────────────────────────────────────────────────────────
+from app.api import stations, devices, parameters, telemetry, trends, reports, alarms, logs, settings as settings_api, server_config
+from app.api import auth as auth_api
+from app.api import users as users_api
+
+log = get_logger("ultron.main")
+
+
+# ─── Seed Default Admin ───────────────────────────────────────────────────────
+async def _seed_admin():
+    """
+    Create the default admin account on first startup if no users exist.
+    Credentials are taken from settings: ADMIN_USERNAME / ADMIN_PASSWORD.
+    """
+    from app.database import AsyncSessionLocal
+    from app.models.user import User
+    from app.core.security import hash_password
+    from sqlalchemy import select, func
+
+    async with AsyncSessionLocal() as db:
+        count_res = await db.execute(select(func.count(User.id)))
+        count = count_res.scalar() or 0
+        if count == 0:
+            admin = User(
+                username=settings.ADMIN_USERNAME,
+                hashed_password=hash_password(settings.ADMIN_PASSWORD),
+                role="admin",
+                full_name="System Administrator",
+                is_active=True,
+                created_by="system",
+            )
+            db.add(admin)
+            await db.commit()
+            log.info(
+                f"Default admin user seeded: username='{settings.ADMIN_USERNAME}' "
+                f"password='{settings.ADMIN_PASSWORD}' — CHANGE THIS IN PRODUCTION!"
+            )
+
+
+# ─── Lifecycle ────────────────────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown hooks."""
+    log.info("=" * 60)
+    log.info(f"  {settings.APP_NAME} v{settings.APP_VERSION} starting …")
+    log.info("=" * 60)
+
+    # 1. Create storage dirs
+    settings.ensure_dirs()
+
+    # 2. Init DB tables
+    await init_db()
+
+    # 3. Start polling engine
+    await polling_engine.start_polling()
+
+    # 4. Seed default admin user if no users exist
+    await _seed_admin()
+
+    # 5. Start APScheduler for averaging (every 1 minute)
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        run_averaging_for_all_parameters,
+        trigger="cron",
+        minute="*",       # every minute — engine decides which windows are due
+        id="averaging",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        ws_manager.send_heartbeat,
+        trigger="interval",
+        seconds=30,
+        id="heartbeat",
+        replace_existing=True,
+    )
+    from app.services.server_push import run_server_push
+
+    scheduler.add_job(
+        run_server_push,
+        args=["live"],
+        trigger="interval",
+        minutes=1,
+        id="server_push_live",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_server_push,
+        args=["delay"],
+        trigger="interval",
+        minutes=15,
+        id="server_push_delay",
+        replace_existing=True,
+    )
+    scheduler.start()
+    log.info("APScheduler started (averaging + heartbeat + server_push)")
+
+    yield   # app is running
+
+    # ─── Shutdown ─────────────────────────────────────────────────────────────
+    log.info("UltrON shutting down …")
+    scheduler.shutdown(wait=False)
+    await polling_engine.stop_polling()
+    log.info("UltrON stopped")
+
+
+# ─── App ──────────────────────────────────────────────────────────────────────
+app = FastAPI(
+    title="UltrON Industrial Monitoring API",
+    description="""
+## UltrON — Powered by Sunshine Technologies
+
+Real-time industrial telemetry platform supporting:
+- **Modbus TCP / RTU / RS485**
+- **TCP Custom Protocols**
+- **CSV File Ingestion**
+- **Live WebSocket Push**
+- **Alarm Engine with Hysteresis**
+- **Averaging Engine (1min → Daily)**
+- **Configurable Settings**: Polling, logging, DB maintenance.
+    """,
+    version=settings.APP_VERSION,
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+# ─── CORS ─────────────────────────────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # tighten in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ─── API Routes ───────────────────────────────────────────────────────────────
+PREFIX = "/api/v1"
+app.include_router(stations.router,     prefix=PREFIX)
+app.include_router(devices.router,      prefix=PREFIX)
+app.include_router(parameters.router,   prefix=PREFIX)
+app.include_router(telemetry.router,    prefix=PREFIX)
+app.include_router(trends.router,       prefix=PREFIX)
+app.include_router(reports.router,      prefix=PREFIX)
+app.include_router(alarms.router,       prefix=PREFIX)
+app.include_router(logs.router,         prefix=PREFIX)
+app.include_router(settings_api.router, prefix=PREFIX)
+app.include_router(server_config.router, prefix=PREFIX)
+app.include_router(auth_api.router,     prefix=PREFIX)
+app.include_router(users_api.router,    prefix=PREFIX)
+
+
+# ─── WebSocket Live Push ──────────────────────────────────────────────────────
+@app.websocket("/ws/live")
+async def websocket_live(
+    websocket: WebSocket,
+    station_ids: str = Query(default=""),
+):
+    """
+    WebSocket endpoint for live dashboard data.
+
+    Connect: ws://localhost:8000/ws/live?station_ids=1,2,3
+    Messages received:
+      - {"type": "live_data", "device_id": ..., "data": [...], "ts": "..."}
+      - {"type": "alarm", "alarm_id": ..., "severity": ..., ...}
+      - {"type": "heartbeat", "ts": ..., "clients": ...}
+    """
+    sids = [int(x) for x in station_ids.split(",") if x.strip().isdigit()] if station_ids else []
+    await ws_manager.connect(websocket, sids)
+    log.info(f"WS client connected. Subscribed stations: {sids or 'all'}")
+
+    try:
+        # Send welcome message
+        await websocket.send_json({
+            "type": "connected",
+            "message": f"Connected to {settings.APP_NAME} live stream",
+            "ts": datetime.utcnow().isoformat(),
+            "subscribed_stations": sids,
+        })
+        # Keep connection open — just drain incoming (clients can send ping)
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_json({"type": "pong", "ts": datetime.utcnow().isoformat()})
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+        log.info("WS client disconnected")
+
+
+_UI_DIST = Path(__file__).parent.parent / "ui_dist"
+
+# ─── Root ─────────────────────────────────────────────────────────────────────
+@app.get("/", include_in_schema=False)
+async def root():
+    index = _UI_DIST / "index.html"
+    if index.is_file():
+        return FileResponse(str(index))
+    return JSONResponse({
+        "app": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "docs": "/docs",
+        "ws": "ws://HOST:PORT/ws/live",
+        "status": "running",
+    })
+
+
+@app.get("/health", include_in_schema=False)
+async def health():
+    return {"status": "ok", "ts": datetime.utcnow().isoformat()}
+
+
+# ─── Serve Built Frontend (SPA) ───────────────────────────────────────────────
+# The Vite production build lands in ui_dist/ (same dir as this app package).
+# We mount it LAST so API routes always take priority.
+
+if _UI_DIST.is_dir():
+    # Serve JS/CSS/assets under /assets
+    _assets = _UI_DIST / "assets"
+    if _assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=str(_assets)), name="ui_assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        """
+        SPA catch-all: serve index.html for any non-API path.
+        Allows React Router / client-side routing to work on hard refresh.
+        """
+        # Don't intercept API or WebSocket paths
+        if full_path.startswith("api/") or full_path.startswith("ws"):
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+        index = _UI_DIST / "index.html"
+        if index.is_file():
+            return FileResponse(str(index))
+        return JSONResponse({"detail": "UI not built — run python run.py"}, status_code=503)
+else:
+    log.warning(
+        "ui_dist/ not found — frontend not served. "
+        "Run 'python run.py' to auto-build, or 'npm run dev' for development."
+    )

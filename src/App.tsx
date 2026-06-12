@@ -1,0 +1,513 @@
+import React, { useContext, useState, useEffect } from 'react';
+import { AppContext } from './context/AppContext';
+
+// Import Screens
+import { DashboardScreen } from './screens/DashboardScreen';
+import { DevicesScreen } from './screens/DevicesScreen';
+import { TrendsScreen } from './screens/TrendsScreen';
+import { ReportsScreen } from './screens/ReportsScreen';
+import { LogsScreen } from './screens/LogsScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
+import { ApiMappingsScreen } from './screens/ApiMappingsScreen';
+import { UsersScreen } from './screens/UsersScreen';
+
+// ─── SVG Icons ────────────────────────────────────────────────────────────────
+const DashboardIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <rect x="3" y="3" width="7" height="9" />
+    <rect x="14" y="3" width="7" height="5" />
+    <rect x="14" y="12" width="7" height="9" />
+    <rect x="3" y="16" width="7" height="5" />
+  </svg>
+);
+
+const DevicesIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+    <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+    <line x1="6" y1="6" x2="6.01" y2="6" />
+    <line x1="6" y1="18" x2="6.01" y2="18" />
+    <line x1="20" y1="6" x2="20.01" y2="6" />
+    <line x1="20" y1="18" x2="20.01" y2="18" />
+  </svg>
+);
+
+const TrendsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+  </svg>
+);
+
+const ReportsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="16" y1="13" x2="8" y2="13" />
+    <line x1="16" y1="17" x2="8" y2="17" />
+  </svg>
+);
+
+const LogsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+  </svg>
+);
+
+const SettingsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </svg>
+);
+
+const UsersIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+);
+
+const EyeIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
+const EyeOffIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+    <line x1="1" y1="1" x2="23" y2="23" />
+  </svg>
+);
+
+const MappingsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <path d="M8 6h13" />
+    <path d="M8 12h13" />
+    <path d="M8 18h13" />
+    <path d="M3 6h.01" />
+    <path d="M3 12h.01" />
+    <path d="M3 18h.01" />
+  </svg>
+);
+
+
+// ─── Nav definitions ──────────────────────────────────────────────────────────
+const ALL_NAV = [
+  { key: 'dashboardScreen', label: 'Dashboard Overview', Icon: DashboardIcon, roles: ['admin', 'client'] },
+  { key: 'devicesScreen', label: 'Devices & Config', Icon: DevicesIcon, roles: ['admin'] },
+  { key: 'apiMappingsScreen', label: 'API Mappings', Icon: MappingsIcon, roles: ['admin'] },
+  { key: 'trendsScreen', label: 'Trends Analysis', Icon: TrendsIcon, roles: ['admin', 'client'] },
+  { key: 'reportsScreen', label: 'Reports Generator', Icon: ReportsIcon, roles: ['admin', 'client'] },
+  { key: 'logsScreen', label: 'System Logs', Icon: LogsIcon, roles: ['admin'] },
+  { key: 'settingsScreen', label: 'System Settings', Icon: SettingsIcon, roles: ['admin'] },
+  { key: 'usersScreen', label: 'User Management', Icon: UsersIcon, roles: ['admin'] },
+];
+
+
+function App() {
+  const {
+    currentUser,
+    currentUserRole,
+    login,
+    logout,
+    activeScreen,
+    setActiveScreen,
+    plantName,
+    plantAddress,
+    plantLogo,
+    fetchLatestTelemetryAndKpis,
+    showToast,
+  } = useContext(AppContext);
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleLogoClick = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    if (showToast) {
+      showToast('Refreshing dashboard telemetry...', 'info');
+    }
+    if (fetchLatestTelemetryAndKpis) {
+      await fetchLatestTelemetryAndKpis();
+    }
+    setRefreshing(false);
+    if (showToast) {
+      showToast('Dashboard telemetry updated successfully.');
+    }
+  };
+
+  const handleHardRefresh = () => {
+    if (showToast) {
+      showToast('Performing hard refresh...', 'info');
+    }
+    // Clear browser caches if available
+    if (window.caches) {
+      window.caches.keys().then((names) => {
+        names.forEach((name) => {
+          window.caches.delete(name);
+        });
+      });
+    }
+    // Force reload bypassing cache after a tiny delay to show the toast
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
+  };
+
+  // Login form state
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loggingIn, setLoggingIn] = useState(false);
+
+  // Clock state
+  const [timeStr, setTimeStr] = useState('');
+
+  useEffect(() => {
+    const updateClock = () => {
+      const d = new Date();
+      const pad = (n, width = 2) => String(n).padStart(width, '0');
+      const year = d.getFullYear();
+      const month = pad(d.getMonth() + 1);
+      const date = pad(d.getDate());
+      const rawHours = d.getHours();
+      const ampm = rawHours >= 12 ? 'PM' : 'AM';
+      let hours = rawHours % 12;
+      if (hours === 0) hours = 12;
+      const hoursStr = pad(hours);
+      const minutes = pad(d.getMinutes());
+      const seconds = pad(d.getSeconds());
+      setTimeStr(`${year}.${month}.${date} || ${hoursStr}:${minutes}:${seconds} ${ampm}`);
+    };
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    if (!username.trim() || !password.trim()) {
+      setLoginError('Both username and password are required.');
+      return;
+    }
+    setLoginError('');
+    setLoggingIn(true);
+    const success = await login(username, password);
+    setLoggingIn(false);
+    if (!success) {
+      setLoginError('Authentication failed. Check your credentials.');
+    }
+  };
+
+  // Filter nav items based on role
+  const visibleNav = ALL_NAV.filter(item =>
+    currentUserRole && item.roles.includes(currentUserRole)
+  );
+
+  // Ensure active screen is accessible by this role
+  useEffect(() => {
+    if (currentUserRole === 'client') {
+      const allowedScreens = ['dashboardScreen', 'trendsScreen', 'reportsScreen'];
+      if (!allowedScreens.includes(activeScreen)) {
+        setActiveScreen('dashboardScreen');
+      }
+    }
+  }, [currentUserRole, activeScreen, setActiveScreen]);
+
+  // ─── Login Screen ──────────────────────────────────────────────────────────
+  if (!currentUser) {
+    return (
+      <div className="login-screen">
+        <div className="login-card">
+          <img src="/assets/Ultron_logo.png" className="login-logo" alt="UltrON Logo" />
+          <h2 className="login-title">Industrial Monitoring Platform</h2>
+          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '20px', textAlign: 'center' }}>
+            Sign in with your credentials to access the system
+          </p>
+
+          <form onSubmit={handleLoginSubmit}>
+            <div className="form-group">
+              <label className="form-label">Username</label>
+              <input
+                id="login-username"
+                type="text"
+                className={`form-input ${loginError ? 'error' : ''}`}
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                placeholder="Enter username"
+                autoComplete="username"
+              />
+            </div>
+
+            <div className="form-group" style={{ position: 'relative' }}>
+              <label className="form-label">Password</label>
+              <input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                className={`form-input ${loginError ? 'error' : ''}`}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Enter password"
+                autoComplete="current-password"
+                style={{ paddingRight: '44px' }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                style={{
+                  position: 'absolute', right: '12px', bottom: '10px',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#64748b', padding: '0', display: 'flex', alignItems: 'center'
+                }}
+              >
+                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+              </button>
+            </div>
+
+            {loginError && (
+              <div className="form-error-msg show" style={{ marginBottom: '18px', textAlign: 'left' }}>
+                {loginError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="btn btn-primary btn-wide"
+              style={{ height: '42px', fontSize: '14px' }}
+              disabled={loggingIn}
+            >
+              {loggingIn ? 'Signing in…' : 'Sign In to System'}
+            </button>
+          </form>
+
+
+          <img
+            src="/assets/sunshine_logo.png"
+            className="brand-logo"
+            alt="Sunshine Technologies"
+            title="Click to perform hard refresh"
+            onClick={handleHardRefresh}
+            style={{ cursor: 'pointer', transition: 'transform 0.2s ease' }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+          />
+        </div>
+        <div id="toastContainer"></div>
+      </div>
+    );
+  }
+
+  // ─── Screen renderer ───────────────────────────────────────────────────────
+  const renderScreen = () => {
+    switch (activeScreen) {
+      case 'dashboardScreen': return <DashboardScreen />;
+      case 'devicesScreen': return currentUserRole === 'admin' ? <DevicesScreen /> : <DashboardScreen />;
+      case 'apiMappingsScreen': return currentUserRole === 'admin' ? <ApiMappingsScreen /> : <DashboardScreen />;
+      case 'trendsScreen': return <TrendsScreen />;
+      case 'reportsScreen': return <ReportsScreen />;
+      case 'logsScreen': return currentUserRole === 'admin' ? <LogsScreen /> : <DashboardScreen />;
+      case 'settingsScreen': return currentUserRole === 'admin' ? <SettingsScreen /> : <DashboardScreen />;
+      case 'usersScreen': return currentUserRole === 'admin' ? <UsersScreen /> : <DashboardScreen />;
+      default: return <DashboardScreen />;
+    }
+  };
+
+  return (
+    <div className="app-shell">
+      {/* Sidebar Nav — Full Height */}
+      <aside className="sidebar" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
+        {/* Logo Section */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '24px 16px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.3)',
+          marginBottom: '16px',
+        }}>
+          <button
+            onClick={handleLogoClick}
+            disabled={refreshing}
+            title="Click to refresh dashboard values"
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: refreshing ? 'not-allowed' : 'pointer',
+              padding: 0,
+              display: 'block',
+              transition: 'transform 0.2s ease',
+              outline: 'none'
+            }}
+            onMouseEnter={e => {
+              if (!refreshing) {
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            <img
+              src="/assets/Ultron_logo.png"
+              alt="UltrON logo"
+              style={{
+                width: '160px',
+                height: 'auto',
+                display: 'block',
+                filter: 'drop-shadow(0 2px 8px rgba(15,118,110,0.15))'
+              }}
+            />
+          </button>
+        </div>
+
+        {/* Welcome Section */}
+        <div style={{ margin: '0 16px 24px 16px', padding: '16px 20px', background: 'linear-gradient(135deg, #0f766e 0%, #0d9488 100%)', borderRadius: '12px', color: '#fff', position: 'relative', boxShadow: '0 8px 20px rgba(15, 118, 110, 0.15)' }}>
+          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', background: '#34d399', borderTopLeftRadius: '12px', borderBottomLeftRadius: '12px' }}></div>
+          <div style={{ fontSize: '16px', fontWeight: '800', letterSpacing: '-0.02em', display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: '13px', fontWeight: '500', opacity: 0.9 }}>Welcome,</span>
+            {currentUser}!
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '0 16px', flex: 1, overflowY: 'auto' }}>
+          {visibleNav.map(({ key, label, Icon }) => (
+            <button
+              key={key}
+              className={`nav-button ${activeScreen === key ? 'active' : ''}`}
+              onClick={() => setActiveScreen(key)}
+            >
+              <Icon /> {label}
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      {/* Main Container — header + content + footer stacked vertically */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+
+        {/* Top Header Bar */}
+        <header className="top-bar">
+          <div className="top-left" style={{ display: 'flex', alignItems: 'center' }}>
+            {/* System Live Clock */}
+            <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f766e', background: 'rgba(15,118,110,0.06)', padding: '6px 14px', borderRadius: '6px', border: '1px solid rgba(15,118,110,0.15)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+              {timeStr}
+            </div>
+          </div>
+
+          {/* Centered Plant Information */}
+          <div className="top-middle" style={{ display: 'flex', alignItems: 'center', gap: '14px', justifyContent: 'center' }}>
+            {plantLogo && (
+              <img
+                src={plantLogo}
+                alt="Industry Logo"
+                style={{ maxHeight: '42px', maxWidth: '120px', objectFit: 'contain', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.04))' }}
+              />
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: plantLogo ? 'flex-start' : 'center' }}>
+              <div style={{ fontSize: '16px', fontWeight: '700', color: '#0f766e', fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                {plantName}
+              </div>
+              {plantAddress && (
+                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '500', marginTop: '1px' }}>
+                  {plantAddress}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="top-right" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ textAlign: 'right', fontSize: '12px', color: '#475569' }}>
+              <div>
+                Operator: <strong>{currentUser}</strong>
+              </div>
+              {/* Role badge */}
+              <div style={{ marginTop: '2px' }}>
+                <span style={{
+                  display: 'inline-block',
+                  padding: '1px 8px',
+                  borderRadius: '999px',
+                  fontSize: '10px',
+                  fontWeight: '700',
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  background: currentUserRole === 'admin' ? 'rgba(220,38,38,0.1)' : 'rgba(15,118,110,0.1)',
+                  color: currentUserRole === 'admin' ? '#dc2626' : '#0f766e',
+                  border: currentUserRole === 'admin' ? '1px solid rgba(220,38,38,0.3)' : '1px solid rgba(15,118,110,0.3)',
+                }}>
+                  {currentUserRole === 'admin' ? 'Admin' : 'Client View'}
+                </span>
+              </div>
+            </div>
+            <button className="btn btn-sm btn-danger" onClick={logout}>Sign Out</button>
+            <button
+              onClick={handleHardRefresh}
+              title="Perform Hard Refresh (Ctrl+Shift+R equivalent)"
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                transition: 'transform 0.2s ease',
+                marginLeft: '4px',
+                outline: 'none'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+            >
+              <img src="/assets/sunshine_logo.png" alt="Sunshine logo" style={{ display: 'block' }} />
+            </button>
+          </div>
+        </header>
+
+        {/* Content Panel */}
+        <main className="content-area">
+          {renderScreen()}
+        </main>
+
+        {/* Footer with Fixed Copyright and Scrolling Marquee */}
+        <footer className="copyright-footer" style={{ margin: '0', borderRadius: '0', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', display: 'flex', alignItems: 'stretch', flexShrink: 0 }}>
+          <div style={{
+            flexShrink: 0,
+            padding: '0 24px',
+            fontWeight: '700',
+            fontSize: '13px',
+            color: '#0f766e',
+            whiteSpace: 'nowrap',
+            borderRight: '1px solid rgba(15,118,110,0.2)',
+            background: 'rgba(255, 255, 255, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            letterSpacing: '0.05em',
+            textTransform: 'uppercase'
+          }}>
+            All &copy; 2026 rights reserved
+            <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#14b8a6', marginLeft: '6px', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => (e.target as HTMLElement).style.color = '#0f766e'} onMouseOut={e => (e.target as HTMLElement).style.color = '#14b8a6'}>
+              Sunshine Technologies!
+            </a>
+          </div>
+          <div className="marquee-container" style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+            <div className="marquee-content" style={{ animationDuration: '35s' }}>
+              <span>Data available at this portal is as per CPCB prescribed procedure published at cpcb.nic.in!</span>
+            </div>
+          </div>
+        </footer>
+
+      </div>{/* end main column */}
+
+      {/* Global Toast Slot */}
+      <div id="toastContainer"></div>
+    </div>
+  );
+}
+
+export default App;
