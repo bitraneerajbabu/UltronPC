@@ -4,6 +4,51 @@ import AppLayout from "@/components/AppLayout";
 import DemoDashboard from "@/pages/DemoDashboard";
 import Login from "@/pages/Login";
 
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null; errorInfo: any }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: any) {
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
+    this.setState({ errorInfo });
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 bg-slate-900 text-slate-100 min-h-screen font-sans">
+          <h1 className="text-xl font-bold text-rose-500">Render Crash Caught</h1>
+          <p className="text-sm text-slate-300 mt-2 font-mono">
+            {this.state.error?.toString()}
+          </p>
+          {this.state.errorInfo && (
+            <pre className="mt-4 p-4 bg-slate-950 rounded text-xs overflow-auto max-h-[70vh]">
+              {this.state.errorInfo.componentStack}
+            </pre>
+          )}
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 bg-indigo-600 rounded text-sm hover:bg-indigo-500 font-medium"
+          >
+            Reload Page
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function AppContent() {
   const { session, isLoading } = useAuth();
   const [currentPath, setCurrentPath] = useState("dashboard");
@@ -45,7 +90,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <ErrorBoundary>
+        <AppContent />
+      </ErrorBoundary>
     </AuthProvider>
   );
 }
