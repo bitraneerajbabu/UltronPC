@@ -5,4 +5,4 @@ import React from 'react'
  */
 export default function Activations() {
   return <div>License Activations Queue</div>
-}\n
+}

@@ -1,6 +1,175 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  background-color: #0d1117;
-  color: #c9d1d9;
-}\n
+@import "@fontsource/inter/index.css";
+@import "leaflet/dist/leaflet.css";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: oklch(1 0 0);      /* slate-50 background #f8fafc */
+    --foreground: oklch(0.145 0 0); /* slate-900 foreground */
+
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+
+    --primary: oklch(0.205 0 0); /* slate-900 */
+    --primary-foreground: oklch(0.985 0 0);
+
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+
+    --destructive: oklch(0.577 0.245 27.325);
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: oklch(0.708 0 0);
+
+    --radius: 0.625rem; /* rounded-xl (12px) */
+
+    /* Status system: HSL values */
+    --status-online: 142.1 76.2% 36.3%; /* emerald-600 */
+    --status-online-bg: 142.1 95% 97%;
+    --status-online-text: 142.1 76% 22%;
+    --status-online-border: 142.1 82% 90%;
+
+    --status-delay: 38 92% 50%; /* amber-500 */
+    --status-delay-bg: 38 95% 97%;
+    --status-delay-text: 38 90% 25%;
+    --status-delay-border: 38 90% 90%;
+
+    --status-offline: 346.8 77.2% 49.8%; /* rose-600 */
+    --status-offline-bg: 346.8 95% 97%;
+    --status-offline-text: 346.8 85% 25%;
+    --status-offline-border: 346.8 85% 90%;
+
+    --status-inactive: 215.4 16.3% 56.9%; /* slate-400 */
+    --status-inactive-bg: 210 40% 98%;
+    --status-inactive-text: 215.4 16% 30%;
+    --status-inactive-border: 214.3 31.8% 91.4%;
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+  }
+
+  .dark {
+    --background: oklch(0.145 0 0); /* slate-950 background */
+    --foreground: oklch(0.985 0 0);
+
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+
+    --card: oklch(0.205 0 0); /* slate-900 card background */
+    --card-foreground: oklch(0.985 0 0);
+
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+
+    --destructive: oklch(0.704 0.191 22.216);
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: oklch(0.556 0 0);
+
+    /* Dark mode status system */
+    --status-online: 142.1 70.2% 45.3%;
+    --status-online-bg: 142.1 80% 8%;
+    --status-online-text: 142.1 76% 75%;
+    --status-online-border: 142.1 70% 15%;
+
+    --status-delay: 38 90% 55%;
+    --status-delay-bg: 38 90% 8%;
+    --status-delay-text: 38 90% 75%;
+    --status-delay-border: 38 80% 15%;
+
+    --status-offline: 346.8 80% 55%;
+    --status-offline-bg: 346.8 80% 8%;
+    --status-offline-text: 346.8 80% 75%;
+    --status-offline-border: 346.8 70% 15%;
+
+    --status-inactive: 215.4 16.3% 46.9%;
+    --status-inactive-bg: 222.2 84% 8.3%;
+    --status-inactive-text: 215.4 16% 75%;
+    --status-inactive-border: 222.2 84% 12%;
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+  }
+  .theme {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif;
+  }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Leaflet Map Styles (fix dimensions & icons) */
+
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  border-radius: 0.75rem;
+  z-index: 1;
+}
