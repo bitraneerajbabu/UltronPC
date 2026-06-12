@@ -37,6 +37,35 @@ def get_latest_release_url(repo):
     return None, None
 
 
+def get_desktop_path() -> Path:
+    """Dynamically get the correct Desktop path, respecting OneDrive or user redirection."""
+    try:
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+        )
+        desktop_val, val_type = winreg.QueryValueEx(key, "Desktop")
+        winreg.CloseKey(key)
+        desktop_path = os.path.expandvars(desktop_val)
+        if os.path.exists(desktop_path):
+            return Path(desktop_path)
+    except Exception as e:
+        print(f"[WARNING] Registry lookup for Desktop failed: {e}")
+    
+    # Fallback 1: check common OneDrive folder path
+    onedrive_desktop = Path(os.path.expanduser("~\\OneDrive\\Desktop"))
+    if onedrive_desktop.exists():
+        return onedrive_desktop
+        
+    onedrive_desktop_alt = Path(os.path.expanduser("~\\OneDrive - Personal\\Desktop"))
+    if onedrive_desktop_alt.exists():
+        return onedrive_desktop_alt
+
+    # Fallback 2: default user profile Desktop
+    return Path(os.path.expanduser("~\\Desktop"))
+
+
 def create_desktop_shortcut(target_exe: str, shortcut_path: str):
     """Creates a desktop shortcut natively using Windows Script Host via PowerShell."""
     working_dir = os.path.dirname(target_exe)
@@ -100,9 +129,9 @@ def main():
         sys.exit(1)
 
     # 4. Create Desktop Shortcut
-    desktop = Path(os.path.expanduser("~\\Desktop"))
+    desktop = get_desktop_path()
     shortcut_path = desktop / f"{APP_NAME}.lnk"
-    print("Creating Desktop shortcut...")
+    print(f"Creating Desktop shortcut at: {shortcut_path}")
     create_desktop_shortcut(str(target_exe), str(shortcut_path))
 
     # 5. Launch the application

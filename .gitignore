@@ -18,4 +18,6 @@ build/
 .env.secrets
 .env*.local
 *.db
-*.db-journal\n
+*.db-journal
+github_token.txt
+\n
