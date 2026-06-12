@@ -16,9 +16,10 @@ import {
   Search,
   Bell,
   Clock,
-  User
+  LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -45,6 +46,7 @@ const navItems: NavItem[] = [
 ];
 
 export default function AppLayout({ children, activePath = "dashboard", onNavigate }: AppLayoutProps) {
+  const { profile, user, signOut } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [time, setTime] = useState(new Date());
@@ -77,6 +79,21 @@ export default function AppLayout({ children, activePath = "dashboard", onNaviga
       onNavigate(path);
     }
     setIsMobileOpen(false);
+  };
+
+  // Filter sidebar tabs depending on user role scopes
+  const visibleNavItems = navItems.filter((item) => {
+    if (profile?.role === "operator" && (item.path === "users" || item.path === "settings")) {
+      return false;
+    }
+    return true;
+  });
+
+  const getInitials = () => {
+    if (profile?.full_name) {
+      return profile.full_name.substring(0, 2).toUpperCase();
+    }
+    return (user?.email || "U").substring(0, 2).toUpperCase();
   };
 
   return (
@@ -115,7 +132,7 @@ export default function AppLayout({ children, activePath = "dashboard", onNaviga
 
         {/* Navigation Items */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = activePath === item.path;
             const Icon = item.icon;
             return (
@@ -129,7 +146,7 @@ export default function AppLayout({ children, activePath = "dashboard", onNaviga
                     : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-100"
                 )}
               >
-                <Icon className={cn("shrink-0", isCollapsed ? "mx-auto" : "")} />
+                <Icon className={cn("shrink-0", isCollapsed ? "mx-auto" : "")} size={18} />
                 {!isCollapsed && <span>{item.name}</span>}
               </button>
             );
@@ -137,15 +154,28 @@ export default function AppLayout({ children, activePath = "dashboard", onNaviga
         </nav>
 
         {/* Sidebar Footer */}
-        <div className="p-4 border-t border-slate-800 flex items-center space-x-3">
-          <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400 font-semibold shadow-inner shrink-0">
-            M
+        <div className="p-4 border-t border-slate-800 flex items-center justify-between">
+          <div className="flex items-center space-x-3 overflow-hidden">
+            <div className="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400 font-semibold shadow-inner shrink-0 text-xs select-none">
+              {getInitials().substring(0, 1)}
+            </div>
+            {!isCollapsed && (
+              <div className="overflow-hidden">
+                <p className="text-xs font-semibold text-slate-200 truncate">
+                  {profile?.full_name || user?.email?.split("@")[0] || "Administrator"}
+                </p>
+                <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
+              </div>
+            )}
           </div>
           {!isCollapsed && (
-            <div className="overflow-hidden">
-              <p className="text-xs font-semibold text-slate-200 truncate">Master Administrator</p>
-              <p className="text-[10px] text-slate-500 truncate">cpcb@ultron.tech</p>
-            </div>
+            <button
+              onClick={signOut}
+              title="Sign Out"
+              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-100 hover:bg-slate-800 transition-all ml-1.5"
+            >
+              <LogOut size={14} />
+            </button>
           )}
         </div>
       </aside>
@@ -175,7 +205,7 @@ export default function AppLayout({ children, activePath = "dashboard", onNaviga
             </div>
 
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-              {navItems.map((item) => {
+              {visibleNavItems.map((item) => {
                 const isActive = activePath === item.path;
                 const Icon = item.icon;
                 return (
@@ -195,14 +225,24 @@ export default function AppLayout({ children, activePath = "dashboard", onNaviga
                 );
               })}
             </nav>
-            <div className="p-4 border-t border-slate-800 flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-indigo-400 font-semibold">
-                M
+            <div className="p-4 border-t border-slate-800 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-indigo-400 font-semibold text-xs">
+                  {getInitials().substring(0, 1)}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-slate-200 truncate">
+                    {profile?.full_name || "Admin"}
+                  </p>
+                  <p className="text-[10px] text-slate-500 truncate">{user?.email}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-semibold text-slate-200">Master Admin</p>
-                <p className="text-[10px] text-slate-500">cpcb@ultron.tech</p>
-              </div>
+              <button
+                onClick={signOut}
+                className="p-1 rounded text-slate-500 hover:text-white hover:bg-slate-800"
+              >
+                <LogOut size={16} />
+              </button>
             </div>
           </aside>
         </div>
@@ -236,7 +276,7 @@ export default function AppLayout({ children, activePath = "dashboard", onNaviga
             {/* Live Clock & Date */}
             <div className="flex items-center space-x-3 text-slate-500 text-xs hidden lg:flex border-r border-slate-200 pr-6">
               <Clock size={14} className="text-slate-400" />
-              <div className="text-right">
+              <div className="text-right select-none">
                 <span className="font-medium text-slate-700">{formatTime(time)}</span>
                 <span className="mx-1.5 text-slate-300">|</span>
                 <span className="text-slate-500 text-[10px]">{formatDate(time)}</span>
@@ -250,14 +290,27 @@ export default function AppLayout({ children, activePath = "dashboard", onNaviga
             </button>
 
             {/* User Details */}
-            <div className="flex items-center space-x-2 select-none border-l border-slate-200 pl-6 h-8">
-              <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-semibold text-xs shadow-sm">
-                AD
+            <div className="flex items-center space-x-3 border-l border-slate-200 pl-6 h-8">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-semibold text-xs shadow-sm select-none">
+                  {getInitials()}
+                </div>
+                <div className="hidden sm:block text-left leading-none">
+                  <span className="text-xs font-semibold text-slate-700 block">
+                    {profile?.full_name || "System Admin"}
+                  </span>
+                  <span className="text-[9px] text-slate-400 block font-bold uppercase tracking-wider mt-0.5">
+                    {profile?.role?.replace("_", " ") || "USER"}
+                  </span>
+                </div>
               </div>
-              <div className="hidden sm:block text-left leading-none">
-                <span className="text-xs font-semibold text-slate-700 block">Apex Admin</span>
-                <span className="text-[9px] text-slate-400 block font-medium">Compliance Officer</span>
-              </div>
+              <button
+                onClick={signOut}
+                title="Sign Out"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all md:hidden"
+              >
+                <LogOut size={16} />
+              </button>
             </div>
           </div>
         </header>

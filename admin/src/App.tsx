@@ -1,9 +1,27 @@
 import React, { useState } from "react";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import DemoDashboard from "@/pages/DemoDashboard";
+import Login from "@/pages/Login";
 
-export default function App() {
+function AppContent() {
+  const { session, isLoading } = useAuth();
   const [currentPath, setCurrentPath] = useState("dashboard");
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-955/50 flex flex-col items-center justify-center space-y-3">
+        <div className="w-8 h-8 rounded-full border-2 border-indigo-200 border-t-indigo-600 animate-spin" />
+        <span className="text-xs text-slate-400 font-medium tracking-wide">
+          Verifying authorization session...
+        </span>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Login />;
+  }
 
   return (
     <AppLayout activePath={currentPath} onNavigate={setCurrentPath}>
@@ -21,5 +39,13 @@ export default function App() {
         </div>
       )}
     </AppLayout>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
