@@ -15,40 +15,13 @@ log = get_logger("ultron.database")
 # ─── Connection Pool ──────────────────────────────────────────────────────────
 engine_kwargs: dict = {
     "echo": False,  # Never log SQL statements (performance + security)
+    "pool_size": 10,
+    "max_overflow": 20,
 }
-
-if settings.DB_TYPE == "sqlite":
-    from sqlalchemy.pool import NullPool
-    engine_kwargs.update({
-        "connect_args": {"check_same_thread": False, "timeout": 30.0},
-        "poolclass": NullPool,
-    })
-else:
-    engine_kwargs.update({
-        "pool_size": 10,
-        "max_overflow": 20,
-    })
 
 engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 
-if settings.DB_TYPE == "sqlite":
-    @event.listens_for(engine.sync_engine, "connect")
-    def set_sqlite_pragma(dbapi_connection, connection_record):
-        # Disable pysqlite's default transaction handling for BEGIN IMMEDIATE
-        dbapi_connection.isolation_level = None
-        cursor = dbapi_connection.cursor()
-        try:
-            cursor.execute("PRAGMA journal_mode=WAL;")
-            cursor.execute("PRAGMA synchronous=NORMAL;")
-        except Exception:
-            pass
-        finally:
-            cursor.close()
 
-    @event.listens_for(engine.sync_engine, "begin")
-    def do_begin(conn):
-        # Emit BEGIN IMMEDIATE to lock writer early and prevent lock-upgrade deadlocks
-        conn.exec_driver_sql("BEGIN IMMEDIATE")
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
@@ -87,26 +60,17 @@ async def init_db():
 
     log.info("Initialising database tables …")
     async with engine.begin() as conn:
-        # Enable WAL mode if SQLite
-        if settings.DB_TYPE == "sqlite":
-            try:
-                await conn.execute(text("PRAGMA journal_mode=WAL;"))
-                await conn.execute(text("PRAGMA synchronous=NORMAL;"))
-            except Exception as pragma_err:
-                log.warning(f"Failed to set WAL pragma: {pragma_err}")
-
         # 1. Create standard tables
         await conn.run_sync(Base.metadata.create_all)
 
-        # Enable TimescaleDB hypertables if PostgreSQL is active and extension is available
-        if settings.DB_TYPE == "postgresql":
-            try:
-                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"))
-                await conn.execute(text("SELECT create_hypertable('historical_data', 'timestamp', if_not_exists => TRUE);"))
-                await conn.execute(text("SELECT create_hypertable('averages', 'timestamp', if_not_exists => TRUE);"))
-                log.info("TimescaleDB extension loaded and hypertables initialized.")
-            except Exception as ts_err:
-                log.info(f"TimescaleDB extension check skipped (using standard PostgreSQL): {ts_err}")
+        # 2. Enable TimescaleDB hypertables
+        try:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"))
+            await conn.execute(text("SELECT create_hypertable('historical_data', 'timestamp', if_not_exists => TRUE);"))
+            await conn.execute(text("SELECT create_hypertable('averages', 'timestamp', if_not_exists => TRUE);"))
+            log.info("TimescaleDB extension loaded and hypertables initialized.")
+        except Exception as ts_err:
+            log.info(f"TimescaleDB extension check skipped or failed: {ts_err}")
 
         # 2. Migrate: add new columns to server_config if they don't exist yet
         # (SQLAlchemy create_all won't add columns to existing tables)
