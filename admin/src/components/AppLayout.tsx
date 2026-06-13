@@ -16,7 +16,9 @@ import {
   Search,
   Bell,
   Clock,
-  LogOut
+  LogOut,
+  Cpu,
+  Server,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
@@ -35,10 +37,9 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { name: "Dashboard", icon: LayoutDashboard, path: "dashboard" },
-  { name: "Industries", icon: Building2, path: "industries" },
-  { name: "Stations", icon: Radio, path: "stations" },
+  { name: "Device Config", icon: Cpu, path: "device-config" },
+  { name: "Server Config", icon: Server, path: "server-config" },
   { name: "Parameters", icon: Activity, path: "parameters" },
-  { name: "Cameras", icon: Video, path: "cameras" },
   { name: "Reports", icon: FileBarChart, path: "reports" },
   { name: "Service", icon: Wrench, path: "service" },
   { name: "Users", icon: Users, path: "users" },

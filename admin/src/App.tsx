@@ -3,6 +3,9 @@ import { AuthProvider, useAuth } from "@/context/AuthContext";
 import AppLayout from "@/components/AppLayout";
 import DemoDashboard from "@/pages/DemoDashboard";
 import Login from "@/pages/Login";
+import Settings from "@/pages/Settings";
+import DeviceConfig from "@/pages/DeviceConfig";
+import ServerConfig from "@/pages/ServerConfig";
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -72,13 +75,19 @@ function AppContent() {
     <AppLayout activePath={currentPath} onNavigate={setCurrentPath}>
       {currentPath === "dashboard" ? (
         <DemoDashboard />
+      ) : currentPath === "device-config" ? (
+        <DeviceConfig />
+      ) : currentPath === "server-config" ? (
+        <ServerConfig />
+      ) : currentPath === "settings" ? (
+        <Settings />
       ) : (
         <div className="bg-white border border-slate-200 rounded-xl p-8 text-center max-w-lg mx-auto shadow-sm select-none">
           <h2 className="text-sm font-semibold text-slate-800 uppercase tracking-wider">
             Module Under Construction
           </h2>
           <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-            The "{currentPath.toUpperCase()}" module has its design system and parameters configured. 
+            The "{currentPath.toUpperCase()}" module has its design system and parameters configured.
             Real data integration is scheduled for the next phase.
           </p>
         </div>

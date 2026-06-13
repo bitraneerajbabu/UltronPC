@@ -28,7 +28,20 @@ class SQLAlchemyHandler(logging.Handler):
         if self._session_maker is None:
             try:
                 from app.config import settings
+                from sqlalchemy import event
                 engine = create_engine(settings.SYNC_DATABASE_URL, pool_pre_ping=True)
+
+                @event.listens_for(engine, "connect")
+                def set_sqlite_pragma(dbapi_connection, connection_record):
+                    cursor = dbapi_connection.cursor()
+                    try:
+                        cursor.execute("PRAGMA journal_mode=WAL;")
+                        cursor.execute("PRAGMA synchronous=NORMAL;")
+                    except Exception:
+                        pass
+                    finally:
+                        cursor.close()
+
                 self._session_maker = sessionmaker(bind=engine)
             except Exception:
                 pass

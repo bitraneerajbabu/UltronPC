@@ -37,7 +37,7 @@ async def list_devices(station_id: int = None, db: AsyncSession = Depends(get_db
 
 
 @router.post("/", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
-async def create_device(payload: DeviceCreate, db: AsyncSession = Depends(get_db)):
+async def create_device(payload: DeviceCreate, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     from app.models.station import Station
     from app.models.parameter import Parameter
     from sqlalchemy.orm import selectinload
@@ -100,6 +100,10 @@ async def create_device(payload: DeviceCreate, db: AsyncSession = Depends(get_db
 
     await db.flush()
     await db.commit()
+
+    # Start polling for the new device immediately
+    background_tasks.add_task(polling_engine.reload_device, device.id)
+    log.info(f"Device {device.id} ({device.name}) created — poll loop scheduled")
 
     # Return loaded
     result = await db.execute(

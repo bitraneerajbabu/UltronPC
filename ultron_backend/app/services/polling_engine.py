@@ -207,6 +207,13 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             )
             station_name = st_res.scalar() or ""
 
+        # Delete old live records for all these parameters in a single batch query
+        param_ids = [r["parameter_id"] for r in readings]
+        if param_ids:
+            await db.execute(
+                delete(LiveData).where(LiveData.parameter_id.in_(param_ids))
+            )
+
         for r in readings:
             # Safely map quality string → enum, fall back to 'bad'
             q_str = r.get("quality", "bad")
@@ -226,11 +233,7 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             )
             db.add(hist_row)
 
-            # Delete old live record for this parameter, then insert fresh one
-            # (LiveData holds only the single latest value per parameter)
-            await db.execute(
-                delete(LiveData).where(LiveData.parameter_id == r["parameter_id"])
-            )
+            # Insert fresh live record (old one deleted in batch above)
             live_row = LiveData(
                 parameter_id=r["parameter_id"],
                 timestamp=ts,

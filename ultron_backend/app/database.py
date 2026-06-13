@@ -4,6 +4,7 @@ Supports:
   • SQLite (aiosqlite) embedded database
 """
 
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
@@ -21,6 +22,17 @@ engine_kwargs: dict = {
 }
 
 engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
+
+@event.listens_for(engine.sync_engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA synchronous=NORMAL;")
+    except Exception:
+        pass
+    finally:
+        cursor.close()
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
@@ -60,6 +72,13 @@ async def init_db():
 
     log.info("Initialising database tables …")
     async with engine.begin() as conn:
+        # Enable WAL mode for SQLite
+        try:
+            await conn.execute(text("PRAGMA journal_mode=WAL;"))
+            await conn.execute(text("PRAGMA synchronous=NORMAL;"))
+        except Exception as pragma_err:
+            log.warning(f"Failed to set WAL pragma: {pragma_err}")
+
         # 1. Create standard tables
         await conn.run_sync(Base.metadata.create_all)
 
