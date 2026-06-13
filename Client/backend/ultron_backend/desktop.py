@@ -8,6 +8,44 @@ so errors are visible even when console=False.
 """
 
 import sys
+import io
+
+# ── Robust Stream Patch ───────────────────────────────────────────────────────
+# When packaged with console=False, standard streams (stdout, stderr) are None
+# or invalid. Some libraries (like uvicorn or logging) call .isatty() or try to
+# write to them, causing silent startup crashes. We patch them immediately here.
+class DummyStream:
+    def write(self, data): pass
+    def writelines(self, lines): pass
+    def flush(self): pass
+    def isatty(self): return False
+    def close(self): pass
+    @property
+    def encoding(self): return "utf-8"
+
+if getattr(sys, "frozen", False):
+    # Hide the console window immediately on Windows if running in console mode
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if hwnd:
+                ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE = 0
+        except Exception:
+            pass
+
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            setattr(sys, stream_name, DummyStream())
+        else:
+            try:
+                stream.write("")
+                if not hasattr(stream, "isatty"):
+                    stream.isatty = lambda: False
+            except Exception:
+                setattr(sys, stream_name, DummyStream())
+
 import os
 import threading
 import time
@@ -96,15 +134,7 @@ def _setup_logging():
 _setup_logging()
 log = logging.getLogger("ultron.desktop")
 
-# ── Null-stream guard ─────────────────────────────────────────────────────────
-# When frozen with console=False, sys.stdout and sys.stderr are None.
-# uvicorn's log formatter calls .isatty() on them and crashes.
-# Redirect to devnull so all stdlib logging still works safely.
-import io
-if sys.stdout is None:
-    sys.stdout = io.open(os.devnull, "w", encoding="utf-8")
-if sys.stderr is None:
-    sys.stderr = io.open(os.devnull, "w", encoding="utf-8")
+# (Null-stream guard removed; robust stream patch has been applied at the top)
 
 # ── Windows single-instance mutex ────────────────────────────────────────────
 # Also used by the Inno Setup uninstaller to detect if app is running.

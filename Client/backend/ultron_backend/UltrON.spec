@@ -44,10 +44,13 @@ hidden = [
     "sqlalchemy.dialects.sqlite",
     "sqlalchemy.dialects.sqlite.pysqlite",
     "sqlalchemy.dialects.sqlite.aiosqlite",
+    "sqlalchemy.dialects.postgresql",
+    "sqlalchemy.dialects.postgresql.asyncpg",
     "sqlalchemy.pool",
     "sqlalchemy.pool.impl",
-    # aiosqlite (async SQLite driver)
+    # Database async drivers
     "aiosqlite",
+    "asyncpg",
 
     # APScheduler
     "apscheduler.schedulers.asyncio",
@@ -196,11 +199,11 @@ exe = EXE(
     a.datas,
     exclude_binaries=False,   # one-file mode (self-contained executable)
     name="UltrON",
-    debug=False,
+    debug=True,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    console=False,           # no console window for desktop app
+    upx=False,
+    console=True,           # console window enabled for PyInstaller bootloader stability (hidden programmatically at runtime)
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
