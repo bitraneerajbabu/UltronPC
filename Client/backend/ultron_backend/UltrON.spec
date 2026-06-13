@@ -81,12 +81,8 @@ hidden = [
     "cryptography.hazmat.primitives",
     "cryptography.hazmat.backends.openssl",
     "cryptography.hazmat.bindings.openssl.binding",
-    # passlib
-    "passlib",
-    "passlib.handlers",
-    "passlib.handlers.bcrypt",
-    "passlib.context",
-    "passlib.crypto",
+    # bcrypt (password hashing — used directly, no passlib)
+    "bcrypt",
     # pymodbus — protocol support
     "pymodbus",
     "pymodbus.client",

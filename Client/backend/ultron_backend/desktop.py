@@ -134,6 +134,22 @@ def _setup_logging():
 _setup_logging()
 log = logging.getLogger("ultron.desktop")
 
+# ── Suppress noisy library loggers in production ─────────────────────────────
+# aiosqlite, sqlalchemy, httpcore flood the crash log with low-level DEBUG ops.
+_QUIET_LOGGERS = [
+    "aiosqlite",
+    "sqlalchemy.engine",
+    "sqlalchemy.pool",
+    "sqlalchemy.dialects",
+    "httpcore",
+    "httpx",
+    "asyncio",
+    "apscheduler",
+    "uvicorn.access",
+]
+for _lib in _QUIET_LOGGERS:
+    logging.getLogger(_lib).setLevel(logging.WARNING)
+
 # (Null-stream guard removed; robust stream patch has been applied at the top)
 
 # ── Windows single-instance mutex ────────────────────────────────────────────
