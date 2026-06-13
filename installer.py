@@ -32,7 +32,8 @@ def get_latest_release_url(repo):
         headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) UltrONInstaller/1.0"}
     )
     try:
-        with urllib.request.urlopen(req) as response:
+        ctx = ssl._create_unverified_context()
+        with urllib.request.urlopen(req, context=ctx) as response:
             data = json.loads(response.read().decode("utf-8"))
             tag_name = data.get("tag_name", "unknown")
             # Look for the asset named 'UltrON.exe'
@@ -123,12 +124,14 @@ def main():
     # 3. Download the executable
     print(f"Downloading {APP_NAME}.exe ({version}) ...")
     try:
-        # Custom user agent for download retrieval
-        opener = urllib.request.build_opener()
-        opener.addheaders = [("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")]
-        urllib.request.install_opener(opener)
-        
-        urllib.request.urlretrieve(download_url, str(target_exe))
+        import shutil
+        ctx = ssl._create_unverified_context()
+        req = urllib.request.Request(
+            download_url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        )
+        with urllib.request.urlopen(req, context=ctx) as response, open(str(target_exe), "wb") as out_file:
+            shutil.copyfileobj(response, out_file)
         print("[OK] Download complete!")
     except Exception as e:
         print(f"\n[ERROR] Failed to download application: {e}")
