@@ -124,6 +124,19 @@ def main():
     # 3. Download the executable
     print(f"Downloading {APP_NAME}.exe ({version}) ...")
     try:
+        # First, check if the file is currently running/locked
+        if target_exe.exists():
+            try:
+                with open(str(target_exe), "ab"):
+                    pass
+            except PermissionError:
+                print("\n[ERROR] Permission Denied: The application file is currently locked.")
+                print("This means UltrON is currently running on this PC.")
+                print("Please close UltrON (check Task Manager or system tray) and run the installer again.")
+                print()
+                input("Press Enter to exit...")
+                sys.exit(1)
+
         import shutil
         ctx = ssl._create_unverified_context()
         req = urllib.request.Request(

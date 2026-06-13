@@ -94,13 +94,23 @@ class Settings(BaseSettings):
     # ─── Database ─────────────────────────────────
     DB_TYPE: str = "sqlite"
     DB_PATH: str = "./ultron.db"
+    DB_HOST: str = "localhost"
+    DB_PORT: int = 5432
+    DB_USER: str = "postgres"
+    DB_PASSWORD: str = "postgres"
+    DB_NAME: str = "ultron"
 
     @property
     def DATABASE_URL(self) -> str:
+        if self.DB_TYPE == "postgresql":
+            return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         # aiosqlite uses 3 slashes for relative path, 4 for absolute
         return f"sqlite+aiosqlite:///{self.DB_PATH}"
+
     @property
     def SYNC_DATABASE_URL(self) -> str:
+        if self.DB_TYPE == "postgresql":
+            return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         return f"sqlite:///{self.DB_PATH}"
 
     # ─── Security ─────────────────────────────────────────────

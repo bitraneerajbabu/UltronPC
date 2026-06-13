@@ -1,4 +1,8 @@
 import asyncio
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent / "backend" / "ultron_backend"))
+
 from sqlalchemy import select
 from app.database import AsyncSessionLocal
 from app.models.server_config import ServerParameterMapping

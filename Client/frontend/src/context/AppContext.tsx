@@ -26,6 +26,7 @@ export const AppProvider = ({ children }) => {
   const [currentUserRole, setCurrentUserRole] = useState(sessionStorage.getItem('ultron_role') || null);
   const [authToken, setAuthToken] = useState(sessionStorage.getItem('ultron_token') || null);
   const [loading, setLoading] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   // User management state (admin only)
   const [usersList, setUsersList] = useState([]);
@@ -254,6 +255,7 @@ export const AppProvider = ({ children }) => {
       // Telemetry + KPIs — depends on parametersData so runs after above, but
       // both its internal sub-calls (telemetry/latest & dashboard-summary) are already parallel
       await fetchLatestTelemetryAndKpis(parametersData);
+      setHasLoadedOnce(true);
 
     } catch (err) {
       console.error('[AppContext] Failed to fetch data:', err);
@@ -625,7 +627,7 @@ export const AppProvider = ({ children }) => {
       testDeviceConnection, testParameterConnection,
       loadAllData, fetchLatestTelemetryAndKpis, showToast, API_BASE, WS_BASE, authFetch,
       plantName, plantAddress, plantLogo, saveLocalSettings,
-      loading, parseUtcDate
+      loading, parseUtcDate, hasLoadedOnce
     }}>
       {children}
     </AppContext.Provider>

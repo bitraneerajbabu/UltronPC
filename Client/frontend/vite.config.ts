@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     // Output into ultron_backend/ui_dist so run.py can serve it with FastAPI
-    outDir: './ultron_backend/ui_dist',
+    outDir: '../backend/ultron_backend/ui_dist',
     emptyOutDir: true,
   },
   server: {

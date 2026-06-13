@@ -44,7 +44,7 @@ os.chdir(str(_APP_DIR))
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BACKEND_DIR  = _APP_DIR                            # .../ultron_backend/  (or dist/UltrON/)
-PROJECT_DIR  = _APP_DIR.parent                     # .../UltrON/
+PROJECT_DIR  = _APP_DIR.parent.parent / "frontend" # .../client/frontend/
 UI_SRC_DIR   = PROJECT_DIR / "src"
 UI_DIST_DIR  = _APP_DIR / "ui_dist"
 PACKAGE_JSON = PROJECT_DIR / "package.json"

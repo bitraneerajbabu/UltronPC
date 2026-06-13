@@ -8,6 +8,7 @@ uvicorn[standard]>=0.30.0
 # ─── Database ────────────────────────────────────────────────
 sqlalchemy>=2.0.30
 aiosqlite>=0.20.0              # SQLite Async Driver
+asyncpg>=0.29.0                # PostgreSQL Async Driver
 alembic>=1.13.0                # Database migrations
 
 

@@ -60,7 +60,7 @@ const setUiDataType = (label) => {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export const DevicesScreen = () => {
-  const { parameters, devices, addParameter, editParameter, deleteParameter, addDevice, showToast, testParameterConnection } = useContext(AppContext);
+  const { parameters, devices, addParameter, editParameter, deleteParameter, addDevice, showToast, testParameterConnection, hasLoadedOnce } = useContext(AppContext);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
@@ -84,11 +84,11 @@ export const DevicesScreen = () => {
   }, [devices]);
 
   useEffect(() => {
-    if (devices && devices.length === 0) {
+    if (hasLoadedOnce && devices && devices.length === 0) {
       // Auto-create a hidden device to satisfy DB requirements
       addDevice({ name: 'Global Gateway', is_active: true, protocol: 'modbus_tcp' });
     }
-  }, [devices, addDevice]);
+  }, [devices, hasLoadedOnce, addDevice]);
 
   const openNew = () => {
     setForm({ ...DEFAULT_PARAM, display_order: parameters.length + 1 });
@@ -121,23 +121,28 @@ export const DevicesScreen = () => {
     if (!globalDevice) return showToast('Initializing global gateway, please wait...', 'error');
     
     setSaving(true);
-    const payload = {
-      ...form,
-      tag_name: genTag(form.name),
-      device_id: globalDevice.id,
-      // Forcing override properties since we flattened it
-      overrideConnection: true,
-    };
+    try {
+      const payload = {
+        ...form,
+        tag_name: genTag(form.name),
+        device_id: globalDevice.id,
+        // Forcing override properties since we flattened it
+        overrideConnection: true,
+      };
 
-    let success = false;
-    if (editingIndex !== null) {
-      success = await editParameter(payload.id, payload);
-    } else {
-      success = await addParameter(payload);
+      let success = false;
+      if (editingIndex !== null) {
+        success = await editParameter(payload.id, payload);
+      } else {
+        success = await addParameter(payload);
+      }
+      if (success) closeModal();
+    } catch (err) {
+      console.error('Failed to save parameter config:', err);
+      showToast('Communication error: Failed to save configuration.', 'error');
+    } finally {
+      setSaving(false);
     }
-    
-    setSaving(false);
-    if (success) closeModal();
   };
 
   const handleChange = (e) => {

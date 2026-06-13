@@ -17,7 +17,7 @@ if not TOKEN:
 
 REPO = "bitraneerajbabu/UltronPC"
 TAG = "v1.0.0"
-FILE_PATH = "ultron_backend/dist/UltrON.exe"
+FILE_PATH = "backend/ultron_backend/dist/UltrON.exe"
 
 def make_request(url, method="GET", headers=None, data=None):
     if headers is None:
