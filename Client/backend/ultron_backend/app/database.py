@@ -14,7 +14,7 @@ log = get_logger("ultron.database")
 
 # ─── Connection Pool ──────────────────────────────────────────────────────────
 engine_kwargs: dict = {
-    "echo": False,
+    "echo": False,  # Never log SQL statements (performance + security)
 }
 
 if settings.DB_TYPE == "sqlite":
