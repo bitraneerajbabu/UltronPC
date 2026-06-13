@@ -12,6 +12,13 @@ import json
 import subprocess
 from pathlib import Path
 import time
+import ssl
+
+# Disable SSL verification globally to prevent failures on machines with missing/outdated root certs or SSL proxy inspection
+try:
+    ssl._create_default_https_context = ssl._create_unverified_context
+except AttributeError:
+    pass
 
 # Config — change this to match your repository
 GITHUB_REPO = "bitraneerajbabu/UltronPC"

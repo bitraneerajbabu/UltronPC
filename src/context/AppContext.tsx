@@ -41,6 +41,12 @@ export const AppProvider = ({ children }) => {
   const wsKpiLastFetch = useRef(0);
   const wsIsClosing = useRef(false);
 
+  const parametersRef = useRef([]);
+  // Sync parametersRef with parameters state
+  useEffect(() => {
+    parametersRef.current = parameters;
+  }, [parameters]);
+
   // Show dynamic toast notifications
   const showToast = useCallback((msg, type = 'success') => {
     const c = document.getElementById('toastContainer');
@@ -159,7 +165,7 @@ export const AppProvider = ({ children }) => {
 
       if (telRes.ok) {
         const telemetryData = await telRes.json();
-        const activeParams = paramsList || parameters || [];
+        const activeParams = paramsList || parametersRef.current || [];
         setLiveData(prev => {
           const newLiveData = { ...prev };
           telemetryData.forEach(p => {
@@ -189,7 +195,7 @@ export const AppProvider = ({ children }) => {
     } catch (err) {
       console.error('[AppContext] Failed to fetch latest telemetry/KPIs:', err);
     }
-  }, [authFetch, API_BASE, parameters]);
+  }, [authFetch, API_BASE]);
 
   // Fetch initial data — all independent calls fire in parallel via Promise.all
   const loadAllData = useCallback(async () => {

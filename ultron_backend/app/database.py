@@ -12,12 +12,12 @@ from app.core.logger import get_logger
 log = get_logger("ultron.database")
 
 # ─── Connection Pool ──────────────────────────────────────────────────────────
-# SQLite uses StaticPool (single connection) — pool_size/max_overflow not valid
-from sqlalchemy.pool import StaticPool
+# SQLite uses NullPool to allow concurrent connections with an increased busy timeout
+from sqlalchemy.pool import NullPool
 engine_kwargs: dict = {
     "echo": False,
-    "connect_args": {"check_same_thread": False},
-    "poolclass": StaticPool,
+    "connect_args": {"check_same_thread": False, "timeout": 30.0},
+    "poolclass": NullPool,
 }
 
 engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
