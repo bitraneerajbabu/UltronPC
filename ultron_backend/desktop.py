@@ -33,6 +33,48 @@ if BUNDLE_DIR not in sys.path:
 os.chdir(APP_DIR)
 
 # ─────────────────────────────────────────────────────────────────────────────
+# STEP 1.5 — Auto-Updater (Applies downloaded firmware)
+# ─────────────────────────────────────────────────────────────────────────────
+def _apply_pending_update():
+    if not getattr(sys, "frozen", False):
+        return
+
+    install_dir = APP_DIR
+    flag_path = os.path.join(install_dir, "update_pending.flag")
+    new_exe = os.path.join(install_dir, "UltrON_new.exe")
+    current_exe = sys.executable
+    old_exe = os.path.join(install_dir, "UltrON_old.exe")
+
+    # Clean up previous old exe if exists
+    if os.path.exists(old_exe):
+        try:
+            os.remove(old_exe)
+        except Exception:
+            pass
+
+    if os.path.exists(flag_path) and os.path.exists(new_exe):
+        try:
+            import subprocess
+            # Rename current exe to old_exe (Windows allows renaming running exes)
+            os.rename(current_exe, old_exe)
+            # Rename downloaded exe to current exe name
+            os.rename(new_exe, current_exe)
+            # Remove flag
+            os.remove(flag_path)
+            # Relaunch newly replaced exe
+            subprocess.Popen([current_exe] + sys.argv[1:])
+            sys.exit(0)
+        except Exception as e:
+            with open(os.path.join(install_dir, "ultron_update_error.log"), "w") as f:
+                f.write(f"Update failed: {e}\n")
+            try:
+                os.remove(flag_path)
+            except Exception:
+                pass
+
+_apply_pending_update()
+
+# ─────────────────────────────────────────────────────────────────────────────
 # STEP 2 — File-based crash logger (survives console=False)
 # ─────────────────────────────────────────────────────────────────────────────
 LOG_FILE = os.path.join(APP_DIR, "ultron_crash.log")
