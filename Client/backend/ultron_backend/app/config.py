@@ -91,9 +91,8 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    # ─── Database ─────────────────────────────────
-    DB_TYPE: str = "sqlite"
-    DB_PATH: str = "./ultron.db"
+    # ─── Database (PostgreSQL ONLY) ───────────────────────────
+    DB_TYPE: str = "postgresql"
     DB_HOST: str = "localhost"
     DB_PORT: int = 5432
     DB_USER: str = "postgres"
@@ -102,16 +101,11 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:
-        if self.DB_TYPE == "postgresql":
-            return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        # aiosqlite uses 3 slashes for relative path, 4 for absolute
-        return f"sqlite+aiosqlite:///{self.DB_PATH}"
+        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property
     def SYNC_DATABASE_URL(self) -> str:
-        if self.DB_TYPE == "postgresql":
-            return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        return f"sqlite:///{self.DB_PATH}"
+        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     # ─── Security ─────────────────────────────────────────────
     SECRET_KEY: str = "ultron-super-secret-key-change-in-production"

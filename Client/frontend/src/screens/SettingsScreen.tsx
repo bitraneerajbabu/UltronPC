@@ -13,7 +13,7 @@ export const SettingsScreen = () => {
 
   // Editable settings stored in local state (synced with localStorage for persistence)
   const [formData, setFormData] = useState({
-    dbType: 'sqlite',
+    dbType: 'postgresql',
     retentionDays: 90,
     timezone: 'Asia/Kolkata',
     pollingInterval: 60,
