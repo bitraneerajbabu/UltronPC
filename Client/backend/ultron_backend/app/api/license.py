@@ -13,9 +13,32 @@ class LicenseVerifyRequest(BaseModel):
 
 @router.get("/status")
 async def get_license_status():
-    """Returns whether the client has an active license key configured."""
+    """Returns whether the client has an active license key configured and valid."""
     key = os.environ.get("CENTRAL_API_KEY", "").strip()
-    return {"licensed": bool(key)}
+    url = os.environ.get("CENTRAL_API_URL", "https://rajapi.com/api/v1/sync/").strip()
+    
+    if not key:
+        return {"licensed": False}
+        
+    # Actively test the key against the server
+    payload = {"client_id": "setup_test", "points": []}
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, json=payload, headers={"X-API-Key": key}, timeout=5.0)
+            if resp.status_code == 401:
+                # Key is invalid or AMC expired! Wipe it out so UI locks.
+                if "CENTRAL_API_KEY" in os.environ:
+                    del os.environ["CENTRAL_API_KEY"]
+                # Wipe from .env.enc
+                enc_file = str(APP_DIR / ".env.enc")
+                write_env_enc_from_dict({"CENTRAL_API_URL": url, "CENTRAL_API_KEY": ""}, enc_file)
+                return {"licensed": False}
+                
+            # If 200 (or any other error like network failure, we assume licensed for offline fallback)
+            return {"licensed": True}
+    except httpx.RequestError:
+        # Offline network failure, assume licensed to allow local UI access
+        return {"licensed": True}
 
 @router.post("/verify")
 async def verify_and_save_license(req: LicenseVerifyRequest):

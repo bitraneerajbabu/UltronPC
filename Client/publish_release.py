@@ -16,7 +16,7 @@ if not TOKEN:
     sys.exit(1)
 
 REPO = "bitraneerajbabu/UltronPC"
-TAG = "v1.0.2"
+TAG = "v1.0.3"
 FILE_PATH = "backend/ultron_backend/dist/UltrON.exe"
 
 def make_request(url, method="GET", headers=None, data=None):

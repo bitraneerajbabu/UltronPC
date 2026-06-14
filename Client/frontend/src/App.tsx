@@ -263,7 +263,7 @@ function App() {
             />
             <h2 className="login-title" style={{ color: '#dc2626' }}>Access Denied</h2>
             <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '20px', textAlign: 'center', lineHeight: '1.5' }}>
-              No permission from Sunshine. Please contact support.
+              AMC Token is expired or not configured. Please contact Sunshine Technologies.
             </p>
 
             {showSetupLogin && (
@@ -276,7 +276,7 @@ function App() {
                   setSetupAuthError('Invalid setup credentials.');
                 }
               }} style={{ marginTop: '30px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '10px' }}>System Setup Override</h3>
+                <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '10px' }}>AMC Token Renewal Override</h3>
                 <div className="form-group">
                   <input
                     type="text"
@@ -308,9 +308,9 @@ function App() {
     return (
       <div className="login-screen">
         <div className="login-card" style={{ maxWidth: '500px' }}>
-          <h2 className="login-title">License & API Setup</h2>
+          <h2 className="login-title">License & AMC Setup</h2>
           <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', textAlign: 'center' }}>
-            Paste the API details from rajapi.com to unlock UltrON.
+            Paste the AMC Token from rajapi.com to unlock UltrON.
           </p>
 
           <form onSubmit={async (e) => {
@@ -349,7 +349,7 @@ function App() {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">API Key</label>
+              <label className="form-label">AMC Token</label>
               <input
                 type="text"
                 className="form-input"

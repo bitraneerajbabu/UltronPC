@@ -220,7 +220,7 @@ function App() {
                 <th className="p-4 font-medium">Location</th>
                 <th className="p-4 font-medium">Status</th>
                 <th className="p-4 font-medium w-48">AMC Expiry</th>
-                <th className="p-4 font-medium">API Key</th>
+                <th className="p-4 font-medium">AMC Token</th>
                 <th className="p-4 font-medium text-right">Actions</th>
               </tr>
             </thead>
@@ -248,9 +248,23 @@ function App() {
                     </div>
                   </td>
                   <td className="p-4">
-                    <code className="text-xs bg-black/50 p-1.5 rounded text-teal-300 break-all max-w-[150px] inline-block truncate" title={site.api_key}>
-                      {site.api_key}
-                    </code>
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs bg-black/50 p-1.5 rounded text-teal-300 break-all max-w-[150px] inline-block truncate" title={site.api_key}>
+                        {site.api_key}
+                      </code>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(site.api_key)
+                          // Optional: could add a tiny toast or tick icon state here
+                        }}
+                        className="text-slate-400 hover:text-teal-300 transition-colors"
+                        title="Copy AMC Token"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                    </div>
                   </td>
                   <td className="p-4 flex gap-2 justify-end">
                     <button 

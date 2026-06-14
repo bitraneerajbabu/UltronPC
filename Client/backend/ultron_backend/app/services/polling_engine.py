@@ -397,6 +397,15 @@ async def _central_sync_worker():
                         if response.status_code != 200:
                             log.warning(f"Central sync failed: {response.status_code} {response.text}")
                             # Important: the API key might have been deleted on the server (AMC expired)
+                            if response.status_code == 401:
+                                log.error("AMC Token expired or invalid! Locking out client.")
+                                if "CENTRAL_API_KEY" in os.environ:
+                                    del os.environ["CENTRAL_API_KEY"]
+                                
+                                from app.config import APP_DIR
+                                from app.core.config_crypt import write_env_enc_from_dict
+                                enc_file = str(APP_DIR / ".env.enc")
+                                write_env_enc_from_dict({"CENTRAL_API_URL": central_url, "CENTRAL_API_KEY": ""}, enc_file)
                         else:
                             log.debug("Successfully synced telemetry to RajAPI")
                             
