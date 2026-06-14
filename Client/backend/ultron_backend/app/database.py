@@ -15,9 +15,11 @@ log = get_logger("ultron.database")
 # ─── Connection Pool ──────────────────────────────────────────────────────────
 engine_kwargs: dict = {
     "echo": False,  # Never log SQL statements (performance + security)
-    "pool_size": 10,
-    "max_overflow": 20,
 }
+
+if settings.DB_TYPE == "postgresql":
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
 
 engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 

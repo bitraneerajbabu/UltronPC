@@ -98,28 +98,32 @@ class Settings(BaseSettings):
         "http://localhost:5173,"
         "http://127.0.0.1:5173"
     )
-    # ─── Database (PostgreSQL ONLY) ───────────────────────────
-    DB_TYPE: str = "postgresql"
+    # ─── Database ───────────────────────────
+    DB_TYPE: str = "sqlite"
     DB_HOST: str = "localhost"
     DB_PORT: int = 5432
     DB_USER: str = "postgres"
-    DB_PASSWORD: str
+    DB_PASSWORD: str = ""
     DB_NAME: str = "ultron"
 
     @property
     def DATABASE_URL(self) -> str:
-        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        if self.DB_TYPE == "postgresql":
+            return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        return f"sqlite+aiosqlite:///{APP_DIR}/ultron.db"
 
     @property
     def SYNC_DATABASE_URL(self) -> str:
-        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        if self.DB_TYPE == "postgresql":
+            return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        return f"sqlite:///{APP_DIR}/ultron.db"
 
     # ─── Security ─────────────────────────────────────────────
     SECRET_KEY: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     ADMIN_USERNAME: str = "Master"
-    ADMIN_PASSWORD: str
+    ADMIN_PASSWORD: str = "Ultron123.0"
 
     # ─── WebSocket ────────────────────────────────────────────
     WS_LIVE_PUSH_INTERVAL: int = 5
