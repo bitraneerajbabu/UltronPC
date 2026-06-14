@@ -127,6 +127,32 @@ function App() {
 
   const [refreshing, setRefreshing] = useState(false);
 
+  // License / Setup state
+  const [hasLicense, setHasLicense] = useState<boolean | null>(null);
+  const [showSetupLogin, setShowSetupLogin] = useState(false);
+  const [setupUsername, setSetupUsername] = useState('');
+  const [setupPassword, setSetupPassword] = useState('');
+  const [setupAuthError, setSetupAuthError] = useState('');
+  const [isSetupAuthenticated, setIsSetupAuthenticated] = useState(false);
+  
+  const [setupApiUrl, setSetupApiUrl] = useState('https://rajapi.com/api/v1/sync/');
+  const [setupApiKey, setSetupApiKey] = useState('');
+  const [setupTesting, setSetupTesting] = useState(false);
+  const [setupResult, setSetupResult] = useState('');
+
+  // Check License on mount
+  useEffect(() => {
+    fetch('/api/v1/license/status')
+      .then(res => res.json())
+      .then(data => {
+        setHasLicense(data.licensed);
+      })
+      .catch(err => {
+        console.error("Failed to check license status:", err);
+        setHasLicense(false);
+      });
+  }, []);
+
   const handleLogoClick = async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -220,6 +246,139 @@ function App() {
       }
     }
   }, [currentUserRole, activeScreen, setActiveScreen]);
+
+  // ─── License / Setup Screen ──────────────────────────────────────────────────
+  if (hasLicense === false) {
+    if (!isSetupAuthenticated) {
+      return (
+        <div className="login-screen">
+          <div className="login-card">
+            <img 
+              src="/assets/Ultron_logo.png" 
+              className="login-logo" 
+              alt="UltrON Logo" 
+              style={{ cursor: 'pointer' }}
+              onClick={() => setShowSetupLogin(true)}
+              title="Click here to authenticate setup"
+            />
+            <h2 className="login-title" style={{ color: '#dc2626' }}>Access Denied</h2>
+            <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '20px', textAlign: 'center', lineHeight: '1.5' }}>
+              No permission from Sunshine. Please contact support.
+            </p>
+
+            {showSetupLogin && (
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (setupUsername === 'token' && setupPassword === 'Ultron123.0') {
+                  setIsSetupAuthenticated(true);
+                  setSetupAuthError('');
+                } else {
+                  setSetupAuthError('Invalid setup credentials.');
+                }
+              }} style={{ marginTop: '30px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+                <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '10px' }}>System Setup Override</h3>
+                <div className="form-group">
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={setupUsername}
+                    onChange={e => setSetupUsername(e.target.value)}
+                    placeholder="Username"
+                  />
+                </div>
+                <div className="form-group">
+                  <input
+                    type="password"
+                    className="form-input"
+                    value={setupPassword}
+                    onChange={e => setSetupPassword(e.target.value)}
+                    placeholder="Password"
+                  />
+                </div>
+                {setupAuthError && <div style={{ color: 'red', fontSize: '12px', marginBottom: '10px' }}>{setupAuthError}</div>}
+                <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Authenticate</button>
+              </form>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Setup configuration screen (isSetupAuthenticated === true)
+    return (
+      <div className="login-screen">
+        <div className="login-card" style={{ maxWidth: '500px' }}>
+          <h2 className="login-title">License & API Setup</h2>
+          <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', textAlign: 'center' }}>
+            Paste the API details from rajapi.com to unlock UltrON.
+          </p>
+
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            setSetupTesting(true);
+            setSetupResult('');
+            try {
+              const res = await fetch('/api/v1/license/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_url: setupApiUrl, api_key: setupApiKey })
+              });
+              if (res.ok) {
+                setSetupResult("Success! Configuration saved.");
+                setTimeout(() => {
+                  setHasLicense(true);
+                }, 1500);
+              } else {
+                const data = await res.json();
+                setSetupResult(`Failed: ${data.detail || 'Unknown error'}`);
+              }
+            } catch (err) {
+              setSetupResult(`Error connecting to server.`);
+            } finally {
+              setSetupTesting(false);
+            }
+          }}>
+            <div className="form-group">
+              <label className="form-label">Central API URL</label>
+              <input
+                type="text"
+                className="form-input"
+                value={setupApiUrl}
+                onChange={e => setSetupApiUrl(e.target.value)}
+                required
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">API Key</label>
+              <input
+                type="text"
+                className="form-input"
+                value={setupApiKey}
+                onChange={e => setSetupApiKey(e.target.value)}
+                required
+                placeholder="uk_..."
+              />
+            </div>
+            
+            {setupResult && (
+              <div style={{ padding: '10px', background: setupResult.startsWith('Success') ? '#dcfce7' : '#fee2e2', color: setupResult.startsWith('Success') ? '#166534' : '#991b1b', borderRadius: '4px', marginBottom: '15px', fontSize: '13px' }}>
+                {setupResult}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              style={{ width: '100%', height: '44px' }}
+              disabled={setupTesting}
+            >
+              {setupTesting ? 'Testing Connection...' : 'Test & Activate'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   // ─── Login Screen ──────────────────────────────────────────────────────────
   if (!currentUser) {

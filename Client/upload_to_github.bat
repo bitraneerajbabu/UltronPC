@@ -14,7 +14,7 @@ if "%GITHUB_TOKEN%"=="" (
 )
 
 echo.
-echo Uploading UltrON.exe to GitHub release v1.0.1...
+echo Uploading UltrON.exe to GitHub release v1.0.2...
 python publish_release.py
 
 echo.

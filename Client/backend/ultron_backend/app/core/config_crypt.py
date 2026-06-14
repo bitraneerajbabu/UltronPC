@@ -89,3 +89,32 @@ def secure_delete_file(file_path: str) -> None:
             except Exception:
                 pass
 
+
+def write_env_enc_from_dict(data: dict, cipher_file_path: str) -> None:
+    """
+    Takes a dictionary of configuration variables, formats them into a .env string,
+    and directly encrypts it to the cipher_file_path (.env.enc).
+    """
+    import io
+    key = get_fernet_key()
+    fernet = Fernet(key)
+    
+    # Format the dictionary into a standard .env format
+    lines = []
+    for k, v in data.items():
+        if v is not None:
+            # Simple escaping: if v contains spaces or quotes, we wrap it in double quotes
+            # (In production we should be careful, but here we control the input)
+            v_str = str(v).replace('"', '\\"')
+            if " " in v_str or '"' in v_str:
+                lines.append(f'{k}="{v_str}"')
+            else:
+                lines.append(f"{k}={v_str}")
+    
+    env_content = "\n".join(lines) + "\n"
+    encrypted = fernet.encrypt(env_content.encode("utf-8"))
+    
+    with open(cipher_file_path, "wb") as f:
+        f.write(encrypted)
+
+

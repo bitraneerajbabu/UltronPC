@@ -16,7 +16,7 @@ if not TOKEN:
     sys.exit(1)
 
 REPO = "bitraneerajbabu/UltronPC"
-TAG = "v1.0.1"
+TAG = "v1.0.2"
 FILE_PATH = "backend/ultron_backend/dist/UltrON.exe"
 
 def make_request(url, method="GET", headers=None, data=None):
@@ -42,7 +42,21 @@ def main():
         sys.exit(1)
 
     print(f"Fetching release {TAG}...")
-    release = make_request(f"https://api.github.com/repos/{REPO}/releases/tags/{TAG}")
+    try:
+        release = make_request(f"https://api.github.com/repos/{REPO}/releases/tags/{TAG}")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print(f"Release {TAG} not found. Creating it...")
+            create_data = json.dumps({
+                "tag_name": TAG,
+                "name": f"UltrON {TAG}",
+                "draft": False,
+                "prerelease": False
+            }).encode('utf-8')
+            release = make_request(f"https://api.github.com/repos/{REPO}/releases", method="POST", data=create_data)
+        else:
+            sys.exit(1)
+
     release_id = release["id"]
     
     # Check if UltrON.exe asset already exists

@@ -11,6 +11,7 @@ from typing import Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
 from sqlalchemy.orm import selectinload
+import httpx
 
 from app.database import AsyncSessionLocal
 from app.models.station import Station, StationStatus
@@ -352,6 +353,60 @@ async def _device_poll_loop(device_id: int, interval: int):
         await asyncio.sleep(interval)
 
 
+async def _central_sync_worker():
+    """Background task to push telemetry data to RajAPI.com"""
+    log.info("Central Sync Worker started")
+    
+    # These would ideally be configured in the UI, but we can load from env for now
+    import os
+    central_url = os.environ.get("CENTRAL_API_URL", "https://rajapi.com/api/v1/sync/")
+
+    while _running:
+        api_key = os.environ.get("CENTRAL_API_KEY", "")
+        if not api_key:
+            # If AMC is expired or setup is pending, we don't sync, but we wait in the loop
+            log.debug("No CENTRAL_API_KEY configured or AMC pending. Central sync paused.")
+            await asyncio.sleep(60)
+            continue
+
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(select(LiveData).join(Parameter).options(selectinload(LiveData.parameter)))
+                live_data = result.scalars().all()
+                
+                if live_data:
+                    payload = {
+                        "client_id": "ultron_client_01",
+                        "points": [
+                            {
+                                "tag_name": ld.parameter.tag_name,
+                                "value": ld.value,
+                                "quality": ld.quality.value if hasattr(ld.quality, "value") else str(ld.quality),
+                                "timestamp": ld.timestamp.isoformat()
+                            } for ld in live_data
+                        ]
+                    }
+                    
+                    async with httpx.AsyncClient() as client:
+                        response = await client.post(
+                            central_url, 
+                            json=payload,
+                            headers={"X-API-Key": api_key},
+                            timeout=10.0
+                        )
+                        if response.status_code != 200:
+                            log.warning(f"Central sync failed: {response.status_code} {response.text}")
+                            # Important: the API key might have been deleted on the server (AMC expired)
+                        else:
+                            log.debug("Successfully synced telemetry to RajAPI")
+                            
+        except Exception as e:
+            log.error(f"Central sync error: {e}")
+            
+        await asyncio.sleep(60) # Sync every 60 seconds
+
+
+
 
 async def start_polling():
     """
@@ -379,6 +434,9 @@ async def start_polling():
             name=f"poll-device-{device.id}",
         )
         _device_tasks[device.id] = task
+
+    # Start the central sync worker
+    _device_tasks[-1] = asyncio.create_task(_central_sync_worker(), name="central-sync")
 
     log.info(f"Polling engine started: {len(devices)} device(s)")
 

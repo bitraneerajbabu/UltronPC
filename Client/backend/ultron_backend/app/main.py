@@ -17,13 +17,14 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import init_db
+
 from app.websocket_manager import ws_manager
 from app.services import polling_engine
 from app.services.averaging_engine import run_averaging_for_all_parameters
 from app.core.logger import get_logger
 
 # ─── API Routers ──────────────────────────────────────────────────────────────
-from app.api import stations, devices, parameters, telemetry, trends, reports, alarms, logs, settings as settings_api, server_config
+from app.api import stations, devices, parameters, telemetry, trends, reports, alarms, logs, settings as settings_api, server_config, license
 from app.api import auth as auth_api
 from app.api import users as users_api
 
@@ -172,7 +173,7 @@ app.include_router(settings_api.router, prefix=PREFIX)
 app.include_router(server_config.router, prefix=PREFIX)
 app.include_router(auth_api.router,     prefix=PREFIX)
 app.include_router(users_api.router,    prefix=PREFIX)
-
+app.include_router(license.router,      prefix=PREFIX)
 
 # ─── WebSocket Live Push ──────────────────────────────────────────────────────
 @app.websocket("/ws/live")
