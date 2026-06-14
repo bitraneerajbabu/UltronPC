@@ -36,23 +36,48 @@ const SignalTest = ({s=14}) => (
 const genTag = (name) => !name ? '' : name.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_').replace(/_+/g, '_').substring(0, 50);
 
 const getUiDataType = (dt, bo) => {
-  if (dt === 'float32') return bo?.includes('swap') ? 'Swaped Float' : 'Float point';
+  if (dt === 'float32') {
+    if (bo === 'big_swap') return 'Byte Swapped Float';
+    if (bo === 'little') return 'Word Swapped Float';
+    if (bo === 'little_swap') return 'Byte & Word Swapped Float';
+    return 'Float point';
+  }
   if (dt === 'uint16') return 'Integer';
   if (dt === 'int16')  return 'Signed Integer';
-  if (dt === 'int32')  return bo?.includes('swap') ? 'Swaped Long' : 'Long Integer';
-  if (dt === 'int64')  return bo?.includes('swap') ? 'Swaped Double' : 'Double Float';
+  if (dt === 'int32') {
+    if (bo === 'big_swap') return 'Byte Swapped Long';
+    if (bo === 'little') return 'Word Swapped Long';
+    if (bo === 'little_swap') return 'Byte & Word Swapped Long';
+    return 'Long Integer';
+  }
+  if (dt === 'int64') {
+    if (bo === 'big_swap') return 'Byte Swapped Double';
+    if (bo === 'little') return 'Word Swapped Double';
+    if (bo === 'little_swap') return 'Byte & Word Swapped Double';
+    return 'Double Float';
+  }
   return 'None';
 };
 
 const setUiDataType = (label) => {
   const map = {
     'Float point': { data_type: 'float32', byte_order: 'big' },
-    'Swaped Float': { data_type: 'float32', byte_order: 'big_swap' },
+    'Byte Swapped Float': { data_type: 'float32', byte_order: 'big_swap' },
+    'Word Swapped Float': { data_type: 'float32', byte_order: 'little' },
+    'Byte & Word Swapped Float': { data_type: 'float32', byte_order: 'little_swap' },
     'Integer': { data_type: 'uint16', byte_order: 'big' },
     'Signed Integer': { data_type: 'int16', byte_order: 'big' },
     'Long Integer': { data_type: 'int32', byte_order: 'big' },
-    'Swaped Long': { data_type: 'int32', byte_order: 'big_swap' },
+    'Byte Swapped Long': { data_type: 'int32', byte_order: 'big_swap' },
+    'Word Swapped Long': { data_type: 'int32', byte_order: 'little' },
+    'Byte & Word Swapped Long': { data_type: 'int32', byte_order: 'little_swap' },
     'Double Float': { data_type: 'int64', byte_order: 'big' },
+    'Byte Swapped Double': { data_type: 'int64', byte_order: 'big_swap' },
+    'Word Swapped Double': { data_type: 'int64', byte_order: 'little' },
+    'Byte & Word Swapped Double': { data_type: 'int64', byte_order: 'little_swap' },
+    // Backwards compatibility
+    'Swaped Float': { data_type: 'float32', byte_order: 'big_swap' },
+    'Swaped Long': { data_type: 'int32', byte_order: 'big_swap' },
     'Swaped Double': { data_type: 'int64', byte_order: 'big_swap' },
   };
   return map[label] || { data_type: 'float32', byte_order: 'big' };
@@ -338,13 +363,19 @@ export const DevicesScreen = () => {
                   <label className="gw-label">REGISTER DATA TYPE</label>
                   <select className="gw-input" value={getUiDataType(form.data_type, form.byte_order)} onChange={handleDataType}>
                     <option value="Float point">Float point</option>
-                    <option value="Swaped Float">Swaped Float</option>
+                    <option value="Byte Swapped Float">Byte Swapped Float</option>
+                    <option value="Word Swapped Float">Word Swapped Float</option>
+                    <option value="Byte & Word Swapped Float">Byte & Word Swapped Float</option>
                     <option value="Integer">Integer</option>
                     <option value="Signed Integer">Signed Integer</option>
                     <option value="Long Integer">Long Integer</option>
-                    <option value="Swaped Long">Swaped Long</option>
+                    <option value="Byte Swapped Long">Byte Swapped Long</option>
+                    <option value="Word Swapped Long">Word Swapped Long</option>
+                    <option value="Byte & Word Swapped Long">Byte & Word Swapped Long</option>
                     <option value="Double Float">Double Float</option>
-                    <option value="Swaped Double">Swaped Double</option>
+                    <option value="Byte Swapped Double">Byte Swapped Double</option>
+                    <option value="Word Swapped Double">Word Swapped Double</option>
+                    <option value="Byte & Word Swapped Double">Byte & Word Swapped Double</option>
                   </select>
                 </div>
               </div>
