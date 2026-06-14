@@ -1,7 +1,7 @@
 """UltrON — Settings API (app-level configuration, user management, DB utilities)"""
 
 from fastapi import APIRouter, Depends, HTTPException
-from app.core.security import require_admin
+from app.core.security import get_current_user, require_admin
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text, delete
 from datetime import datetime
@@ -12,12 +12,16 @@ from app.models.station import Station, StationStatus, StationType
 from app.models.device import Device, DeviceProtocol, DeviceType
 from app.models.parameter import Parameter, RegisterType, DataType, ByteOrder, AlarmSeverity
 from app.models.telemetry import LiveData, HistoricalData, Averages, Alarm, SystemLog
-from app.config import settings
+from app.config import APP_DIR, settings
 from app.core.logger import get_logger, get_audit_logger
 
 log = get_logger("ultron.settings")
 audit = get_audit_logger()
-router = APIRouter(prefix="/settings", tags=["Settings"])
+router = APIRouter(
+    prefix="/settings",
+    tags=["Settings"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 # ─── App Info ─────────────────────────────────────────────────────────────────
@@ -127,10 +131,8 @@ class PlantSettingsSchema(BaseModel):
 @router.get("/plant")
 async def get_plant_settings():
     import json
-    import os
-    db_dir = os.path.dirname(settings.DB_PATH) or "."
-    settings_file = os.path.join(db_dir, "plant_settings.json")
-    if os.path.exists(settings_file):
+    settings_file = APP_DIR / "plant_settings.json"
+    if settings_file.exists():
         try:
             with open(settings_file, "r", encoding="utf-8") as f:
                 return json.load(f)
@@ -146,11 +148,9 @@ async def get_plant_settings():
 @router.post("/plant", dependencies=[Depends(require_admin)])
 async def save_plant_settings(payload: PlantSettingsSchema):
     import json
-    import os
     try:
-        db_dir = os.path.dirname(settings.DB_PATH) or "."
-        settings_file = os.path.join(db_dir, "plant_settings.json")
-        os.makedirs(db_dir, exist_ok=True)
+        settings_file = APP_DIR / "plant_settings.json"
+        APP_DIR.mkdir(parents=True, exist_ok=True)
         with open(settings_file, "w", encoding="utf-8") as f:
             json.dump(payload.model_dump(), f, ensure_ascii=False, indent=2)
         return {"success": True, "data": payload.model_dump()}
@@ -175,7 +175,7 @@ async def check_firmware():
     current_version = settings.APP_VERSION
 
     try:
-        ctx = ssl._create_unverified_context()
+        ctx = ssl.create_default_context()
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(
             url,
@@ -274,7 +274,7 @@ def _do_firmware_download():
     _fw_download_state = {"state": "downloading", "percent": 0, "message": "Fetching release info…", "restart_required": False}
 
     try:
-        ctx = ssl._create_unverified_context()
+        ctx = ssl.create_default_context()
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(url, headers={"User-Agent": "UltrON-Updater/1.0", "Accept": "application/vnd.github.v3+json"})
         with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:

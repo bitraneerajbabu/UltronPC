@@ -8,8 +8,13 @@ from typing import List, Optional
 from app.database import get_db
 from app.models.telemetry import SystemLog
 from app.schemas.telemetry import SystemLogOut
+from app.core.security import get_current_user, require_admin
 
-router = APIRouter(prefix="/logs", tags=["Logs"])
+router = APIRouter(
+    prefix="/logs",
+    tags=["Logs"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/", response_model=List[SystemLogOut])
@@ -40,7 +45,7 @@ async def list_logs(
     return result.scalars().all()
 
 
-@router.delete("/purge")
+@router.delete("/purge", dependencies=[Depends(require_admin)])
 async def purge_logs(
     older_than_days: int = Query(30, ge=1),
     log_type: Optional[str] = None,

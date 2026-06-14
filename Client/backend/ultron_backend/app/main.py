@@ -57,7 +57,7 @@ async def _seed_admin():
             await db.commit()
             log.info(
                 f"Default admin user seeded: username='{settings.ADMIN_USERNAME}' "
-                f"password='{settings.ADMIN_PASSWORD}' — CHANGE THIS IN PRODUCTION!"
+                "Change the default password in production."
             )
 
 
@@ -152,7 +152,7 @@ Real-time industrial telemetry platform supporting:
 # ─── CORS ─────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # tighten in production
+    allow_origins=settings.cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

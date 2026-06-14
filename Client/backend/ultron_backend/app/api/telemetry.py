@@ -13,8 +13,13 @@ from app.models.telemetry import LiveData, HistoricalData, Averages, AverageType
 from app.models.station import Station, StationStatus
 from app.models.parameter import Parameter
 from app.schemas.telemetry import TelemetryPoint, DashboardSummary
+from app.core.security import get_current_user
 
-router = APIRouter(prefix="/telemetry", tags=["Telemetry"])
+router = APIRouter(
+    prefix="/telemetry",
+    tags=["Telemetry"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/", response_model=List[TelemetryPoint])

@@ -9,8 +9,13 @@ from app.database import get_db
 from app.models.telemetry import Alarm, AlarmState
 from app.schemas.telemetry import AlarmOut, AlarmAck
 from app.services.alarm_engine import alarm_engine
+from app.core.security import get_current_user
 
-router = APIRouter(prefix="/alarms", tags=["Alarms"])
+router = APIRouter(
+    prefix="/alarms",
+    tags=["Alarms"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/", response_model=List[AlarmOut])

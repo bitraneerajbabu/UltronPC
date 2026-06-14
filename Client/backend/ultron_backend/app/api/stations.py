@@ -7,8 +7,13 @@ from typing import List
 from app.database import get_db
 from app.models.station import Station
 from app.schemas.station import StationCreate, StationUpdate, StationOut
+from app.core.security import get_current_user, require_admin
 
-router = APIRouter(prefix="/stations", tags=["Stations"])
+router = APIRouter(
+    prefix="/stations",
+    tags=["Stations"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/", response_model=List[StationOut])
@@ -17,7 +22,12 @@ async def list_stations(db: AsyncSession = Depends(get_db)):
     return result.scalars().all()
 
 
-@router.post("/", response_model=StationOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=StationOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
+)
 async def create_station(payload: StationCreate, db: AsyncSession = Depends(get_db)):
     station = Station(**payload.model_dump())
     db.add(station)
@@ -35,7 +45,7 @@ async def get_station(station_id: int, db: AsyncSession = Depends(get_db)):
     return station
 
 
-@router.patch("/{station_id}", response_model=StationOut)
+@router.patch("/{station_id}", response_model=StationOut, dependencies=[Depends(require_admin)])
 async def update_station(station_id: int, payload: StationUpdate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Station).where(Station.id == station_id))
     station = result.scalar_one_or_none()
@@ -48,7 +58,7 @@ async def update_station(station_id: int, payload: StationUpdate, db: AsyncSessi
     return station
 
 
-@router.delete("/{station_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{station_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_admin)])
 async def delete_station(station_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Station).where(Station.id == station_id))
     station = result.scalar_one_or_none()

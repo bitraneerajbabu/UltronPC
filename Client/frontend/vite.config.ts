@@ -10,12 +10,12 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 8000,
-    strictPort: true, // Fail if port 8000 is taken, never silently switch
-    // Dev mode: proxy API and WS to the FastAPI backend on 8001
+    port: 5173,
+    strictPort: true, // Fail if port 5173 is taken, never silently switch
+    // Dev mode: proxy API and WS to the FastAPI backend on 8000
     proxy: {
-      '/api': 'http://localhost:8001',
-      '/ws': { target: 'ws://localhost:8001', ws: true },
+      '/api': 'http://localhost:8000',
+      '/ws': { target: 'ws://localhost:8000', ws: true },
     },
   },
 })

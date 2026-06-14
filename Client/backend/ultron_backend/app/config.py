@@ -8,11 +8,12 @@ Never store the service_role key or other true secrets.
 """
 
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
+from pydantic import Field
 from typing import Optional
 import os
 import sys
 import io
+import secrets
 from pathlib import Path
 import dotenv
 
@@ -91,12 +92,18 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
+    CORS_ALLOW_ORIGINS: str = (
+        "http://localhost:8000,"
+        "http://127.0.0.1:8000,"
+        "http://localhost:5173,"
+        "http://127.0.0.1:5173"
+    )
     # ─── Database (PostgreSQL ONLY) ───────────────────────────
     DB_TYPE: str = "postgresql"
     DB_HOST: str = "localhost"
     DB_PORT: int = 5432
     DB_USER: str = "postgres"
-    DB_PASSWORD: str = "postgres"
+    DB_PASSWORD: str
     DB_NAME: str = "ultron"
 
     @property
@@ -108,11 +115,11 @@ class Settings(BaseSettings):
         return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     # ─── Security ─────────────────────────────────────────────
-    SECRET_KEY: str = "ultron-super-secret-key-change-in-production"
+    SECRET_KEY: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     ADMIN_USERNAME: str = "Master"
-    ADMIN_PASSWORD: str = "Ultron123.0"
+    ADMIN_PASSWORD: str
 
     # ─── WebSocket ────────────────────────────────────────────
     WS_LIVE_PUSH_INTERVAL: int = 5
@@ -157,6 +164,15 @@ class Settings(BaseSettings):
         """Create all required storage directories on startup."""
         for d in [self.REPORTS_DIR, self.LOGS_DIR, self.BACKUPS_DIR, self.UPLOADS_DIR]:
             os.makedirs(d, exist_ok=True)
+
+    @property
+    def cors_allow_origins(self) -> list[str]:
+        """Return configured CORS origins as a clean list."""
+        return [
+            origin.strip()
+            for origin in self.CORS_ALLOW_ORIGINS.split(",")
+            if origin.strip()
+        ]
 
 
 # Singleton instance — import this everywhere
