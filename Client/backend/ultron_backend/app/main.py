@@ -79,6 +79,10 @@ async def lifespan(app: FastAPI):
     # 3. Start polling engine
     await polling_engine.start_polling()
 
+    # 3.5 Start RajAPI MQTT client
+    from app.services.remote_control import start_mqtt_client
+    asyncio.create_task(start_mqtt_client())
+
     # 4. Seed default admin user if no users exist
     await _seed_admin()
 

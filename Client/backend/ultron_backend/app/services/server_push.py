@@ -519,3 +519,36 @@ async def run_server_push(mode: str = "live"):
             else:
                 # TGPCB — HTTP JSON push (live + delay)
                 await _push_tgpcb(config, db, mode)
+
+        # Always push latest live telemetry to RajAPI MQTT broker (if enabled)
+        if mode == "live":
+            from app.services.remote_control import publish_telemetry
+            from app.config import settings
+            if settings.RAJAPI_MQTT_ENABLED:
+                # Fetch all live data for a simple payload
+                ld_stmt = select(LiveData).options(selectinload(LiveData.parameter))
+                ld_res = await db.execute(ld_stmt)
+                live_data_list = ld_res.scalars().all()
+                
+                payload = {
+                    "station_id": settings.RAJAPI_STATION_ID,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": []
+                }
+                
+                for ld in live_data_list:
+                    if ld.parameter:
+                        val = ld.value
+                        if val is not None:
+                            try:
+                                val = round(float(val), 2)
+                            except (ValueError, TypeError):
+                                pass
+                        payload["data"].append({
+                            "tag": ld.parameter.tag_name,
+                            "value": val,
+                            "unit": ld.parameter.unit
+                        })
+                
+                if payload["data"]:
+                    await publish_telemetry(payload)

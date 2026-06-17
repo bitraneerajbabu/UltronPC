@@ -139,7 +139,41 @@ def build_frontend(force=False):
         return False
 
 
+def create_desktop_shortcut():
+    """Create a desktop shortcut to the executable if running frozen and it doesn't exist."""
+    if not getattr(sys, "frozen", False):
+        return
+        
+    try:
+        desktop_path = os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop')
+        shortcut_path = os.path.join(desktop_path, "UltrON.lnk")
+        
+        if not os.path.exists(shortcut_path):
+            log("Creating desktop shortcut...", "INFO")
+            exe_path = sys.executable
+            work_dir = os.path.dirname(exe_path)
+            
+            script = f"""
+            $WshShell = New-Object -comObject WScript.Shell
+            $Shortcut = $WshShell.CreateShortcut("{shortcut_path}")
+            $Shortcut.TargetPath = "{exe_path}"
+            $Shortcut.WorkingDirectory = "{work_dir}"
+            $Shortcut.Description = "UltrON Industrial Platform"
+            $Shortcut.IconLocation = "{exe_path},0"
+            $Shortcut.Save()
+            """
+            
+            subprocess.run(
+                ["powershell", "-Command", script], 
+                creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            )
+            log("Desktop shortcut created.", "OK")
+    except Exception as e:
+        log(f"Failed to create desktop shortcut: {e}", "WARN")
+
+
 def main():
+    create_desktop_shortcut()
     parser = argparse.ArgumentParser(description="UltrON unified launcher")
     parser.add_argument("--no-build",    action="store_true", help="Skip frontend build")
     parser.add_argument("--force-build", action="store_true", help="Force full frontend rebuild")

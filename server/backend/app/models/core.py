@@ -12,6 +12,7 @@ class IndustrySite(Base):
     location = Column(String)
     is_active = Column(Boolean, default=True)
     amc_expiry = Column(DateTime, nullable=True)
+    last_sync = Column(DateTime, nullable=True)   # Updated on every UltrON client sync
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     devices = relationship("Device", back_populates="site", cascade="all, delete-orphan")

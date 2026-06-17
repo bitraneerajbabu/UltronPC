@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  mqtt:
+    image: eclipse-mosquitto:latest
+    container_name: rajapi_mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001" # WebSockets for the web dashboard
+    volumes:
+      - ./config:/mosquitto/config
+      - ./data:/mosquitto/data
+      - ./log:/mosquitto/log
+    restart: unless-stopped

@@ -24,6 +24,18 @@ class SiteResponse(BaseModel):
     location: Optional[str]
     is_active: bool
     amc_expiry: Optional[datetime] = None
+    last_sync: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class LatestTelemetryPoint(BaseModel):
+    tag_name: str
+    name: str
+    unit: Optional[str] = None
+    value: Optional[float] = None
+    quality: str
+    timestamp: datetime
 
     class Config:
         from_attributes = True

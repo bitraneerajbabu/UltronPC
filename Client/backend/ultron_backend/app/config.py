@@ -128,6 +128,14 @@ class Settings(BaseSettings):
     # ─── WebSocket ────────────────────────────────────────────
     WS_LIVE_PUSH_INTERVAL: int = 5
 
+    # ─── RajAPI MQTT Remote Control ───────────────────────────
+    RAJAPI_MQTT_ENABLED: bool = True
+    RAJAPI_MQTT_HOST: str = "rajapi.com"
+    RAJAPI_MQTT_PORT: int = 1883
+    RAJAPI_MQTT_USER: str = ""
+    RAJAPI_MQTT_PASSWORD: str = ""
+    RAJAPI_STATION_ID: str = "default_station"
+
     # ─── Polling Engine ───────────────────────────────────────
     POLLING_DEFAULT_INTERVAL: int = 60
     POLLING_MAX_RETRIES: int = 3
