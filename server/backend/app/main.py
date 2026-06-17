@@ -17,6 +17,22 @@ from app.models.core import IndustrySite, Device, Parameter, TelemetryData
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
+# Auto-migrate: safely add any new columns that may not exist yet
+def _run_auto_migrations():
+    from sqlalchemy import text, inspect
+    with engine.connect() as conn:
+        inspector = inspect(engine)
+        existing_cols = {c["name"] for c in inspector.get_columns("industry_sites")}
+        if "last_sync" not in existing_cols:
+            try:
+                conn.execute(text("ALTER TABLE industry_sites ADD COLUMN last_sync TIMESTAMP"))
+                conn.commit()
+                logger.info("Auto-migration: added 'last_sync' column to industry_sites")
+            except Exception as e:
+                logger.warning(f"Auto-migration skipped: {e}")
+
+_run_auto_migrations()
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
