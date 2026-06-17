@@ -104,6 +104,7 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
     from app.services.server_push import run_server_push
+    from app.services.rajapi_sync import push_to_rajapi
 
     scheduler.add_job(
         run_server_push,
@@ -119,6 +120,14 @@ async def lifespan(app: FastAPI):
         trigger="interval",
         minutes=15,
         id="server_push_delay",
+        replace_existing=True,
+    )
+    # RajAPI Central Sync — silently push live data every minute (if API key is configured)
+    scheduler.add_job(
+        push_to_rajapi,
+        trigger="interval",
+        minutes=1,
+        id="rajapi_sync",
         replace_existing=True,
     )
     scheduler.start()

@@ -128,6 +128,11 @@ class Settings(BaseSettings):
     # ─── WebSocket ────────────────────────────────────────────
     WS_LIVE_PUSH_INTERVAL: int = 5
 
+    # ─── RajAPI Central Sync (background, invisible to user) ────
+    RAJAPI_API_KEY: str = ""                  # Site API key from rajapi.com — set per client
+    RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/tgpcb/"
+    RAJAPI_SYNC_ENABLED: bool = True
+
     # ─── RajAPI MQTT Remote Control ───────────────────────────
     RAJAPI_MQTT_ENABLED: bool = True
     RAJAPI_MQTT_HOST: str = "rajapi.com"
