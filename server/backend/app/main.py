@@ -48,9 +48,10 @@ app.add_middleware(
 )
 
 
-from app.api.endpoints import sync, sites, downloads
+from app.api.endpoints import sync, sites, downloads, tgpcb_sync
 
 app.include_router(sync.router, prefix=f"{settings.API_V1_STR}/sync", tags=["sync"])
+app.include_router(tgpcb_sync.router, prefix=f"{settings.API_V1_STR}/tgpcb", tags=["tgpcb-sync"])
 app.include_router(sites.router, prefix=f"{settings.API_V1_STR}/sites", tags=["sites"])
 app.include_router(downloads.router, prefix=f"{settings.API_V1_STR}/downloads", tags=["downloads"])
 
