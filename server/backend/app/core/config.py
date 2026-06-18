@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # Default assumes postgres runs locally on the Pi
     DATABASE_URL: str = os.environ.get("DATABASE_URL", "postgresql://ultron_admin:my_secure_password@localhost:5432/ultron_central")
 
+    # Admin key for protected endpoints (site creation, deletion)
+    # Set ADMIN_KEY in server .env — must match what's in client_manager.py
+    ADMIN_KEY: str = os.environ.get("ADMIN_KEY", "UltrON@RajAPI_Admin_2026!")
+
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

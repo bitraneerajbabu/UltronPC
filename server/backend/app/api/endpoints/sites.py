@@ -1,14 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from sqlalchemy import func
 import secrets
 from datetime import datetime, timedelta, timezone
 from app.db.database import get_db
 from app.models.core import IndustrySite, TelemetryData, Parameter
 from app.schemas.api_models import SiteCreate, SiteResponse, LatestTelemetryPoint
+from app.core.config import settings
 
 router = APIRouter()
+
+def _require_admin(x_admin_key: Optional[str] = Header(default=None)):
+    if x_admin_key != settings.ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing admin key")
 
 @router.get("/", response_model=List[SiteResponse])
 def get_sites(db: Session = Depends(get_db)):
@@ -16,7 +21,7 @@ def get_sites(db: Session = Depends(get_db)):
     return db.query(IndustrySite).all()
 
 @router.post("/", response_model=SiteResponse)
-def create_site(site: SiteCreate, db: Session = Depends(get_db)):
+def create_site(site: SiteCreate, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
     # Generate a secure API key for this site
     api_key = f"uk_{secrets.token_urlsafe(32)}"
     
@@ -32,6 +37,15 @@ def create_site(site: SiteCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_site)
     return db_site
+
+@router.delete("/{site_id}")
+def delete_site(site_id: int, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    db_site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
+    if not db_site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    db.delete(db_site)
+    db.commit()
+    return {"status": "deleted", "id": site_id}
 
 @router.put("/{site_id}/status", response_model=SiteResponse)
 def update_site_status(site_id: int, is_active: bool, db: Session = Depends(get_db)):
