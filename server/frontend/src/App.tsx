@@ -21,7 +21,9 @@ interface LatestPoint {
 
 function getConnectionStatus(last_sync?: string): { label: string; pulse: boolean; color: string } {
   if (!last_sync) return { label: 'Never Connected', pulse: false, color: 'text-slate-500' };
-  const diffMs = Date.now() - new Date(last_sync).getTime();
+  // Server stores UTC timestamps without 'Z' suffix — append it so browser parses as UTC not local time
+  const utcStr = last_sync.endsWith('Z') ? last_sync : last_sync + 'Z';
+  const diffMs = Date.now() - new Date(utcStr).getTime();
   const diffMins = diffMs / 60000;
   if (diffMins < 5) return { label: 'Client Live', pulse: true, color: 'text-emerald-400' };
   if (diffMins < 60) return { label: `${Math.floor(diffMins)}m ago`, pulse: false, color: 'text-yellow-400' };
@@ -501,7 +503,8 @@ function App() {
                     {liveData.map((pt) => {
                       const isGood = pt.quality?.toLowerCase() === 'good';
                       const ago = pt.timestamp ? (() => {
-                        const diff = Math.floor((Date.now() - new Date(pt.timestamp).getTime()) / 1000);
+                        const utcTs = pt.timestamp.endsWith('Z') ? pt.timestamp : pt.timestamp + 'Z';
+                        const diff = Math.floor((Date.now() - new Date(utcTs).getTime()) / 1000);
                         if (diff < 60) return `${diff}s`;
                         if (diff < 3600) return `${Math.floor(diff/60)}m`;
                         return `${Math.floor(diff/3600)}h`;
