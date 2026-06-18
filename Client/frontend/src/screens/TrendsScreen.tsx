@@ -63,10 +63,11 @@ export const TrendsScreen = () => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
-  function formatShortDate(isoString) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+
+  function formatShortDate(isoString: string) {
     const d = parseUtcDate(isoString);
-    const pad = n => String(n).padStart(2, '0');
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   // Generate historical trends
@@ -103,7 +104,7 @@ export const TrendsScreen = () => {
       const rows = series.labels.map((ts, idx) => ({
         timestamp: formatTimestamp(parseUtcDate(ts)),
         parameter: series.name,
-        value: series.values[idx] !== null ? series.values[idx].toFixed(2) : '—',
+        value: series.values[idx] !== null ? series.values[idx].toFixed(2) : 'NA',
         unit: series.unit || '',
         quality: series.qualities[idx] ? series.qualities[idx].toUpperCase() : 'GOOD',
         source: 'POLL'
@@ -163,8 +164,7 @@ export const TrendsScreen = () => {
   };
 
   const formatTimestamp = (date) => {
-    const p = n => String(n).padStart(2, '0');
-    return `${p(date.getDate())}-${p(date.getMonth()+1)}-${date.getFullYear()} ${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
+    return `${date.getFullYear()}/${pad(date.getMonth()+1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
 
   const handleReset = () => {
@@ -190,25 +190,28 @@ export const TrendsScreen = () => {
   const downloadPDF = () => {
     if (!chartInstanceRef.current) return showToast('Generate a trend first.', 'warn');
     const img = chartInstanceRef.current.toBase64Image();
-    const w = window.open('');
-    w.document.write(`
+    const html = `
       <html>
-        <body style="margin:24px; font-family:sans-serif;">
+        <head><style>body{margin:24px;font-family:sans-serif;}h2{color:#0f172a;}img{width:100%;border:1px solid #e2e8f0;border-radius:8px;}</style></head>
+        <body>
           <h2>Historical Trend Analysis — ${seriesData?.name}</h2>
-          <div style="font-size:13px; color:#64748b; margin-bottom:15px;">
+          <div style="font-size:13px;color:#64748b;margin-bottom:15px;">
             Range: ${startDate} ${startTime} to ${endDate} ${endTime}
           </div>
-          <img src="${img}" style="width:100%; border:1px solid #e2e8f0; border-radius:8px;">
+          <img src="${img}">
           <script>
-            window.onload = () => {
-              window.print();
-              setTimeout(() => window.close(), 800);
-            };
-          </script>
+            window.onload = () => { window.print(); setTimeout(() => window.close(), 800); };
+          <\/script>
         </body>
       </html>
-    `);
-    w.document.close();
+    `;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = url;
+    document.body.appendChild(iframe);
+    setTimeout(() => { document.body.removeChild(iframe); URL.revokeObjectURL(url); }, 5000);
     showToast('PDF print dialog opened.');
   };
 
@@ -275,9 +278,12 @@ export const TrendsScreen = () => {
               <option value="raw">1 Minute Raw</option>
               <option value="avg_5min">5 Minute Average</option>
               <option value="avg_15min">15 Minute Average</option>
+              <option value="avg_30min">30 Minute Average</option>
               <option value="avg_1hr">1 Hour Average</option>
-              <option value="avg_8hr">8 Hour Average</option>
-              <option value="avg_daily">Daily Average</option>
+              <option value="avg_3hr">3 Hour Average</option>
+              <option value="avg_6hr">6 Hour Average</option>
+              <option value="avg_12hr">12 Hour Average</option>
+              <option value="avg_24hr">24 Hour Average</option>
             </select>
           </div>
 

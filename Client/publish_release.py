@@ -16,7 +16,7 @@ if not TOKEN:
     sys.exit(1)
 
 REPO = "bitraneerajbabu/UltronPC"
-TAG = "v1.0.6"
+TAG = "v1.0.7"
 FILE_PATH = "backend/ultron_backend/dist/UltrON.exe"
 
 def make_request(url, method="GET", headers=None, data=None):
@@ -51,25 +51,27 @@ def main():
                 "tag_name": TAG,
                 "name": f"UltrON {TAG}",
                 "body": (
-                    "## What's New in v1.0.6\n\n"
-                    "### Daily Rotating CSV Reader\n"
-                    "- CSV protocol can now read daily files from a folder using date-based filename patterns\n"
-                    "- Supported tokens: {YYYYMMDD}, {YYYY-MM-DD}, {DD-MM-YYYY}, {DDMMYYYY}\n"
-                    "- Automatically resolves today's file and falls back to yesterday during midnight rollover\n"
-                    "- Added CSV fixed-file vs daily-file configuration in the device screen\n"
-                    "- CSV column guide uses A=0, B=1, C=2 mapping for parameter register addresses\n\n"
-                    "### 🚦 LED Board LAN Support\n"
-                    "- New **LED Board (LAN)** protocol in Server Push Mappings\n"
-                    "- UltrON now serves live telemetry on **port 80** — paste URL directly into LED control card\n"
-                    "- Enable/disable toggle with live URL display and **Copy URL** button\n"
-                    "- Per-parameter LED Name and Unit mapping columns\n\n"
-                    "### 🔧 TGPCB Delay Push Fix\n"
-                    "- Delay push now logs a clear warning when Delay URL is not configured (was silently skipped)\n"
-                    "- New **Test Delay Push** button to verify delay URL connectivity from the UI\n"
-                    "- Test result modal shows which push type was tested (Live / Delay) and the URL used\n\n"
-                    "### 🛠️ Other Improvements\n"
-                    "- Port 80 secondary HTTP server for LED cards (runs alongside main app)\n"
-                    "- LED board URL auto-detected from PC LAN IP\n"
+                    "## What's New in v1.0.7\n\n"
+                    "### 🖥️ All Screens Redesigned\n"
+                    "- **Dashboard**: Modern teal-themed layout with PC IP KPI card\n"
+                    "- **Devices**: 8 simplified data types, RS485 serial fields, CSV daily/fixed mode, protocol labels\n"
+                    "- **API Mappings**: 4 organized sections (SPCB, CPCB, Central Sync, LED Board) with per-protocol mapping tables\n"
+                    "- **Trends**: PDF export via Blob+hidden iframe (no popup blocker), resolution dropdown for all intervals\n"
+                    "- **Reports**: Two-section design (Normal / Average), fixed PDF/Excel via authFetch+Blob, YYYY/MM/DD HH:MM format\n"
+                    "- **Logs**: Teal theme, colored level/type badges, sticky header, source/type filtering\n"
+                    "- **Settings**: Real backend persistence, push-status with internet & pending count\n\n"
+                    "### ⏫ Software Update UI\n"
+                    "- In-app update checker: checks GitHub Releases for new versions\n"
+                    "- One-click download with progress bar\n"
+                    "- Background download + restart flag for seamless upgrade\n\n"
+                    "### 📤 Pending Uploads Queue\n"
+                    "- Failed HTTP POSTs queued in database, retried every 15 min via delay_url\n"
+                    "- Amber pending-count badge per server with Clear button, auto-refresh every 30s\n"
+                    "- API endpoints: GET /pending-counts, GET /{id}/pending-count, DELETE /{id}/pending-records\n\n"
+                    "### 🔌 Enhanced Connectivity Logging\n"
+                    "- Internet connectivity logs only on state transitions (up→down, down→up)\n"
+                    "- Parameter snapshot logged every 60 sec as one consolidated SystemLog entry\n"
+                    "- Quality events (comm_fail, out_of_range, sensor_fail, device OFFLINE) — one log per device per cycle\n"
                 ),
                 "draft": False,
                 "prerelease": False

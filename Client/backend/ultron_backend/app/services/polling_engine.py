@@ -308,6 +308,24 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
                     .values(status=station_status, last_seen=now)
                 )
 
+        # ─── SystemLog for device events ─────────────────────────────────────
+        if not any_good:
+            db.add(SystemLog(log_type="comm", level="ERROR", source="ultron.polling",
+                message=f"Device {device.name} ({device.id}): OFFLINE — no data"))
+        else:
+            bad_params = []
+            for r in readings:
+                q = r.get("quality")
+                if q in ("comms_fail", "bad", "sensor_fail"):
+                    p = param_by_id.get(r["parameter_id"])
+                    bad_params.append(p.tag_name if p else f"#{r['parameter_id']}")
+                elif q == "out_of_range":
+                    p = param_by_id.get(r["parameter_id"])
+                    bad_params.append(f"{p.tag_name if p else '#'+str(r['parameter_id'])}={r.get('value')} OOR")
+            if bad_params:
+                db.add(SystemLog(log_type="comm", level="WARNING", source="ultron.polling",
+                    message=f"Device {device.name} ({device.id}): {', '.join(bad_params)}"))
+
         await db.commit()
 
     # ─── WebSocket Live Push ──────────────────────────────────────────────────

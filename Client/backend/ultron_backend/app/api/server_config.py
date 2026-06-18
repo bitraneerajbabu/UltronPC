@@ -1,7 +1,7 @@
 """UltrON — Server Config API"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.orm import joinedload
 from typing import List
 from app.database import get_db
@@ -9,6 +9,7 @@ from app.models.server_config import ServerConfig, ServerParameterMapping
 from app.models.parameter import Parameter
 from app.models.device import Device
 from app.models.station import Station
+from app.models.telemetry import PendingUpload
 from app.schemas.server_config import (
     ServerConfigCreate, ServerConfigUpdate, ServerConfigResponse,
     ParameterMappingResponse, BulkMappingUpdate, ServerMappingBase
@@ -252,4 +253,37 @@ async def test_server_delay_push(server_id: int, db: AsyncSession = Depends(get_
                 })
 
     return {"results": results, "url_used": server.delay_url}
+
+
+# ─── Pending Uploads ──────────────────────────────────────────────────────────
+
+@router.get("/{server_id}/pending-count")
+async def get_pending_count(server_id: int, db: AsyncSession = Depends(get_db)):
+    """Return count of pending uploads for a given server config."""
+    result = await db.execute(
+        select(func.count(PendingUpload.id)).where(PendingUpload.server_config_id == server_id)
+    )
+    count = result.scalar() or 0
+    return {"server_id": server_id, "pending_count": count}
+
+
+@router.get("/pending-counts")
+async def get_all_pending_counts(db: AsyncSession = Depends(get_db)):
+    """Return pending counts grouped by server config."""
+    rows = await db.execute(
+        select(PendingUpload.server_config_id, func.count(PendingUpload.id).label("cnt"))
+        .group_by(PendingUpload.server_config_id)
+    )
+    counts = {row.server_config_id: row.cnt for row in rows}
+    return counts
+
+
+@router.delete("/{server_id}/pending-records", dependencies=[Depends(require_admin)])
+async def delete_pending_records(server_id: int, db: AsyncSession = Depends(get_db)):
+    """Delete all pending upload records for a given server config."""
+    result = await db.execute(
+        delete(PendingUpload).where(PendingUpload.server_config_id == server_id)
+    )
+    await db.commit()
+    return {"deleted": result.rowcount, "server_id": server_id}
 

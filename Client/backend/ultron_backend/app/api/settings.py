@@ -11,7 +11,7 @@ from app.database import get_db, engine, Base
 from app.models.station import Station, StationStatus, StationType
 from app.models.device import Device, DeviceProtocol, DeviceType
 from app.models.parameter import Parameter, RegisterType, DataType, ByteOrder, AlarmSeverity
-from app.models.telemetry import LiveData, HistoricalData, Averages, Alarm, SystemLog
+from app.models.telemetry import LiveData, HistoricalData, Averages, Alarm, SystemLog, PendingUpload
 from app.config import APP_DIR, settings
 from app.core.logger import get_logger, get_audit_logger
 import socket
@@ -202,6 +202,67 @@ async def save_plant_settings(payload: PlantSettingsSchema):
     except Exception as e:
         log.error(f"Error saving plant settings: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to save plant settings: {str(e)}")
+
+
+# ─── General System Settings ────────────────────────────────────────────────────
+class GeneralSettingsSchema(BaseModel):
+    retentionDays: int = 90
+    timezone: str = "Asia/Kolkata"
+    pollingInterval: int = 60
+    alarmCheckInterval: int = 30
+    emailEnabled: bool = False
+    smtpHost: str = ""
+    smtpPort: int = 587
+    smtpUser: str = ""
+    alertRecipients: str = ""
+
+@router.get("/general")
+async def get_general_settings():
+    import json
+    settings_file = APP_DIR / "general_settings.json"
+    if settings_file.exists():
+        try:
+            with open(settings_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            log.error(f"Error reading general settings: {e}")
+    return {
+        "retentionDays": 90,
+        "timezone": "Asia/Kolkata",
+        "pollingInterval": 60,
+        "alarmCheckInterval": 30,
+        "emailEnabled": False,
+        "smtpHost": "",
+        "smtpPort": 587,
+        "smtpUser": "",
+        "alertRecipients": "",
+    }
+
+@router.post("/general", dependencies=[Depends(require_admin)])
+async def save_general_settings(payload: GeneralSettingsSchema):
+    import json
+    try:
+        settings_file = APP_DIR / "general_settings.json"
+        APP_DIR.mkdir(parents=True, exist_ok=True)
+        with open(settings_file, "w", encoding="utf-8") as f:
+            json.dump(payload.model_dump(), f, ensure_ascii=False, indent=2)
+        return {"success": True, "data": payload.model_dump()}
+    except Exception as e:
+        log.error(f"Error saving general settings: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save general settings: {str(e)}")
+
+
+# ─── Push Engine Status ────────────────────────────────────────────────────────
+@router.get("/push-status")
+async def push_engine_status():
+    from app.services.server_push import _last_net_ok
+    from app.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        pend_count = await db.execute(select(func.count(PendingUpload.id)))
+    return {
+        "internet_ok": _last_net_ok,
+        "pending_uploads": pend_count.scalar() or 0,
+    }
 
 
 # ─── Firmware Update Check ────────────────────────────────────────────────────

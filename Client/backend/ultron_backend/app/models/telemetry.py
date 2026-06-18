@@ -3,7 +3,7 @@
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Boolean, DateTime, Float,
-    ForeignKey, Text, Index, Enum as SAEnum
+    ForeignKey, Text, Index, Enum as SAEnum, JSON
 )
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -27,7 +27,12 @@ class AverageType(str, enum.Enum):
     avg_1min = "avg_1min"
     avg_5min = "avg_5min"
     avg_15min = "avg_15min"
+    avg_30min = "avg_30min"
     avg_1hr = "avg_1hr"
+    avg_3hr = "avg_3hr"
+    avg_6hr = "avg_6hr"
+    avg_12hr = "avg_12hr"
+    avg_24hr = "avg_24hr"
     avg_8hr = "avg_8hr"
     avg_daily = "avg_daily"
 
@@ -179,3 +184,25 @@ class SystemLog(Base):
 
     def __repr__(self):
         return f"<SystemLog id={self.id} type={self.log_type} level={self.level}>"
+
+
+# ─── Pending Upload Queue ─────────────────────────────────────────────────────
+class PendingUpload(Base):
+    """
+    Queued upload payloads that failed due to network errors.
+    Retried automatically; can be manually cleared from the UI.
+    """
+    __tablename__ = "pending_uploads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    server_config_id = Column(Integer, ForeignKey("server_config.id", ondelete="CASCADE"), nullable=False, index=True)
+    url = Column(String(500), nullable=False)
+    payload = Column(JSON, nullable=False)
+    mode = Column(String(20), default="live")        # "live" or "delay"
+    retry_count = Column(Integer, default=0)
+    last_error = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<PendingUpload id={self.id} server={self.server_config_id} mode={self.mode} retries={self.retry_count}>"
