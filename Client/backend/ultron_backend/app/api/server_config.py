@@ -203,3 +203,53 @@ async def test_server_push(server_id: int, db: AsyncSession = Depends(get_db)):
                 })
                 
     return {"results": results}
+
+
+@router.post("/{server_id}/test-delay-push", dependencies=[Depends(require_admin)])
+async def test_server_delay_push(server_id: int, db: AsyncSession = Depends(get_db)):
+    """Test the DELAY (15-min) push to verify the Delay URL is working."""
+    res = await db.execute(select(ServerConfig).filter(ServerConfig.id == server_id))
+    server = res.scalars().first()
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    proto = (server.protocol or "tspcb").lower()
+    if proto == "cpcb":
+        raise HTTPException(status_code=400, detail="Test delay push only supported for HTTP/JSON protocols")
+
+    if not server.delay_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Delay URL is not configured for this server. "
+                   "Set a Delay URL in the Server Push Mappings page."
+        )
+
+    from app.services.server_push import _build_tgpcb_payloads
+    import httpx
+
+    payloads = await _build_tgpcb_payloads(db, server_id)
+    if not payloads:
+        raise HTTPException(status_code=400, detail="No active mappings found to push")
+
+    results = []
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for payload in payloads:
+            device_id = payload.get("DeviceID", "?")
+            try:
+                response = await client.post(server.delay_url, json=payload)
+                results.append({
+                    "device_id": device_id,
+                    "status_code": response.status_code,
+                    "response": response.text,
+                    "success": response.status_code < 300
+                })
+            except Exception as e:
+                results.append({
+                    "device_id": device_id,
+                    "status_code": 0,
+                    "response": str(e),
+                    "success": False
+                })
+
+    return {"results": results, "url_used": server.delay_url}
+

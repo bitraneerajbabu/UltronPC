@@ -85,7 +85,37 @@ elif ENV_ENC_FILE.is_file():
 
 
 
+
+
+def _load_or_create_secret_key() -> str:
+    """
+    Return a stable secret key that persists across restarts.
+
+    On first launch the key is generated with secrets.token_urlsafe(32) and
+    written to  <APP_DIR>/secret.key  (next to the EXE in frozen mode, or next
+    to the package root in dev mode).  Subsequent launches read the file, so
+    all previously issued JWT tokens remain valid.
+
+    Falls back to a fresh random key if the file cannot be read or written
+    (e.g. read-only filesystem) — this matches the old behaviour.
+    """
+    key_file = APP_DIR / "secret.key"
+    try:
+        if key_file.is_file():
+            key = key_file.read_text(encoding="utf-8").strip()
+            if key:
+                return key
+        # Generate a new key and persist it
+        key = secrets.token_urlsafe(32)
+        key_file.write_text(key, encoding="utf-8")
+        return key
+    except Exception as e:
+        print(f"[UltrON] Could not persist secret key ({e}) — using ephemeral key.", file=sys.stderr)
+        return secrets.token_urlsafe(32)
+
+
 class Settings(BaseSettings):
+
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
     APP_VERSION: str = "1.0.6"
@@ -119,7 +149,7 @@ class Settings(BaseSettings):
         return f"sqlite:///{APP_DIR}/ultron.db"
 
     # ─── Security ─────────────────────────────────────────────
-    SECRET_KEY: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
+    SECRET_KEY: str = Field(default_factory=lambda: _load_or_create_secret_key())
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     ADMIN_USERNAME: str = "Master"
@@ -163,7 +193,7 @@ class Settings(BaseSettings):
     BACKUPS_DIR: str = "./backups"
     UPLOADS_DIR: str = "./uploads"
 
-    # ─── Security ────────────────────────────────────────────────
+    # ─── Security ────────────────────────────────────────────────────
     EMAIL_ENABLED: bool = False
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
@@ -171,9 +201,17 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     ALERT_RECIPIENTS: str = ""
 
+    # ─── LED Board LAN Endpoint ───────────────────────────────────
+    # Token checked on GET /api/v1/led?auth=<token>&PCB=...
+    # Change this in .env (LED_AUTH_TOKEN=yourtoken) to secure the endpoint.
+    LED_AUTH_TOKEN: str = "menakshi"
+    # Port for the dedicated LED board HTTP server (default 80 for LAN cards)
+    # Set LED_HTTP_PORT=0 to disable the secondary LED server.
+    LED_HTTP_PORT: int = 80
+
     class Config:
         # Overrides loading of unencrypted .env if .env.enc exists and was already loaded
-        env_file = None if os.path.exists(str(APP_DIR / ".env.enc")) else ".env"
+        env_file = None if os.path.exists(str(APP_DIR / ".env.enc")) else str(APP_DIR / ".env")
         env_file_encoding = "utf-8"
         case_sensitive = False
 

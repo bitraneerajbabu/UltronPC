@@ -182,3 +182,101 @@
     border-right-color: var(--border);
   }
 }
+
+.setup-card {
+  max-width: 500px;
+}
+
+.setup-description {
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.auth-error-message {
+  color: red;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.login-title-error {
+  color: #dc2626;
+}
+
+.access-denied-description {
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 20px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.override-form {
+  margin-top: 30px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 20px;
+}
+
+.override-form-title {
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+.setup-result-msg {
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 15px;
+  font-size: 13px;
+}
+
+.msg-success {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.msg-error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.btn-tall {
+  height: 44px;
+}
+
+.login-description {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.relative-group {
+  position: relative;
+}
+
+.password-input {
+  padding-right: 44px;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}

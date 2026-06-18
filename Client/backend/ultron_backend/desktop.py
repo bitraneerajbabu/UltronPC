@@ -113,6 +113,120 @@ def _apply_pending_update():
 _apply_pending_update()
 
 # ─────────────────────────────────────────────────────────────────────────────
+# STEP 1.6 — Background Update Downloader
+# Silently checks GitHub for a newer release and downloads it in the background.
+# The actual swap is applied on the NEXT launch by _apply_pending_update().
+# ─────────────────────────────────────────────────────────────────────────────
+GITHUB_REPO = "bitraneerajbabu/UltronPC"
+GITHUB_API_LATEST = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+
+
+def _version_tuple(v: str):
+    """Convert 'v1.2.3' or '1.2.3' to (1, 2, 3) for comparison."""
+    v = v.lstrip("v").strip()
+    try:
+        return tuple(int(x) for x in v.split("."))
+    except Exception:
+        return (0,)
+
+
+def _check_and_download_update():
+    """
+    Run in a daemon thread.  Checks GitHub for a newer release; if found,
+    downloads UltrON.exe as UltrON_new.exe and writes update_pending.flag.
+    The swap is applied on next launch by _apply_pending_update().
+    """
+    if not getattr(sys, "frozen", False):
+        return  # only run when packaged
+
+    install_dir = APP_DIR
+    flag_path   = os.path.join(install_dir, "update_pending.flag")
+    new_exe     = os.path.join(install_dir, "UltrON_new.exe")
+    partial_exe = os.path.join(install_dir, "UltrON_new.exe.part")
+
+    # Don't download again if a pending update already exists
+    if os.path.exists(flag_path) and os.path.exists(new_exe):
+        return
+
+    try:
+        import urllib.request
+        import json as _json
+
+        req = urllib.request.Request(
+            GITHUB_API_LATEST,
+            headers={"User-Agent": "UltrON-Updater/1.0",
+                     "Accept": "application/vnd.github.v3+json"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+
+        latest_tag = data.get("tag_name", "")
+        assets     = data.get("assets", [])
+
+        # Find the UltrON.exe asset
+        exe_url = None
+        for asset in assets:
+            if asset.get("name", "").lower() == "ultron.exe":
+                exe_url = asset.get("browser_download_url")
+                break
+
+        if not exe_url:
+            return  # no asset found
+
+        # Compare versions — import APP_VERSION from config
+        try:
+            from app.config import settings
+            current_ver = settings.APP_VERSION
+        except Exception:
+            current_ver = "0.0.0"
+
+        if _version_tuple(latest_tag) <= _version_tuple(current_ver):
+            return  # already up-to-date
+
+        # Download new EXE to a .part file first
+        import logging as _logging
+        _log_update = _logging.getLogger("ultron.updater")
+        _log_update.info("Update available: %s → %s — downloading…", current_ver, latest_tag)
+
+        dl_req = urllib.request.Request(
+            exe_url,
+            headers={"User-Agent": "UltrON-Updater/1.0"},
+        )
+        with urllib.request.urlopen(dl_req, timeout=120) as dl_resp, \
+             open(partial_exe, "wb") as f:
+            while True:
+                chunk = dl_resp.read(65536)
+                if not chunk:
+                    break
+                f.write(chunk)
+
+        # Move .part → final
+        if os.path.exists(new_exe):
+            os.remove(new_exe)
+        os.rename(partial_exe, new_exe)
+
+        # Write the flag — _apply_pending_update() reads this on next launch
+        with open(flag_path, "w") as f:
+            f.write(latest_tag)
+
+        _log_update.info("Update %s downloaded ✓ — will apply on next launch.", latest_tag)
+
+    except Exception as _e:
+        # Non-fatal — log quietly
+        import logging as _logging
+        _logging.getLogger("ultron.updater").debug("Update check failed: %s", _e)
+        # Clean up partial download if present
+        if os.path.exists(partial_exe):
+            try:
+                os.remove(partial_exe)
+            except Exception:
+                pass
+
+
+# Launch update checker as a daemon thread (never blocks startup)
+threading.Thread(target=_check_and_download_update, daemon=True, name="updater").start()
+
+# ─────────────────────────────────────────────────────────────────────────────
 # STEP 2 — File-based crash logger (survives console=False)
 # ─────────────────────────────────────────────────────────────────────────────
 LOG_FILE = os.path.join(APP_DIR, "ultron_crash.log")

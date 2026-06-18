@@ -1,20 +1,28 @@
 import os
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 router = APIRouter()
 
+# Current release version hosted on GitHub
+CURRENT_VERSION = "v1.0.6"
+GITHUB_RELEASE_URL = f"https://github.com/bitraneerajbabu/UltronPC/releases/download/{CURRENT_VERSION}/UltrON.exe"
+
 @router.get("/latest-client")
 async def download_latest_client():
-    # Use absolute path to the downloads folder
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    installer_path = os.path.join(base_dir, "downloads", "UltrON_Installer.exe")
-    
-    if not os.path.exists(installer_path):
-        raise HTTPException(status_code=404, detail="Latest installer not found on server")
-        
-    return FileResponse(
-        path=installer_path,
-        filename="UltrON_Installer_v1.0.6.exe",
-        media_type="application/x-msdownload"
-    )
+    """
+    Redirect to the latest UltrON.exe on GitHub Releases.
+    Falls back to locally stored installer if the redirect fails (offline environments).
+    """
+    # Always redirect to GitHub — no need to host locally
+    return RedirectResponse(url=GITHUB_RELEASE_URL, status_code=302)
+
+
+@router.get("/version")
+async def get_latest_version():
+    """Return the current latest version info for auto-update checks."""
+    return {
+        "version": CURRENT_VERSION,
+        "download_url": GITHUB_RELEASE_URL,
+        "release_notes": "v1.0.6: Daily rotating CSV reader with date-based filename patterns",
+    }

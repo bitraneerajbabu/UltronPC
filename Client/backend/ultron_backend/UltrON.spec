@@ -195,16 +195,16 @@ exe = EXE(
     a.datas,
     exclude_binaries=False,   # one-file mode (self-contained executable)
     name="UltrON",
-    debug=True,
+    debug=False,              # no debug console
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,           # console window enabled for PyInstaller bootloader stability (hidden programmatically at runtime)
+    console=False,            # NO terminal window — runs silently in background
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon="ultron.ico",       # place ultron.ico next to this .spec file
-    version=None,            # replace with a version_info.txt for Windows metadata
+    icon="ultron.ico",
+    version=None,
 )

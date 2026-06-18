@@ -27,6 +27,7 @@ from app.core.logger import get_logger
 from app.api import stations, devices, parameters, telemetry, trends, reports, alarms, logs, settings as settings_api, server_config, license
 from app.api import auth as auth_api
 from app.api import users as users_api
+from app.api import led as led_api
 
 log = get_logger("ultron.main")
 
@@ -62,6 +63,55 @@ async def _seed_admin():
             )
 
 
+
+# ─── LED Board Secondary HTTP Server (port 80) ───────────────────────────────
+async def _start_led_http_server(port: int):
+    """
+    Spawn a lightweight second ASGI/uvicorn server on the given port (default 80)
+    that serves ONLY the LED board endpoint.
+
+    LED control cards need to poll a URL without a port number (plain HTTP = port 80).
+    This runs silently alongside the main app — errors are logged but never crash the app.
+
+    URL the card should use:
+        http://<PC-LAN-IP>/api/v1/led?auth=menakshi&PCB=7005,7004,7003
+    """
+    try:
+        import uvicorn
+        from fastapi import FastAPI
+        from fastapi.middleware.cors import CORSMiddleware
+        from app.api import led as led_api
+
+        led_app = FastAPI(title="UltrON LED", docs_url=None, redoc_url=None)
+        led_app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["GET"],
+            allow_headers=["*"],
+        )
+        led_app.include_router(led_api.router, prefix="/api/v1")
+
+        cfg = uvicorn.Config(
+            led_app,
+            host="0.0.0.0",
+            port=port,
+            log_level="warning",   # quiet — main app already logs everything
+        )
+        server = uvicorn.Server(cfg)
+        log.info(f"LED board HTTP server starting on port {port} — "
+                 f"Card URL: http://<PC-LAN-IP>/api/v1/led?auth=<token>&PCB=...")
+        await server.serve()
+    except OSError as e:
+        # Port 80 might need admin rights on Windows — log clearly and continue
+        log.warning(
+            f"LED HTTP server could not bind to port {port}: {e}. "
+            f"The LED board URL on port {port} will NOT be available. "
+            f"Try running UltrON as Administrator, or set LED_HTTP_PORT=0 to disable."
+        )
+    except Exception as e:
+        log.error(f"LED HTTP server error on port {port}: {e}")
+
+
 # ─── Lifecycle ────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -85,6 +135,10 @@ async def lifespan(app: FastAPI):
 
     # 4. Seed default admin user if no users exist
     await _seed_admin()
+
+    # 4.5 Start dedicated LED board HTTP server on port 80 (LAN LED cards use port 80)
+    if settings.LED_HTTP_PORT and settings.LED_HTTP_PORT > 0:
+        asyncio.create_task(_start_led_http_server(settings.LED_HTTP_PORT))
 
     # 5. Start APScheduler for averaging (every 1 minute)
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -187,6 +241,7 @@ app.include_router(server_config.router, prefix=PREFIX)
 app.include_router(auth_api.router,     prefix=PREFIX)
 app.include_router(users_api.router,    prefix=PREFIX)
 app.include_router(license.router,      prefix=PREFIX)
+app.include_router(led_api.router,      prefix=PREFIX)  # LED Board LAN endpoint
 
 # ─── WebSocket Live Push ──────────────────────────────────────────────────────
 @app.websocket("/ws/live")

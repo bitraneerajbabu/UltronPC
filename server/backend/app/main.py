@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 import os
 from app.core.config import settings
 from app.db.database import engine, Base
@@ -30,6 +30,27 @@ def _run_auto_migrations():
                 logger.info("Auto-migration: added 'last_sync' column to industry_sites")
             except Exception as e:
                 logger.warning(f"Auto-migration skipped: {e}")
+
+        # Add performance indexes for latest-telemetry query (DISTINCT ON pattern)
+        for idx_sql, idx_name in [
+            (
+                "CREATE INDEX IF NOT EXISTS ix_telemetry_site_ts "
+                "ON telemetry_data (site_id, timestamp DESC)",
+                "ix_telemetry_site_ts"
+            ),
+            (
+                "CREATE INDEX IF NOT EXISTS ix_telemetry_param_ts "
+                "ON telemetry_data (parameter_id, timestamp DESC)",
+                "ix_telemetry_param_ts"
+            ),
+        ]:
+            try:
+                conn.execute(text(idx_sql))
+                conn.commit()
+                logger.info(f"Auto-migration: ensured index '{idx_name}'")
+            except Exception as e:
+                logger.warning(f"Index '{idx_name}' skipped: {e}")
+
 
 _run_auto_migrations()
 
@@ -68,7 +89,7 @@ if os.path.exists(frontend_path):
     async def serve_frontend(full_path: str):
         # Allow API requests to pass through (this catch-all must be defined AFTER API routers)
         if full_path.startswith("api/"):
-            return
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
             
         file_path = os.path.join(frontend_path, full_path)
         if os.path.isfile(file_path):

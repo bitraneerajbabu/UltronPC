@@ -36,6 +36,7 @@ export const ApiMappingsScreen = () => {
   const [generatingHistorical, setGeneratingHistorical] = useState({});
   const [activeServerTab, setActiveServerTab] = useState(null);
   const [selectedParamId, setSelectedParamId] = useState(null);
+  const [lanIp, setLanIp] = useState('');
 
   const theme = {
     primary: '#0f766e',        // Primary Dark Teal Green
@@ -83,6 +84,17 @@ export const ApiMappingsScreen = () => {
 
   const loadData = async () => {
     setLoading(true);
+    // Detect PC LAN IP via a backend info call
+    try {
+      const infoRes = await authFetch(`${API_BASE}/led/info`);
+      if (infoRes.ok) {
+        const infoData = await infoRes.json();
+        // API_BASE is like http://192.168.x.x:8000/api/v1 — extract host
+        const host = new URL(API_BASE).hostname;
+        setLanIp(host);
+      }
+    } catch (_) {}
+
     try {
       const [srvRes, mapRes] = await Promise.all([
         authFetch(`${API_BASE}/server-config/`),
@@ -122,6 +134,8 @@ export const ApiMappingsScreen = () => {
             api_unit: existing.api_unit || '',
             cpcb_station_name: existing.cpcb_station_name || '',
             cpcb_parameter: existing.cpcb_parameter || '',
+            led_channel_name: existing.led_channel_name || '',
+            led_unit: existing.led_unit || '',
           };
         });
       });
@@ -174,7 +188,8 @@ export const ApiMappingsScreen = () => {
   const addServer = () => {
     setServers(prev => [...prev, {
       name: '', protocol: 'tspcb',
-      live_url: '', delay_url: '', cpcb_file_path: '', is_active: true, is_cpcb_active: true
+      live_url: '', delay_url: '', cpcb_file_path: '', is_active: true, is_cpcb_active: true,
+      led_channel_id: null, led_station_name: ''
     }]);
   };
 
@@ -234,6 +249,8 @@ export const ApiMappingsScreen = () => {
             api_unit: '',
             cpcb_station_name: '',
             cpcb_parameter: '',
+            led_channel_name: '',
+            led_unit: '',
             ...(editedMappings[param.parameter_id]?.[srv.id] || editedMappings[param.parameter_id]?.[String(srv.id)] || {})
           };
         });
@@ -304,6 +321,7 @@ export const ApiMappingsScreen = () => {
   };
 
   const [testingPush, setTestingPush] = useState({});
+  const [testingDelayPush, setTestingDelayPush] = useState({});
   const [testResultModal, setTestResultModal] = useState(null);
 
   const handleTestPush = async (serverId) => {
@@ -318,6 +336,7 @@ export const ApiMappingsScreen = () => {
       if (data.results && data.results.length > 0) {
         const first = data.results[0];
         setTestResultModal({
+          title: 'Live Push Test',
           status: first.status_code,
           response: first.response,
           success: first.success
@@ -330,6 +349,34 @@ export const ApiMappingsScreen = () => {
       showToast(`Test failed: ${e.message}`, 'error');
     } finally {
       setTestingPush(prev => ({ ...prev, [serverId]: false }));
+    }
+  };
+
+  const handleTestDelayPush = async (serverId) => {
+    setTestingDelayPush(prev => ({ ...prev, [serverId]: true }));
+    try {
+      const res = await authFetch(`${API_BASE}/server-config/${serverId}/test-delay-push`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `Delay test failed (${res.status})`);
+      }
+      const data = await res.json();
+      if (data.results && data.results.length > 0) {
+        const first = data.results[0];
+        setTestResultModal({
+          title: `Delay Push Test — ${data.url_used || ''}`,
+          status: first.status_code,
+          response: first.response,
+          success: first.success
+        });
+      } else {
+        showToast('No payloads were sent (no active mappings?).', 'warn');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast(`Delay test failed: ${e.message}`, 'error');
+    } finally {
+      setTestingDelayPush(prev => ({ ...prev, [serverId]: false }));
     }
   };
 
@@ -402,10 +449,19 @@ export const ApiMappingsScreen = () => {
           {servers.map((conf, idx) => {
             const isCpcb = conf.protocol === 'cpcb';
             const isBoth = conf.protocol === 'both';
+            const isLed = conf.protocol === 'led';
+            // Build the LED card URL from LAN IP
+            const ledAuth = 'menakshi';
+            const ledChannelId = conf.led_channel_id || '';
+            const ledUrl = lanIp && ledChannelId
+              ? `http://${lanIp}/api/v1/led?auth=${ledAuth}&PCB=${ledChannelId}`
+              : lanIp
+              ? `http://${lanIp}/api/v1/led?auth=${ledAuth}&PCB=<channel_id>`
+              : 'http://<PC-LAN-IP>/api/v1/led?auth=menakshi&PCB=<channel_id>';
             return (
               <div key={conf.id || `new-server-${idx}`} style={{
-                background: '#fff',
-                border: `1.5px solid ${theme.border}`,
+                background: isLed ? 'linear-gradient(135deg,#fff7ed,#fff)' : '#fff',
+                border: `1.5px solid ${isLed ? '#f97316' : theme.border}`,
                 borderRadius: '12px',
                 padding: '12px 16px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
@@ -424,20 +480,37 @@ export const ApiMappingsScreen = () => {
                       <option value="tspcb">TGPCB (JSON HTTP)</option>
                       <option value="cpcb">CPCB (CSV File)</option>
                       <option value="both">Both (TGPCB & CPCB)</option>
+                      <option value="led">🚦 LED Board (LAN)</option>
                     </select>
                   </div>
 
-                  {/* Live URL */}
-                  <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontSize: '10px', fontWeight: '800', color: theme.darkLabel }}>Live URL</span>
-                    <input type="text" name="live_url" disabled={isCpcb} value={isCpcb ? '' : (conf.live_url || '')} onChange={e => handleServerFieldChange(idx, e)} placeholder={isCpcb ? 'N/A for CPCB' : 'e.g. https://.../live'} style={{...localINP, backgroundColor: isCpcb ? '#f1f5f9' : '#fff'}} />
-                  </div>
+                  {/* LED: Channel ID + Station Name */}
+                  {isLed ? (
+                    <>
+                      <div style={{ flex: '0 1 120px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '800', color: '#c2410c' }}>Channel ID (PCB#)</span>
+                        <input type="number" name="led_channel_id" value={conf.led_channel_id || ''} onChange={e => handleServerFieldChange(idx, { target: { name: 'led_channel_id', value: e.target.value ? parseInt(e.target.value) : null, type: 'text' } })} placeholder="e.g. 7003" style={{...localINP, borderColor: '#fb923c'}} />
+                      </div>
+                      <div style={{ flex: '1 1 150px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '800', color: '#c2410c' }}>Station Name (LED label)</span>
+                        <input type="text" name="led_station_name" value={conf.led_station_name || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="e.g. AAQMS" style={{...localINP, borderColor: '#fb923c'}} />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Live URL */}
+                      <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '800', color: theme.darkLabel }}>Live URL</span>
+                        <input type="text" name="live_url" disabled={isCpcb} value={isCpcb ? '' : (conf.live_url || '')} onChange={e => handleServerFieldChange(idx, e)} placeholder={isCpcb ? 'N/A for CPCB' : 'e.g. https://.../live'} style={{...localINP, backgroundColor: isCpcb ? '#f1f5f9' : '#fff'}} />
+                      </div>
 
-                  {/* Delay URL */}
-                  <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontSize: '10px', fontWeight: '800', color: theme.darkLabel }}>Delay URL</span>
-                    <input type="text" name="delay_url" disabled={isCpcb} value={isCpcb ? '' : (conf.delay_url || '')} onChange={e => handleServerFieldChange(idx, e)} placeholder={isCpcb ? 'N/A for CPCB' : 'e.g. https://.../delay'} style={{...localINP, backgroundColor: isCpcb ? '#f1f5f9' : '#fff'}} />
-                  </div>
+                      {/* Delay URL */}
+                      <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '800', color: theme.darkLabel }}>Delay URL</span>
+                        <input type="text" name="delay_url" disabled={isCpcb} value={isCpcb ? '' : (conf.delay_url || '')} onChange={e => handleServerFieldChange(idx, e)} placeholder={isCpcb ? 'N/A for CPCB' : 'e.g. https://.../delay'} style={{...localINP, backgroundColor: isCpcb ? '#f1f5f9' : '#fff'}} />
+                      </div>
+                    </>
+                  )}
 
                   {/* Actions (Trash) */}
                   <div style={{ flexShrink: 0 }}>
@@ -450,12 +523,35 @@ export const ApiMappingsScreen = () => {
                   </div>
                 </div>
 
+                {/* LED URL Banner — shown when enabled */}
+                {isLed && conf.is_active && (
+                  <div style={{
+                    marginTop: '10px', padding: '10px 14px', borderRadius: '8px',
+                    background: 'linear-gradient(135deg,#fff7ed,#ffedd5)',
+                    border: '1.5px solid #fb923c', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap'
+                  }}>
+                    <span style={{ fontSize: '11px', fontWeight: '900', color: '#c2410c', whiteSpace: 'nowrap' }}>🚦 LED Card URL:</span>
+                    <code style={{
+                      flex: 1, fontSize: '11px', fontFamily: 'Consolas,monospace', color: '#1e293b',
+                      background: '#fff', padding: '4px 10px', borderRadius: '6px', border: '1px solid #fb923c',
+                      wordBreak: 'break-all'
+                    }}>{ledUrl}</code>
+                    <button onClick={() => { navigator.clipboard.writeText(ledUrl); showToast('URL copied!', 'success'); }} style={{
+                      background: '#f97316', color: '#fff', border: 'none', padding: '5px 12px',
+                      borderRadius: '6px', fontSize: '11px', fontWeight: '800', cursor: 'pointer', whiteSpace: 'nowrap'
+                    }}>Copy URL</button>
+                    {!ledChannelId && (
+                      <span style={{ fontSize: '10px', color: '#dc2626', fontWeight: '700' }}>⚠️ Set Channel ID above to complete URL</span>
+                    )}
+                  </div>
+                )}
+
                 {/* Sub-row for path & historical dates */}
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0 }}>
-                    <Toggle checked={!!conf.is_active} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_active', type: 'checkbox', checked: !conf.is_active } })} />
-                    <span style={{ fontSize: '11px', fontWeight: '800', color: theme.darkLabel }}>
-                      {isCpcb ? 'Enable CPCB Push' : 'Enable TGPCB Push'}
+                    <Toggle checked={!!conf.is_active} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_active', type: 'checkbox', checked: !conf.is_active } })} color={isLed ? '#f97316' : theme.primary} />
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: isLed ? '#c2410c' : theme.darkLabel }}>
+                      {isLed ? (conf.is_active ? '🚦 LED Enabled' : '🚦 LED Disabled') : isCpcb ? 'Enable CPCB Push' : 'Enable TGPCB Push'}
                     </span>
                   </label>
 
@@ -484,12 +580,17 @@ export const ApiMappingsScreen = () => {
                     </div>
                   )}
 
-                  {(!isCpcb || isBoth) && conf.id && (
+                  {(!isCpcb || isBoth) && !isLed && conf.id && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', borderLeft: '1px solid #cbd5e1', paddingLeft: '12px' }}>
                       <button onClick={() => handleTestPush(conf.id)} disabled={testingPush[conf.id]} style={{
                         backgroundColor: theme.primary, color: '#fff', border: 'none', height: '28px', padding: '0 12px', fontSize: '11px', borderRadius: '6px', fontWeight: '800', cursor: 'pointer'
                       }}>
-                        {testingPush[conf.id] ? '⏳ Testing...' : 'Test Push'}
+                        {testingPush[conf.id] ? '⏳ Testing...' : 'Test Live Push'}
+                      </button>
+                      <button onClick={() => handleTestDelayPush(conf.id)} disabled={testingDelayPush[conf.id]} style={{
+                        backgroundColor: '#7c3aed', color: '#fff', border: 'none', height: '28px', padding: '0 12px', fontSize: '11px', borderRadius: '6px', fontWeight: '800', cursor: 'pointer'
+                      }}>
+                        {testingDelayPush[conf.id] ? '⏳ Testing...' : 'Test Delay Push'}
                       </button>
                     </div>
                   )}
@@ -517,9 +618,11 @@ export const ApiMappingsScreen = () => {
                 const isSelected = activeServerTab === srv.id;
                 const isBoth = srv.protocol === 'both';
                 const isCpcb = srv.protocol === 'cpcb';
+                const isLedTab = srv.protocol === 'led';
                 let pillColor = theme.primary;
                 if (isBoth) pillColor = '#7c3aed';
                 if (isCpcb) pillColor = theme.cpcbBg;
+                if (isLedTab) pillColor = '#f97316';
 
                 return (
                   <button key={srv.id} style={{
@@ -533,7 +636,7 @@ export const ApiMappingsScreen = () => {
                     fontSize: '11px',
                     transition: 'all 0.15s ease'
                   }} onClick={() => setActiveServerTab(srv.id)}>
-                    {srv.name} [{isBoth ? 'Both' : isCpcb ? 'CPCB' : 'TGPCB'}]
+                    {srv.name} [{isBoth ? 'Both' : isCpcb ? 'CPCB' : isLedTab ? '🚦 LED' : 'TGPCB'}]
                   </button>
                 );
               })}
@@ -544,15 +647,17 @@ export const ApiMappingsScreen = () => {
           <div style={{ flex: 1, minHeight: '250px', overflow: 'auto', borderRadius: '8px', border: `1.5px solid ${theme.border}`, background: '#fff' }}>
             {selectedServer ? (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: theme.primary }}>
+                <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: selectedServer.protocol === 'led' ? '#ea580c' : theme.primary }}>
                   <tr>
-                    {[`Ch_no`, `Station`, `Var Name`, `Status`, `vname`, `unit`].map(col => (
-                      <th key={col} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', color: '#fff', fontWeight: 'bold', borderRight: '1px solid rgba(255,255,255,0.15)', borderBottom: `2px solid ${theme.primary}` }}>{col}</th>
+                    {[`Ch_no`, `Station`, `Var Name`, `Status`,
+                      ...(selectedServer.protocol === 'led' ? [`LED Name`, `LED Unit`] : [`vname`, `unit`])
+                    ].map(col => (
+                      <th key={col} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', color: '#fff', fontWeight: 'bold', borderRight: '1px solid rgba(255,255,255,0.15)', borderBottom: `2px solid ${selectedServer.protocol === 'led' ? '#ea580c' : theme.primary}` }}>{col}</th>
                     ))}
                     {(selectedServer.protocol === 'cpcb' || selectedServer.protocol === 'both') && [`CPCB St. Name`, `CPCB Param`].map(col => (
                       <th key={col} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', color: '#fff', fontWeight: 'bold', borderRight: '1px solid rgba(255,255,255,0.15)', borderBottom: `2px solid ${theme.primary}` }}>{col}</th>
                     ))}
-                    {(selectedServer.protocol !== 'cpcb' || selectedServer.protocol === 'both') && [`Device ID`, `Site Name`, `Password`].map(col => (
+                    {(selectedServer.protocol !== 'cpcb' && selectedServer.protocol !== 'led') && [`Device ID`, `Site Name`, `Password`].map(col => (
                       <th key={col} style={{ padding: '10px 12px', textAlign: 'left', fontSize: '11px', color: '#fff', fontWeight: 'bold', borderRight: '1px solid rgba(255,255,255,0.15)', borderBottom: `2px solid ${theme.primary}` }}>{col}</th>
                     ))}
                   </tr>
@@ -583,12 +688,29 @@ export const ApiMappingsScreen = () => {
                           <td style={{ padding: '6px 12px', borderRight: '1px solid #f1f5f9' }}>
                             <Toggle checked={!!state.is_active} onChange={() => handleCellChange('is_active', !state.is_active)} />
                           </td>
-                          <td style={{ padding: '4px 8px', borderRight: '1px solid #f1f5f9' }}>
-                            <input style={cellInputStyle} placeholder="vname" value={state.api_vname || ''} onChange={e => handleCellChange('api_vname', e.target.value)} onFocus={e => e.target.style.borderColor = theme.primary} onBlur={e => e.target.style.borderColor = 'transparent'} />
-                          </td>
-                          <td style={{ padding: '4px 8px', borderRight: '1px solid #f1f5f9' }}>
-                            <input style={cellInputStyle} placeholder="unit" value={state.api_unit || ''} onChange={e => handleCellChange('api_unit', e.target.value)} onFocus={e => e.target.style.borderColor = theme.primary} onBlur={e => e.target.style.borderColor = 'transparent'} />
-                          </td>
+                          {/* LED-specific columns */}
+                          {srv.protocol === 'led' && (
+                            <>
+                              <td style={{ padding: '4px 8px', borderRight: '1px solid #f1f5f9' }}>
+                                <input style={cellInputStyle} placeholder="e.g. NOX" value={state.led_channel_name || ''} onChange={e => handleCellChange('led_channel_name', e.target.value)} onFocus={e => e.target.style.borderColor = '#f97316'} onBlur={e => e.target.style.borderColor = 'transparent'} />
+                              </td>
+                              <td style={{ padding: '4px 8px', borderRight: '1px solid #f1f5f9' }}>
+                                <input style={cellInputStyle} placeholder="e.g. mg/Nm3" value={state.led_unit || ''} onChange={e => handleCellChange('led_unit', e.target.value)} onFocus={e => e.target.style.borderColor = '#f97316'} onBlur={e => e.target.style.borderColor = 'transparent'} />
+                              </td>
+                            </>
+                          )}
+
+                          {/* TGPCB/Both vname+unit */}
+                          {srv.protocol !== 'led' && (
+                            <>
+                              <td style={{ padding: '4px 8px', borderRight: '1px solid #f1f5f9' }}>
+                                <input style={cellInputStyle} placeholder="vname" value={state.api_vname || ''} onChange={e => handleCellChange('api_vname', e.target.value)} onFocus={e => e.target.style.borderColor = theme.primary} onBlur={e => e.target.style.borderColor = 'transparent'} />
+                              </td>
+                              <td style={{ padding: '4px 8px', borderRight: '1px solid #f1f5f9' }}>
+                                <input style={cellInputStyle} placeholder="unit" value={state.api_unit || ''} onChange={e => handleCellChange('api_unit', e.target.value)} onFocus={e => e.target.style.borderColor = theme.primary} onBlur={e => e.target.style.borderColor = 'transparent'} />
+                              </td>
+                            </>
+                          )}
 
                           {(srv.protocol === 'cpcb' || srv.protocol === 'both') && (
                             <>
@@ -604,7 +726,7 @@ export const ApiMappingsScreen = () => {
                             </>
                           )}
 
-                          {(srv.protocol !== 'cpcb' || srv.protocol === 'both') && (
+                          {(srv.protocol !== 'cpcb' && srv.protocol !== 'led') && (
                             <>
                               <td style={{ padding: '4px 8px', borderRight: '1px solid #f1f5f9' }}>
                                 <input style={cellInputStyle} placeholder="ID" value={state.api_id || ''} onChange={e => handleCellChange('api_id', e.target.value)} onFocus={e => e.target.style.borderColor = theme.primary} onBlur={e => e.target.style.borderColor = 'transparent'} />
@@ -662,6 +784,19 @@ export const ApiMappingsScreen = () => {
             <b>api_id</b> = Station Name &nbsp;|&nbsp; <b>CPCB PARAM</b> = CO / SO2 / PM10 …
           </div>
         </div>
+        <div style={{
+          flex: 1, minWidth: '240px', background: 'rgba(249,115,22,0.03)',
+          border: '1px solid rgba(249,115,22,0.2)', borderRadius: '8px', padding: '10px 14px'
+        }}>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#c2410c', marginBottom: '4px' }}>
+            🚦 LED Board (LAN — Port 80)
+          </div>
+          <div style={{ fontSize: '11px', color: '#475569', lineHeight: 1.6 }}>
+            <b>How:</b> LED card polls this URL on the LAN (port 80)<br />
+            <b>URL:</b> <code style={{ fontSize: '10px', background: '#fff7ed', padding: '1px 4px', borderRadius: '3px' }}>http://&lt;PC-IP&gt;/api/v1/led?auth=menakshi&amp;PCB=7003</code><br />
+            <b>Channel ID</b> = PCB number on card &nbsp;|&nbsp; <b>LED Name</b> = label shown on board
+          </div>
+        </div>
       </div>
 
       {/* ── Test Response Modal ── */}
@@ -680,8 +815,9 @@ export const ApiMappingsScreen = () => {
               padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               backgroundColor: testResultModal.success ? '#f0fdf4' : '#fef2f2'
             }}>
-              <h3 style={{ margin: 0, fontSize: '15px', color: testResultModal.success ? '#166534' : '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', color: testResultModal.success ? '#166534' : '#991b1b', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 {testResultModal.success ? '✅ Push Successful' : '❌ Push Failed'}
+                {testResultModal.title && <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>{testResultModal.title}</span>}
                 <span style={{
                   fontSize: '11px', padding: '2px 6px', borderRadius: '4px',
                   backgroundColor: testResultModal.success ? '#dcfce7' : '#fee2e2',

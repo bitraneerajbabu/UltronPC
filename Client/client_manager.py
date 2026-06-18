@@ -7,6 +7,7 @@ Just run:  python client_manager.py
 """
 
 import os
+import re
 import sys
 import json
 import shutil
@@ -19,21 +20,251 @@ import urllib.request
 import urllib.error
 
 # ── Config ───────────────────────────────────────────────────────────────────
-RAJAPI_BASE   = "https://rajapi.com/api/v1"
-ADMIN_KEY     = "UltrON@RajAPI_Admin_2026!"   # Must match ADMIN_KEY on the Pi server
+RAJAPI_BASE        = "https://rajapi.com/api/v1"
+ADMIN_KEY          = "UltrON@RajAPI_Admin_2026!"   # Must match ADMIN_KEY on the Pi server
+GITHUB_REPO        = "bitraneerajbabu/UltronPC"
+GITHUB_API_LATEST  = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
-SCRIPT_DIR    = Path(__file__).parent.resolve()
-BACKEND_DIR   = SCRIPT_DIR / "backend" / "ultron_backend"
-ENV_BAK       = BACKEND_DIR / ".env.bak"
-ENV_FILE      = BACKEND_DIR / ".env"
-ENV_ENC_FILE  = BACKEND_DIR / ".env.enc"
-DIST_DIR      = BACKEND_DIR / "dist"
-OUTPUT_DIR    = DIST_DIR / "clients"
-PYTHON        = BACKEND_DIR / "venv" / "Scripts" / "python.exe"
-BUILD_BAT     = SCRIPT_DIR / "build_exe.bat"
-CLIENTS_FILE  = SCRIPT_DIR / "clients.json"     # Persistent list of all clients
+SCRIPT_DIR         = Path(__file__).parent.resolve()
+BACKEND_DIR        = SCRIPT_DIR / "backend" / "ultron_backend"
+PUBLISH_SCRIPT     = SCRIPT_DIR / "publish_release.py"
+ENV_BAK            = BACKEND_DIR / ".env.bak"
+ENV_FILE           = BACKEND_DIR / ".env"
+ENV_ENC_FILE       = BACKEND_DIR / ".env.enc"
+DIST_DIR           = BACKEND_DIR / "dist"
+OUTPUT_DIR         = DIST_DIR / "clients"
+PYTHON             = BACKEND_DIR / "venv" / "Scripts" / "python.exe"
+BUILD_BAT          = SCRIPT_DIR / "build_exe.bat"
+CLIENTS_FILE       = SCRIPT_DIR / "clients.json"     # Persistent list of all clients
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _version_tuple(v: str):
+    """Convert 'v1.2.3' or '1.2.3' to (1, 2, 3) for comparison."""
+    v = v.lstrip("v").strip()
+    try:
+        return tuple(int(x) for x in v.split("."))
+    except Exception:
+        return (0,)
+
+
+def _get_current_version() -> str:
+    """Read the TAG constant from publish_release.py."""
+    try:
+        text = PUBLISH_SCRIPT.read_text(encoding="utf-8")
+        m = re.search(r'^TAG\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
+        return m.group(1) if m else "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _get_latest_github_version() -> str:
+    """Fetch the latest release tag from GitHub (returns tag string or raises)."""
+    req = urllib.request.Request(
+        GITHUB_API_LATEST,
+        headers={"User-Agent": "UltrON-Manager/1.0",
+                 "Accept": "application/vnd.github.v3+json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    return data.get("tag_name", "unknown")
+
+
+def _bump_patch(tag: str) -> str:
+    """Increment the patch segment: 'v1.0.3' → 'v1.0.4'."""
+    m = re.match(r'^(v?)(\d+)\.(\d+)\.(\d+)$', tag.strip())
+    if not m:
+        return tag  # unrecognised format — leave unchanged
+    prefix, major, minor, patch = m.group(1), m.group(2), m.group(3), m.group(4)
+    return f"{prefix}{major}.{minor}.{int(patch)+1}"
+
+
+def _set_publish_tag(new_tag: str):
+    """Rewrite the TAG line in publish_release.py."""
+    text = PUBLISH_SCRIPT.read_text(encoding="utf-8")
+    updated = re.sub(
+        r'^(TAG\s*=\s*)["\']([^"\']+)["\']',
+        lambda m2: f'{m2.group(1)}"{new_tag}"',
+        text,
+        flags=re.MULTILINE,
+    )
+    PUBLISH_SCRIPT.write_text(updated, encoding="utf-8")
+
+
+# ── Update Dialog ─────────────────────────────────────────────────────────────
+
+class UpdateDialog(tk.Toplevel):
+    """Version-check + publish dialog shown when the admin clicks 'Update'."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("UltrON — Check for Updates")
+        self.configure(bg="#0f172a")
+        self.resizable(False, False)
+        self.grab_set()  # modal
+        self._build_ui()
+        self.after(100, self._fetch_versions)  # fetch asynchronously after draw
+
+    def _build_ui(self):
+        hdr = tk.Frame(self, bg="#0f3460", pady=12)
+        hdr.pack(fill="x")
+        tk.Label(hdr, text="⬆  UltrON Update Manager",
+                 font=("Segoe UI", 14, "bold"), fg="#2dd4bf", bg="#0f3460").pack(padx=20)
+
+        info = tk.Frame(self, bg="#0f172a", pady=14, padx=24)
+        info.pack(fill="x")
+
+        def row(label, col=0):
+            tk.Label(info, text=label, fg="#94a3b8", bg="#0f172a",
+                     font=("Segoe UI", 9)).grid(row=col, column=0, sticky="w", pady=3)
+
+        row("Current version (publish_release.py TAG):", 0)
+        row("Latest release on GitHub:", 1)
+
+        self._lbl_current = tk.Label(info, text="…", fg="#e2e8f0", bg="#0f172a",
+                                      font=("Segoe UI", 9, "bold"))
+        self._lbl_current.grid(row=0, column=1, sticky="w", padx=12)
+
+        self._lbl_latest = tk.Label(info, text="checking…", fg="#e2e8f0", bg="#0f172a",
+                                     font=("Segoe UI", 9, "bold"))
+        self._lbl_latest.grid(row=1, column=1, sticky="w", padx=12)
+
+        self._lbl_status = tk.Label(self, text="", fg="#fbbf24", bg="#0f172a",
+                                     font=("Segoe UI", 9), pady=4)
+        self._lbl_status.pack()
+
+        # Log output
+        log_frm = tk.Frame(self, bg="#0f172a", padx=16, pady=0)
+        log_frm.pack(fill="both", expand=True, pady=(0, 8))
+        self._log = scrolledtext.ScrolledText(
+            log_frm, width=72, height=10,
+            bg="#020617", fg="#86efac",
+            font=("Consolas", 8), relief="flat", state="disabled")
+        self._log.pack(fill="both", expand=True)
+
+        # Buttons
+        btn_frm = tk.Frame(self, bg="#0f172a", pady=10)
+        btn_frm.pack()
+        self._btn_publish = tk.Button(
+            btn_frm, text="🚀  Publish New Release",
+            command=self._on_publish,
+            bg="#065f46", fg="white", font=("Segoe UI", 9, "bold"),
+            relief="flat", activebackground="#047857", padx=14, pady=6,
+            cursor="hand2", state="disabled")
+        self._btn_publish.pack(side="left", padx=8)
+        tk.Button(btn_frm, text="Close",
+                  command=self.destroy,
+                  bg="#1e293b", fg="#94a3b8", font=("Segoe UI", 9),
+                  relief="flat", padx=14, pady=6, cursor="hand2").pack(side="left", padx=8)
+
+        # geometry after widget creation
+        self.update_idletasks()
+        w, h = 620, 440
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        self.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
+
+    def _log_write(self, msg: str):
+        self._log.configure(state="normal")
+        self._log.insert("end", msg + "\n")
+        self._log.see("end")
+        self._log.configure(state="disabled")
+
+    def _fetch_versions(self):
+        """Fetch current + latest version in a thread and update labels."""
+        current = _get_current_version()
+        self._lbl_current.configure(text=current)
+
+        def _fetch():
+            try:
+                latest = _get_latest_github_version()
+                self.after(0, lambda: self._on_versions_fetched(current, latest))
+            except Exception as e:
+                self.after(0, lambda: self._on_fetch_error(str(e)))
+
+        threading.Thread(target=_fetch, daemon=True).start()
+
+    def _on_versions_fetched(self, current: str, latest: str):
+        self._lbl_latest.configure(text=latest)
+        if _version_tuple(latest) > _version_tuple(current):
+            self._lbl_status.configure(
+                text=f"⚠  A newer release ({latest}) exists on GitHub. "
+                     f"Current publish tag is {current}.",
+                fg="#fbbf24")
+            self._btn_publish.configure(state="normal")
+        elif _version_tuple(current) > _version_tuple(latest):
+            new_tag = current
+            self._lbl_status.configure(
+                text=f"Current tag ({current}) is newer than GitHub. "
+                     f"Ready to publish.",
+                fg="#86efac")
+            self._btn_publish.configure(state="normal")
+        else:
+            self._lbl_status.configure(
+                text="✓  Already up-to-date. Bump the version and publish to release a new build.",
+                fg="#86efac")
+            self._btn_publish.configure(state="normal")  # allow force-publish
+
+    def _on_fetch_error(self, err: str):
+        self._lbl_latest.configure(text="Error", fg="#f87171")
+        self._lbl_status.configure(text=f"✗ Could not reach GitHub: {err}", fg="#f87171")
+
+    def _on_publish(self):
+        """Bump patch version, update TAG in publish_release.py, run publish."""
+        current = _get_current_version()
+        new_tag = _bump_patch(current)
+        if not messagebox.askyesno(
+            "Confirm Publish",
+            f"This will:\n"
+            f"  1. Update TAG in publish_release.py: {current} → {new_tag}\n"
+            f"  2. Run publish_release.py to upload dist/UltrON.exe to GitHub\n\n"
+            f"Make sure you have built the EXE first!\n\nProceed?",
+            parent=self
+        ):
+            return
+        self._btn_publish.configure(state="disabled", text="Publishing…")
+        try:
+            _set_publish_tag(new_tag)
+            self._lbl_current.configure(text=new_tag)
+            self._log_write(f"[Publish] TAG updated to {new_tag}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not update TAG: {e}", parent=self)
+            self._btn_publish.configure(state="normal", text="🚀  Publish New Release")
+            return
+
+        threading.Thread(target=self._run_publish, daemon=True).start()
+
+    def _run_publish(self):
+        """Run publish_release.py and stream output to the log widget."""
+        py = str(PYTHON) if PYTHON.exists() else sys.executable
+        self._log_write(f"[Publish] Running: {py} {PUBLISH_SCRIPT.name}\n")
+        try:
+            proc = subprocess.Popen(
+                [py, str(PUBLISH_SCRIPT)],
+                cwd=str(SCRIPT_DIR),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            for line in proc.stdout:
+                stripped = line.rstrip()
+                if stripped:
+                    self.after(0, lambda l=stripped: self._log_write(l))
+            proc.wait()
+            if proc.returncode == 0:
+                self.after(0, lambda: self._log_write("\n✓ Publish complete!"))
+                self.after(0, lambda: self._lbl_status.configure(
+                    text="✓ Published successfully!", fg="#86efac"))
+            else:
+                self.after(0, lambda: self._log_write(f"\n✗ Publish failed (exit {proc.returncode})"))
+                self.after(0, lambda: self._lbl_status.configure(
+                    text="✗ Publish failed — see log above.", fg="#f87171"))
+        except Exception as e:
+            self.after(0, lambda: self._log_write(f"\n✗ Error: {e}"))
+        finally:
+            self.after(0, lambda: self._btn_publish.configure(
+                state="normal", text="🚀  Publish New Release"))
+
 
 def _api(method: str, path: str, body: dict = None) -> dict:
     """Simple HTTP call to rajapi.com with admin key."""
@@ -161,6 +392,12 @@ class App(tk.Tk):
                  font=("Segoe UI", 18, "bold"), fg="#2dd4bf", bg="#0f3460").pack(side="left", padx=20)
         tk.Label(hdr, text="Register clients & build installers",
                  font=("Segoe UI", 10), fg="#94a3b8", bg="#0f3460").pack(side="left")
+        # Update button — right-aligned in the header
+        tk.Button(hdr, text="⬆  Update",
+                  command=self._open_update_dialog,
+                  bg="#1d4ed8", fg="white", font=("Segoe UI", 9, "bold"),
+                  relief="flat", activebackground="#2563eb",
+                  padx=12, pady=5, cursor="hand2").pack(side="right", padx=20)
 
         # ── Sync from rajapi ────────────────────────────────────────────
         top = tk.Frame(self, bg="#0f172a", pady=8, padx=16)
@@ -425,6 +662,9 @@ class App(tk.Tk):
 
     def _run_in_thread(self, fn):
         threading.Thread(target=fn, daemon=True).start()
+
+    def _open_update_dialog(self):
+        UpdateDialog(self)
 
 
 if __name__ == "__main__":

@@ -23,14 +23,23 @@ import uvicorn
 from pathlib import Path
 
 # ── PyInstaller compatibility ─────────────────────────────────────────────────
-# When frozen by PyInstaller the executable lives in dist/UltrON/,
-# not next to the source files.  We must fix up sys.path and cwd before any
-# relative-path resolution happens.
-
 if getattr(sys, "frozen", False):
-    # Frozen: _MEIPASS holds extracted packages; executable dir holds data files
     _BUNDLE_DIR = Path(sys._MEIPASS)
     _APP_DIR    = Path(sys.executable).parent
+
+    # ── Silent windowed mode: redirect stdout/stderr to log file ──────────────
+    # When console=False, any print()/exception to stdout/stderr causes a crash.
+    # We redirect them to a log file so errors are still captured for debugging.
+    import io
+    _log_path = _APP_DIR / "ultron_log.txt"
+    try:
+        _log_file = open(_log_path, "a", encoding="utf-8", buffering=1)
+        sys.stdout = _log_file
+        sys.stderr = _log_file
+    except Exception:
+        # If log file can't be opened, use a null sink to prevent crashes
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
 else:
     _BUNDLE_DIR = Path(__file__).parent.resolve()
     _APP_DIR    = _BUNDLE_DIR
@@ -265,7 +274,7 @@ def main():
     print()
     log("Starting API server on http://{}:{}".format(args.host, args.port))
     log("Swagger docs  -> http://localhost:{}/docs".format(args.port))
-    log("Press Ctrl+C to stop.")
+    log("UltrON running silently in background. Open http://localhost:{} in browser.".format(args.port))
     print()
 
     # Import the app object directly when frozen to avoid the module-string lookup

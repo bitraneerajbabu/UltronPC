@@ -217,7 +217,7 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleLoginSubmit = async (e) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) {
       setLoginError('Both username and password are required.');
@@ -255,14 +255,13 @@ function App() {
           <div className="login-card">
             <img 
               src="/assets/Ultron_logo.png" 
-              className="login-logo" 
+              className="login-logo cursor-pointer" 
               alt="UltrON Logo" 
-              style={{ cursor: 'pointer' }}
               onClick={() => setShowSetupLogin(true)}
               title="Click here to authenticate setup"
             />
-            <h2 className="login-title" style={{ color: '#dc2626' }}>Access Denied</h2>
-            <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '20px', textAlign: 'center', lineHeight: '1.5' }}>
+            <h2 className="login-title login-title-error">Access Denied</h2>
+            <p className="access-denied-description">
               AMC Token is expired or not configured. Please contact Sunshine Technologies.
             </p>
 
@@ -275,8 +274,8 @@ function App() {
                 } else {
                   setSetupAuthError('Invalid setup credentials.');
                 }
-              }} style={{ marginTop: '30px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '10px' }}>AMC Token Renewal Override</h3>
+              }} className="override-form">
+                <h3 className="override-form-title">AMC Token Renewal Override</h3>
                 <div className="form-group">
                   <input
                     type="text"
@@ -295,8 +294,8 @@ function App() {
                     placeholder="Password"
                   />
                 </div>
-                {setupAuthError && <div style={{ color: 'red', fontSize: '12px', marginBottom: '10px' }}>{setupAuthError}</div>}
-                <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Authenticate</button>
+                {setupAuthError && <div className="auth-error-message">{setupAuthError}</div>}
+                <button type="submit" className="btn btn-primary full-width">Authenticate</button>
               </form>
             )}
           </div>
@@ -307,9 +306,9 @@ function App() {
     // Setup configuration screen (isSetupAuthenticated === true)
     return (
       <div className="login-screen">
-        <div className="login-card" style={{ maxWidth: '500px' }}>
+        <div className="login-card setup-card">
           <h2 className="login-title">License & AMC Setup</h2>
-          <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', textAlign: 'center' }}>
+          <p className="setup-description">
             Paste the AMC Token from rajapi.com to unlock UltrON.
           </p>
 
@@ -339,18 +338,21 @@ function App() {
             }
           }}>
             <div className="form-group">
-              <label className="form-label">Central API URL</label>
+              <label htmlFor="setupApiUrl" className="form-label">Central API URL</label>
               <input
+                id="setupApiUrl"
                 type="text"
                 className="form-input"
                 value={setupApiUrl}
                 onChange={e => setSetupApiUrl(e.target.value)}
                 required
+                placeholder="https://api.example.com"
               />
             </div>
             <div className="form-group">
-              <label className="form-label">AMC Token</label>
+              <label htmlFor="setupApiKey" className="form-label">AMC Token</label>
               <input
+                id="setupApiKey"
                 type="text"
                 className="form-input"
                 value={setupApiKey}
@@ -361,15 +363,14 @@ function App() {
             </div>
             
             {setupResult && (
-              <div style={{ padding: '10px', background: setupResult.startsWith('Success') ? '#dcfce7' : '#fee2e2', color: setupResult.startsWith('Success') ? '#166534' : '#991b1b', borderRadius: '4px', marginBottom: '15px', fontSize: '13px' }}>
+              <div className={`setup-result-msg ${setupResult.startsWith('Success') ? 'msg-success' : 'msg-error'}`}>
                 {setupResult}
               </div>
             )}
 
             <button
               type="submit"
-              className="btn btn-primary"
-              style={{ width: '100%', height: '44px' }}
+              className="btn btn-primary full-width btn-tall"
               disabled={setupTesting}
             >
               {setupTesting ? 'Testing Connection...' : 'Test & Activate'}
@@ -387,7 +388,7 @@ function App() {
         <div className="login-card">
           <img src="/assets/Ultron_logo.png" className="login-logo" alt="UltrON Logo" />
           <h2 className="login-title">Industrial Monitoring Platform</h2>
-          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '20px', textAlign: 'center' }}>
+          <p className="login-description">
             Sign in with your credentials to access the system
           </p>
 
@@ -405,26 +406,21 @@ function App() {
               />
             </div>
 
-            <div className="form-group" style={{ position: 'relative' }}>
+            <div className="form-group relative-group">
               <label className="form-label">Password</label>
               <input
                 id="login-password"
                 type={showPassword ? 'text' : 'password'}
-                className={`form-input ${loginError ? 'error' : ''}`}
+                className={`form-input password-input ${loginError ? 'error' : ''}`}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Enter password"
                 autoComplete="current-password"
-                style={{ paddingRight: '44px' }}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(v => !v)}
-                style={{
-                  position: 'absolute', right: '12px', bottom: '10px',
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#64748b', padding: '0', display: 'flex', alignItems: 'center'
-                }}
+                className="password-toggle-btn"
               >
                 {showPassword ? <EyeOffIcon /> : <EyeIcon />}
               </button>

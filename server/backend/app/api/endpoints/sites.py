@@ -40,6 +40,7 @@ def create_site(site: SiteCreate, db: Session = Depends(get_db), _: None = Depen
 
 @router.delete("/{site_id}")
 def delete_site(site_id: int, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    """Delete a site and all its telemetry."""
     db_site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
     if not db_site:
         raise HTTPException(status_code=404, detail="Site not found")
@@ -48,7 +49,7 @@ def delete_site(site_id: int, db: Session = Depends(get_db), _: None = Depends(_
     return {"status": "deleted", "id": site_id}
 
 @router.put("/{site_id}/status", response_model=SiteResponse)
-def update_site_status(site_id: int, is_active: bool, db: Session = Depends(get_db)):
+def update_site_status(site_id: int, is_active: bool, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
     db_site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
     if not db_site:
         raise HTTPException(status_code=404, detail="Site not found")
@@ -59,7 +60,7 @@ def update_site_status(site_id: int, is_active: bool, db: Session = Depends(get_
     return db_site
 
 @router.post("/{site_id}/renew", response_model=SiteResponse)
-def renew_site_amc(site_id: int, db: Session = Depends(get_db)):
+def renew_site_amc(site_id: int, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
     db_site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
     if not db_site:
         raise HTTPException(status_code=404, detail="Site not found")
@@ -79,7 +80,7 @@ class AmcExpiryUpdate(BaseModel):
     amc_expiry: datetime
 
 @router.put("/{site_id}/amc-expiry", response_model=SiteResponse)
-def update_site_amc_expiry(site_id: int, payload: AmcExpiryUpdate, db: Session = Depends(get_db)):
+def update_site_amc_expiry(site_id: int, payload: AmcExpiryUpdate, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
     db_site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
     if not db_site:
         raise HTTPException(status_code=404, detail="Site not found")
@@ -90,49 +91,101 @@ def update_site_amc_expiry(site_id: int, payload: AmcExpiryUpdate, db: Session =
     return db_site
 
 
+class SiteUpdate(BaseModel):
+    name: Optional[str] = None
+    location: Optional[str] = None
+    amc_expiry: Optional[datetime] = None
+
+@router.patch("/{site_id}", response_model=SiteResponse)
+def update_site(site_id: int, payload: SiteUpdate, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    """Update site name, location, or AMC expiry without changing the API key."""
+    db_site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
+    if not db_site:
+        raise HTTPException(status_code=404, detail="Site not found")
+
+    if payload.name is not None:
+        db_site.name = payload.name
+    if payload.location is not None:
+        db_site.location = payload.location
+    if payload.amc_expiry is not None:
+        db_site.amc_expiry = payload.amc_expiry
+
+    db.commit()
+    db.refresh(db_site)
+    return db_site
+
+
 @router.get("/{site_id}/telemetry/latest", response_model=List[LatestTelemetryPoint])
 def get_latest_telemetry(site_id: int, db: Session = Depends(get_db)):
     """
-    Returns the most recent telemetry value for every parameter/tag
-    at the given site. Used by the live data panel in the dashboard.
+    Returns the most recent telemetry value for every parameter/tag at the given site.
+    Uses DISTINCT ON (PostgreSQL native) — much faster than the correlated-subquery approach
+    on large telemetry tables.
     """
+    from sqlalchemy import text
+
     site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
 
-    # Subquery: for each parameter, get the timestamp of its latest reading
-    latest_ts_subq = (
-        db.query(
-            TelemetryData.parameter_id,
-            func.max(TelemetryData.timestamp).label("max_ts")
-        )
-        .filter(TelemetryData.site_id == site_id)
-        .group_by(TelemetryData.parameter_id)
-        .subquery()
-    )
+    # Single-pass DISTINCT ON — PostgreSQL picks the latest row per parameter in one scan
+    sql = text("""
+        SELECT DISTINCT ON (t.parameter_id)
+               p.tag_name,
+               p.name       AS param_name,
+               p.unit,
+               t.value,
+               t.quality,
+               t.timestamp
+        FROM   telemetry_data t
+        JOIN   parameters     p ON p.id = t.parameter_id
+        WHERE  t.site_id = :site_id
+        ORDER  BY t.parameter_id, t.timestamp DESC
+    """)
+    rows = db.execute(sql, {"site_id": site_id}).fetchall()
 
-    # Join back to get the full telemetry row for that latest timestamp
-    rows = (
-        db.query(TelemetryData, Parameter)
-        .join(Parameter, TelemetryData.parameter_id == Parameter.id)
-        .join(
-            latest_ts_subq,
-            (TelemetryData.parameter_id == latest_ts_subq.c.parameter_id) &
-            (TelemetryData.timestamp == latest_ts_subq.c.max_ts)
+    return [
+        LatestTelemetryPoint(
+            tag_name=r.tag_name,
+            name=r.param_name,
+            unit=r.unit,
+            value=r.value,
+            quality=r.quality,
+            timestamp=r.timestamp,
         )
-        .filter(TelemetryData.site_id == site_id)
-        .order_by(Parameter.tag_name)
-        .all()
-    )
+        for r in rows
+    ]
 
-    result = []
-    for td, param in rows:
-        result.append(LatestTelemetryPoint(
-            tag_name=param.tag_name,
-            name=param.name,
-            unit=param.unit,
-            value=td.value,
-            quality=td.quality,
-            timestamp=td.timestamp,
-        ))
-    return result
+
+@router.delete("/{site_id}/telemetry/prune")
+def prune_telemetry(site_id: int, keep_days: int = 7, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    """
+    Delete old telemetry rows for a site, keeping only the last `keep_days` days.
+    Default: keep 7 days. Reduces DB size and speeds up all queries.
+    Call periodically or after a client pushes too much data.
+    """
+    from sqlalchemy import text
+    cutoff = datetime.now(timezone.utc) - timedelta(days=keep_days)
+    result = db.execute(
+        text("DELETE FROM telemetry_data WHERE site_id = :sid AND timestamp < :cutoff"),
+        {"sid": site_id, "cutoff": cutoff}
+    )
+    db.commit()
+    return {"status": "pruned", "site_id": site_id, "deleted_rows": result.rowcount, "kept_days": keep_days}
+
+
+@router.delete("/telemetry/prune-all")
+def prune_all_telemetry(keep_days: int = 7, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    """
+    Prune telemetry for ALL sites older than `keep_days` days.
+    Run this to shrink the DB and speed up rajapi.com globally.
+    """
+    from sqlalchemy import text
+    cutoff = datetime.now(timezone.utc) - timedelta(days=keep_days)
+    result = db.execute(
+        text("DELETE FROM telemetry_data WHERE timestamp < :cutoff"),
+        {"cutoff": cutoff}
+    )
+    db.commit()
+    return {"status": "pruned_all", "deleted_rows": result.rowcount, "kept_days": keep_days}
+

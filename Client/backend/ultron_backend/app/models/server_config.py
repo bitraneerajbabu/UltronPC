@@ -9,12 +9,16 @@ class ServerConfig(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), unique=True, index=True)
-    protocol = Column(String(20), default="tspcb")      # "tspcb" | "cpcb"
+    protocol = Column(String(20), default="tspcb")      # "tspcb" | "cpcb" | "led"
     live_url = Column(String(500), nullable=True)        # TSPCB live HTTP push URL
     delay_url = Column(String(500), nullable=True)       # TSPCB delay HTTP push URL
     cpcb_file_path = Column(String(500), nullable=True)  # CPCB output file path
     is_active = Column(Boolean, default=True)
     is_cpcb_active = Column(Boolean, default=True)
+
+    # ─── LED Board (LAN) ──────────────────────────────────────────────────────
+    led_channel_id = Column(Integer, nullable=True)      # PCB/ChannelId integer (e.g. 7003)
+    led_station_name = Column(String(100), nullable=True) # Station label on LED board
 
     mappings = relationship("ServerParameterMapping", back_populates="server", cascade="all, delete-orphan")
 
@@ -36,6 +40,10 @@ class ServerParameterMapping(Base):
     api_unit = Column(String(50), nullable=True)      # unit override
     cpcb_station_name = Column(String(100), nullable=True)
     cpcb_parameter = Column(String(100), nullable=True)
+
+    # ─── LED Board (LAN) ──────────────────────────────────────────────────────
+    led_channel_name = Column(String(100), nullable=True)  # Label shown on LED (e.g. "NOX", "PM10")
+    led_unit = Column(String(50), nullable=True)           # Unit override for LED display
 
     server = relationship("ServerConfig", back_populates="mappings")
     parameter = relationship("Parameter", lazy="selectin")

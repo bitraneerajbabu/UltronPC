@@ -125,6 +125,11 @@ async def _push_tgpcb(config: ServerConfig, db, mode: str):
     """HTTP POST each payload to the configured TGPCB URL."""
     target_url = config.live_url if mode == "live" else config.delay_url
     if not target_url:
+        if mode == "delay":
+            log.warning(
+                f"[TGPCB/DELAY] ⚠ Server '{config.name}' has no Delay URL configured — "
+                f"delay push skipped. Set a Delay URL in Server Push Mappings to fix this."
+            )
         return
 
     try:
@@ -166,6 +171,7 @@ async def _push_tgpcb(config: ServerConfig, db, mode: str):
                     )
     except Exception as e:
         log.error(f"[TGPCB/{mode.upper()}] Build/push failed for '{config.name}': {e}")
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -57,7 +57,19 @@ def main():
                     "- Supported tokens: {YYYYMMDD}, {YYYY-MM-DD}, {DD-MM-YYYY}, {DDMMYYYY}\n"
                     "- Automatically resolves today's file and falls back to yesterday during midnight rollover\n"
                     "- Added CSV fixed-file vs daily-file configuration in the device screen\n"
-                    "- CSV column guide uses A=0, B=1, C=2 mapping for parameter register addresses\n"
+                    "- CSV column guide uses A=0, B=1, C=2 mapping for parameter register addresses\n\n"
+                    "### 🚦 LED Board LAN Support\n"
+                    "- New **LED Board (LAN)** protocol in Server Push Mappings\n"
+                    "- UltrON now serves live telemetry on **port 80** — paste URL directly into LED control card\n"
+                    "- Enable/disable toggle with live URL display and **Copy URL** button\n"
+                    "- Per-parameter LED Name and Unit mapping columns\n\n"
+                    "### 🔧 TGPCB Delay Push Fix\n"
+                    "- Delay push now logs a clear warning when Delay URL is not configured (was silently skipped)\n"
+                    "- New **Test Delay Push** button to verify delay URL connectivity from the UI\n"
+                    "- Test result modal shows which push type was tested (Live / Delay) and the URL used\n\n"
+                    "### 🛠️ Other Improvements\n"
+                    "- Port 80 secondary HTTP server for LED cards (runs alongside main app)\n"
+                    "- LED board URL auto-detected from PC LAN IP\n"
                 ),
                 "draft": False,
                 "prerelease": False
