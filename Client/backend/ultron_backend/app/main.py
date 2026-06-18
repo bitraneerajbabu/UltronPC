@@ -28,6 +28,7 @@ from app.api import stations, devices, parameters, telemetry, trends, reports, a
 from app.api import auth as auth_api
 from app.api import users as users_api
 from app.api import led as led_api
+from app.api import broadcasts as broadcasts_api
 
 log = get_logger("ultron.main")
 
@@ -242,6 +243,7 @@ app.include_router(auth_api.router,     prefix=PREFIX)
 app.include_router(users_api.router,    prefix=PREFIX)
 app.include_router(license.router,      prefix=PREFIX)
 app.include_router(led_api.router,      prefix=PREFIX)  # LED Board LAN endpoint
+app.include_router(broadcasts_api.router, prefix=PREFIX)
 
 # ─── WebSocket Live Push ──────────────────────────────────────────────────────
 @app.websocket("/ws/live")

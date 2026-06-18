@@ -26,6 +26,7 @@ from app.models.parameter import Parameter
 from app.models.device import Device
 from app.models.station import Station
 from app.core.logger import get_logger
+from app.services.lock_store import is_push_allowed, get_lock_status
 
 log = get_logger("ultron.server_push")
 
@@ -583,10 +584,46 @@ async def run_server_push(mode: str = "live"):
     Called by APScheduler:
       mode="live"  → every  1 minute  — TGPCB live push, check CPCB files
       mode="delay" → every 15 minutes — TGPCB delay push, check CPCB files
+
+    When lock is active or AMC expired:
+      - Polling continues (device reading NEVER stops)
+      - Live data is queued as PendingUpload instead of pushed live
+      - When lock is removed, queued data is posted from delay queue
     """
     async with AsyncSessionLocal() as db:
         # Check internet connectivity (logs state transitions)
         await check_connectivity()
+
+        # Check lock status — if push blocked, queue instead of push
+        push_allowed = await is_push_allowed()
+        lock_info = await get_lock_status()
+
+        if not push_allowed and mode == "live":
+            log.info(f"[PUSH] Locked ({lock_info.get('lock_status')}) — queueing live data as pending")
+            # Queue current live data as pending uploads instead of pushing
+            ld_stmt = select(LiveData).options(selectinload(LiveData.parameter))
+            ld_res = await db.execute(ld_stmt)
+            live_data_list = ld_res.scalars().all()
+            conf_result = await db.execute(
+                select(ServerConfig).filter(ServerConfig.is_active == True)
+            )
+            servers = conf_result.scalars().all()
+            for config in servers:
+                payloads = await _build_tgpcb_payloads(db, config.id)
+                for payload in payloads:
+                    db.add(PendingUpload(
+                        server_config_id=config.id,
+                        url=config.live_url or config.delay_url or "",
+                        payload=payload,
+                        mode="delay",
+                        last_error="Queued (locked/AMC expired)",
+                    ))
+            await db.commit()
+            log.info(f"[PUSH] ✓ Queued {len(servers)} server config(s) for delayed push")
+            # Skip live push, still process delay retry
+            if mode == "delay":
+                await retry_pending_uploads(db)
+            return
 
         conf_result = await db.execute(
             select(ServerConfig).filter(ServerConfig.is_active == True)
@@ -597,25 +634,20 @@ async def run_server_push(mode: str = "live"):
             proto = (config.protocol or "tspcb").lower()
 
             if proto == "cpcb":
-                # Check CPCB flat-file on every run (both live & delay)
                 await _push_cpcb(config, db)
 
             elif proto == "both":
-                # Both — TGPCB (live + delay) and CPCB (on every run)
                 if mode == "live":
                     await _push_tgpcb(config, db, "live")
                 elif mode == "delay":
                     await _push_tgpcb(config, db, "delay")
-                
                 await _push_cpcb(config, db)
 
             else:
-                # TGPCB — HTTP JSON push (live + delay)
                 await _push_tgpcb(config, db, mode)
 
         # Always push latest live telemetry to RajAPI MQTT broker (if enabled)
         if mode == "live":
-            # Fetch live data once — reused for MQTT and parameter snapshot
             ld_stmt = select(LiveData).options(selectinload(LiveData.parameter))
             ld_res = await db.execute(ld_stmt)
             live_data_list = ld_res.scalars().all()
@@ -644,7 +676,6 @@ async def run_server_push(mode: str = "live"):
                 if payload["data"]:
                     await publish_telemetry(payload)
 
-            # Log consolidated parameter snapshot every 60 sec
             param_vals = []
             for ld in live_data_list:
                 if ld.parameter and ld.value is not None:
@@ -662,6 +693,5 @@ async def run_server_push(mode: str = "live"):
                 ))
                 await db.commit()
 
-        # Retry pending uploads only in delay mode (every 15 min)
         if mode == "delay":
             await retry_pending_uploads(db)

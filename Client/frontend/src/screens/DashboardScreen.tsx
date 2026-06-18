@@ -173,13 +173,14 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
 });
 
 export const DashboardScreen = () => {
-  const { kpis, stations, devices, parameters, liveData, showToast, authFetch, API_BASE, parseUtcDate, fetchLatestTelemetryAndKpis } = useContext(AppContext);
+  const { kpis, stations, devices, parameters, liveData, showToast, authFetch, API_BASE, parseUtcDate, fetchLatestTelemetryAndKpis, amcExpiry, broadcasts } = useContext(AppContext);
   const [selectedParam, setSelectedParam] = useState('');
   const [currentTime, setCurrentTime] = useState(formatCurrentTime());
   const [showAlarmsModal, setShowAlarmsModal] = useState(false);
   const [isTrendsModalOpen, setIsTrendsModalOpen] = useState(false);
   const [avg15Mins, setAvg15Mins] = useState({});
   const [networkInfo, setNetworkInfo] = useState<{ lan_ip: string; internet_connected: boolean; hostname: string } | null>(null);
+  const [dismissedBroadcast, setDismissedBroadcast] = useState<number | null>(null);
 
   // Poll latest telemetry and KPIs every 5 seconds for dashboard updates
   useEffect(() => {
@@ -550,10 +551,31 @@ export const DashboardScreen = () => {
     return parameters.filter(p => !devices.some(d => d.id === p.device_id));
   }, [devices, parameters]);
 
+  // AMC expiry warning (45 days early)
+  const amcWarning = (() => {
+    if (!amcExpiry) return null;
+    try {
+      const expiry = new Date(amcExpiry);
+      const now = new Date();
+      const diffDays = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays <= 0) return { msg: `AMC has expired! Please renew immediately.`, severity: 'critical' };
+      if (diffDays <= 45) return { msg: `AMC expires in ${diffDays} day${diffDays === 1 ? '' : 's'} (${amcExpiry}). Contact Sunshine Technologies for renewal.`, severity: 'warn' };
+    } catch {}
+    return null;
+  })();
+
   if (!parameters || parameters.length === 0) {
     return (
       <div className="screen active" id="dashboardScreen">
         
+        {/* AMC Warning Banner */}
+        {amcWarning && (
+          <div className="card" style={{ padding: '12px 20px', marginBottom: '16px', background: amcWarning.severity === 'critical' ? '#fef2f2' : '#fffbeb', border: `1px solid ${amcWarning.severity === 'critical' ? '#fecaca' : '#fde68a'}`, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? '🚨' : '⚠️'}</span>
+            <span style={{ fontSize: '13px', fontWeight: '600', color: amcWarning.severity === 'critical' ? '#991b1b' : '#92400e', flex: 1 }}>{amcWarning.msg}</span>
+          </div>
+        )}
+
         {/* KPI Cards */}
         <div className="card">
           <div className="section-title">System Summary</div>
@@ -644,6 +666,30 @@ export const DashboardScreen = () => {
 
         <AlarmsInspectorModal isOpen={showAlarmsModal} onClose={() => setShowAlarmsModal(false)} />
 
+        {broadcasts && broadcasts.length > 0 && (() => {
+          const critical = broadcasts.find((b: any) => b.severity === 'critical' && b.id !== dismissedBroadcast);
+          if (!critical) return null;
+          return (
+            <div style={{
+              position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999,
+              maxWidth: '400px', padding: '16px 20px',
+              background: '#fef2f2', border: '1px solid #fecaca',
+              borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+              display: 'flex', alignItems: 'flex-start', gap: '12px',
+            }}>
+              <span style={{ fontSize: '24px', flexShrink: 0 }}>🚨</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#991b1b', marginBottom: '4px' }}>Broadcast Message</div>
+                <div style={{ fontSize: '12px', color: '#7f1d1d' }}>{critical.message}</div>
+              </div>
+              <button onClick={() => setDismissedBroadcast(critical.id)} style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '18px', color: '#991b1b', padding: '0 0 0 8px', lineHeight: 1
+              }}>×</button>
+            </div>
+          );
+        })()}
+
       </div>
     );
   }
@@ -651,6 +697,14 @@ export const DashboardScreen = () => {
   return (
     <div className="screen active" id="dashboardScreen">
       
+      {/* AMC Warning Banner */}
+      {amcWarning && (
+        <div style={{ padding: '12px 20px', marginBottom: '16px', background: amcWarning.severity === 'critical' ? '#fef2f2' : '#fffbeb', border: `1px solid ${amcWarning.severity === 'critical' ? '#fecaca' : '#fde68a'}`, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? '🚨' : '⚠️'}</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: amcWarning.severity === 'critical' ? '#991b1b' : '#92400e', flex: 1 }}>{amcWarning.msg}</span>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="card">
         <div className="section-title">System Summary</div>
@@ -951,6 +1005,31 @@ export const DashboardScreen = () => {
 
 
       <AlarmsInspectorModal isOpen={showAlarmsModal} onClose={() => setShowAlarmsModal(false)} />
+
+      {/* Broadcast Popup — latest critical broadcast shown as dismissible overlay */}
+      {broadcasts && broadcasts.length > 0 && (() => {
+        const critical = broadcasts.find((b: any) => b.severity === 'critical' && b.id !== dismissedBroadcast);
+        if (!critical) return null;
+        return (
+          <div style={{
+            position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999,
+            maxWidth: '400px', padding: '16px 20px',
+            background: '#fef2f2', border: '1px solid #fecaca',
+            borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+            display: 'flex', alignItems: 'flex-start', gap: '12px',
+          }}>
+            <span style={{ fontSize: '24px', flexShrink: 0 }}>🚨</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#991b1b', marginBottom: '4px' }}>Broadcast Message</div>
+              <div style={{ fontSize: '12px', color: '#7f1d1d' }}>{critical.message}</div>
+            </div>
+            <button onClick={() => setDismissedBroadcast(critical.id)} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: '18px', color: '#991b1b', padding: '0 0 0 8px', lineHeight: 1
+            }}>×</button>
+          </div>
+        );
+      })()}
 
     </div>
   );

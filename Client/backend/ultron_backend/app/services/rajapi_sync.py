@@ -15,12 +15,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSessionLocal
-from app.models.telemetry import LiveData
+from app.models.telemetry import LiveData, Broadcast
 from app.models.parameter import Parameter
 from app.models.device import Device
 from app.models.station import Station
 from app.config import settings
 from app.core.logger import get_logger
+from app.services.lock_store import update_from_sync_response
 
 log = get_logger("ultron.rajapi_sync")
 
@@ -97,6 +98,33 @@ async def push_to_rajapi():
                     f"[RajAPI] ✓ Synced {len(variables)} parameters "
                     f"to {settings.RAJAPI_SYNC_URL} (HTTP {resp.status_code})"
                 )
+                # Parse response for broadcast messages and lock status
+                try:
+                    sync_resp = resp.json()
+                    # Store lock status from server
+                    await update_from_sync_response(sync_resp)
+                    # Handle broadcast messages from server
+                    broadcasts = sync_resp.get("broadcasts") or sync_resp.get("broadcast")
+                    if broadcasts:
+                        async with AsyncSessionLocal() as sdb:
+                            if isinstance(broadcasts, list):
+                                for msg in broadcasts:
+                                    text = msg.get("message", msg) if isinstance(msg, dict) else msg
+                                    sev = msg.get("severity", "info") if isinstance(msg, dict) else "info"
+                                    expires = None
+                                    if isinstance(msg, dict) and msg.get("expires_at"):
+                                        try:
+                                            from datetime import datetime as dt2
+                                            expires = dt2.fromisoformat(msg["expires_at"].replace("Z", "+00:00"))
+                                        except: pass
+                                    b = Broadcast(message=str(text), severity=sev, expires_at=expires)
+                                    sdb.add(b)
+                            elif isinstance(broadcasts, str):
+                                sdb.add(Broadcast(message=broadcasts))
+                            await sdb.commit()
+                            log.info(f"[RajAPI] ✓ Stored {len(broadcasts) if isinstance(broadcasts, list) else 1} broadcast(s)")
+                except Exception as parse_err:
+                    log.debug(f"[RajAPI] Response parse (non-critical): {parse_err}")
             else:
                 log.warning(
                     f"[RajAPI] ✗ Sync HTTP {resp.status_code}: "

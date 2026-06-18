@@ -206,3 +206,19 @@ class PendingUpload(Base):
 
     def __repr__(self):
         return f"<PendingUpload id={self.id} server={self.server_config_id} mode={self.mode} retries={self.retry_count}>"
+
+
+# ─── Broadcast Message ─────────────────────────────────────────────────────────
+class Broadcast(Base):
+    """Broadcast messages from RajAPI central server shown as scrolling marquee on dashboard."""
+    __tablename__ = "broadcasts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message = Column(Text, nullable=False)
+    severity = Column(String(20), default="info")  # info / warn / critical
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)
+
+    def __repr__(self):
+        return f"<Broadcast id={self.id} severity={self.severity}>"
