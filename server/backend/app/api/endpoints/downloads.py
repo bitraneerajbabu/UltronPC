@@ -15,6 +15,6 @@ async def download_latest_client():
         
     return FileResponse(
         path=installer_path,
-        filename="UltrON_Installer_v1.0.3.exe",
+        filename="UltrON_Installer_v1.0.6.exe",
         media_type="application/x-msdownload"
     )

@@ -89,6 +89,8 @@ class DeviceBase(BaseModel):
     parity: Optional[str] = "N"
     stop_bits: Optional[int] = 1
     csv_path: Optional[str] = None
+    csv_folder: Optional[str] = None
+    csv_filename_pattern: Optional[str] = None
     csv_delimiter: Optional[str] = ","
     csv_timestamp_col: Optional[int] = None
     poll_interval: int = 60
@@ -102,8 +104,8 @@ class DeviceBase(BaseModel):
         if isinstance(data, dict):
             nullable_fields = [
                 "station_id", "manufacturer", "model_number", "serial_number", 
-                "firmware_version", "host", "port", "serial_port", "csv_path", 
-                "csv_timestamp_col"
+                "firmware_version", "host", "port", "serial_port", "csv_path",
+                "csv_folder", "csv_filename_pattern", "csv_timestamp_col"
             ]
             for f in nullable_fields:
                 if data.get(f) == "":
@@ -151,6 +153,8 @@ class DeviceUpdate(BaseModel):
     retry_count: Optional[int] = None
     is_active: Optional[bool] = None
     csv_path: Optional[str] = None
+    csv_folder: Optional[str] = None
+    csv_filename_pattern: Optional[str] = None
     csv_delimiter: Optional[str] = None
     csv_timestamp_col: Optional[int] = None
     parameters: Optional[List[ParameterCreateNested]] = None
@@ -162,8 +166,9 @@ class DeviceUpdate(BaseModel):
             fields = [
                 "station_id", "manufacturer", "model_number", "serial_number",
                 "firmware_version", "host", "port", "slave_id", "serial_port",
-                "baud_rate", "data_bits", "stop_bits", "csv_path", "csv_delimiter",
-                "csv_timestamp_col", "poll_interval", "timeout", "retry_count"
+                "baud_rate", "data_bits", "stop_bits", "csv_path", "csv_folder",
+                "csv_filename_pattern", "csv_delimiter", "csv_timestamp_col",
+                "poll_interval", "timeout", "retry_count"
             ]
             for f in fields:
                 if data.get(f) == "":

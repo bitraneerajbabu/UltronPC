@@ -364,9 +364,20 @@ async def test_device_connection(device_id: int, db: AsyncSession = Depends(get_
 
         elif protocol == "csv":
             import os
-            csv_path = device.csv_path or ""
+            if device.csv_folder:
+                from app.services.csv_watcher import DailyCSVWatcher
+                watcher = DailyCSVWatcher(
+                    device.csv_folder,
+                    device.csv_filename_pattern or "{YYYYMMDD}.csv",
+                    device.csv_delimiter or ",",
+                    device.poll_interval or 60,
+                    device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
+                )
+                csv_path = watcher.resolve_path()
+            else:
+                csv_path = device.csv_path or ""
             if not csv_path:
-                return {"success": False, "message": "No CSV path configured", "latency_ms": None}
+                return {"success": False, "message": "No CSV source configured", "latency_ms": None}
             exists = os.path.exists(csv_path)
             if not exists:
                 return {"success": False, "message": f"CSV file not found: {csv_path}", "latency_ms": None}

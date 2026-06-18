@@ -280,9 +280,10 @@ function App() {
 
         {/* Right Actions */}
         <div className="flex items-center gap-4 w-64 justify-end">
-           <a 
+          <span className="text-xs font-bold text-teal-400 bg-teal-900/40 px-2 py-0.5 rounded-full border border-teal-700/50">v1.0.6</span>
+          <a 
             href="/api/v1/downloads/latest-client" 
-            title="Download Latest Client"
+            title="Download Latest Client v1.0.6"
             className="p-2 rounded-full text-slate-400 hover:bg-slate-700/50 transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

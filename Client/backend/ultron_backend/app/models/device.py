@@ -53,6 +53,8 @@ class Device(Base):
 
     # CSV-specific
     csv_path = Column(String(500))
+    csv_folder = Column(String(500))
+    csv_filename_pattern = Column(String(200))
     csv_delimiter = Column(String(5), default=",")
     csv_timestamp_col = Column(Integer, nullable=True)
 

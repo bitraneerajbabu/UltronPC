@@ -16,7 +16,7 @@ if not TOKEN:
     sys.exit(1)
 
 REPO = "bitraneerajbabu/UltronPC"
-TAG = "v1.0.3"
+TAG = "v1.0.6"
 FILE_PATH = "backend/ultron_backend/dist/UltrON.exe"
 
 def make_request(url, method="GET", headers=None, data=None):
@@ -50,6 +50,15 @@ def main():
             create_data = json.dumps({
                 "tag_name": TAG,
                 "name": f"UltrON {TAG}",
+                "body": (
+                    "## What's New in v1.0.6\n\n"
+                    "### Daily Rotating CSV Reader\n"
+                    "- CSV protocol can now read daily files from a folder using date-based filename patterns\n"
+                    "- Supported tokens: {YYYYMMDD}, {YYYY-MM-DD}, {DD-MM-YYYY}, {DDMMYYYY}\n"
+                    "- Automatically resolves today's file and falls back to yesterday during midnight rollover\n"
+                    "- Added CSV fixed-file vs daily-file configuration in the device screen\n"
+                    "- CSV column guide uses A=0, B=1, C=2 mapping for parameter register addresses\n"
+                ),
                 "draft": False,
                 "prerelease": False
             }).encode('utf-8')

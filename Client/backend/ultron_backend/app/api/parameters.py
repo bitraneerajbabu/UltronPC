@@ -266,13 +266,22 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
                 value, quality = None, "sensor_fail"
                 
         elif protocol == "csv":
-            from app.services.csv_watcher import CSVWatcher
-            watcher = CSVWatcher(
-                device.csv_path or "",
-                device.csv_delimiter or ",",
-                device.poll_interval or 60,
-                device.csv_timestamp_col,
-            )
+            from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher
+            if device.csv_folder:
+                watcher = DailyCSVWatcher(
+                    device.csv_folder,
+                    device.csv_filename_pattern or "{YYYYMMDD}.csv",
+                    device.csv_delimiter or ",",
+                    device.poll_interval or 60,
+                    device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
+                )
+            else:
+                watcher = CSVWatcher(
+                    device.csv_path or "",
+                    device.csv_delimiter or ",",
+                    device.poll_interval or 60,
+                    device.csv_timestamp_col,
+                )
             param_dict = {
                 "id": param.id,
                 "register_address": param.register_address,

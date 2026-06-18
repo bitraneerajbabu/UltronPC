@@ -22,7 +22,7 @@ from app.models.telemetry import LiveData, HistoricalData, AverageType, DataQual
 from app.services.modbus_tcp import ModbusTCPReader
 from app.services.modbus_rtu import ModbusRTUReader
 from app.services.tcp_custom import TCPCustomReader
-from app.services.csv_watcher import CSVWatcher
+from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher
 from app.services.data_quality import dq_engine
 from app.services.alarm_engine import alarm_engine
 from app.websocket_manager import ws_manager
@@ -73,15 +73,24 @@ def _get_tcp_custom(device: Device) -> TCPCustomReader:
 
 
 def _get_csv_watcher(device: Device) -> Optional[CSVWatcher]:
-    if not device.csv_path:
+    if not device.csv_folder and not device.csv_path:
         return None
     if device.id not in _csv_watchers:
-        _csv_watchers[device.id] = CSVWatcher(
-            device.csv_path,
-            device.csv_delimiter or ",",
-            device.poll_interval or 60,
-            device.csv_timestamp_col,
-        )
+        if device.csv_folder:
+            _csv_watchers[device.id] = DailyCSVWatcher(
+                device.csv_folder,
+                device.csv_filename_pattern or "{YYYYMMDD}.csv",
+                device.csv_delimiter or ",",
+                device.poll_interval or 60,
+                device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
+            )
+        else:
+            _csv_watchers[device.id] = CSVWatcher(
+                device.csv_path,
+                device.csv_delimiter or ",",
+                device.poll_interval or 60,
+                device.csv_timestamp_col,
+            )
     return _csv_watchers[device.id]
 
 
@@ -155,7 +164,7 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             if watcher:
                 readings = watcher.get_latest_values(param_dicts)
             else:
-                log.warning(f"Device {device.id}: CSV protocol but no csv_path configured")
+                log.warning(f"Device {device.id}: CSV protocol but no CSV source configured")
                 readings = [
                     {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "comms_fail"}
                     for p in param_dicts
@@ -471,6 +480,7 @@ async def reload_device(device_id: int):
     # Clear cached readers so fresh connections are made with new config
     _tcp_readers.pop(device_id, None)
     _tcp_custom.pop(device_id, None)
+    _csv_watchers.pop(device_id, None)
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Device).where(Device.id == device_id))
