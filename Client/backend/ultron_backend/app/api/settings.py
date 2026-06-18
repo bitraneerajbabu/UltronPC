@@ -14,6 +14,8 @@ from app.models.parameter import Parameter, RegisterType, DataType, ByteOrder, A
 from app.models.telemetry import LiveData, HistoricalData, Averages, Alarm, SystemLog
 from app.config import APP_DIR, settings
 from app.core.logger import get_logger, get_audit_logger
+import socket
+import asyncio
 
 log = get_logger("ultron.settings")
 audit = get_audit_logger()
@@ -41,6 +43,49 @@ async def app_info(db: AsyncSession = Depends(get_db)):
         "devices":     device_count.scalar(),
         "parameters":  param_count.scalar(),
         "timestamp":   datetime.utcnow().isoformat(),
+    }
+
+
+# ─── Network Info ──────────────────────────────────────────────────────────────
+async def _get_lan_ip() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.5)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            return "127.0.0.1"
+
+
+async def _check_internet() -> bool:
+    try:
+        import urllib.request
+        import ssl
+        ctx = ssl.create_default_context()
+        req = urllib.request.Request(
+            "https://clients3.google.com/generate_204",
+            method="GET",
+        )
+        with urllib.request.urlopen(req, context=ctx, timeout=5) as resp:
+            return resp.status == 204
+    except Exception:
+        return False
+
+
+@router.get("/network-info")
+async def network_info():
+    lan_ip = await _get_lan_ip()
+    internet_ok = await _check_internet()
+    return {
+        "lan_ip": lan_ip,
+        "internet_connected": internet_ok,
+        "hostname": socket.gethostname(),
+        "timestamp": datetime.utcnow().isoformat(),
     }
 
 

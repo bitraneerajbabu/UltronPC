@@ -179,6 +179,7 @@ export const DashboardScreen = () => {
   const [showAlarmsModal, setShowAlarmsModal] = useState(false);
   const [isTrendsModalOpen, setIsTrendsModalOpen] = useState(false);
   const [avg15Mins, setAvg15Mins] = useState({});
+  const [networkInfo, setNetworkInfo] = useState<{ lan_ip: string; internet_connected: boolean; hostname: string } | null>(null);
 
   // Poll latest telemetry and KPIs every 5 seconds for dashboard updates
   useEffect(() => {
@@ -198,6 +199,25 @@ export const DashboardScreen = () => {
     datasets: {}
   });
   const lastTimestampRef = useRef('');
+
+  // Fetch network info (PC IP + internet)
+  const fetchNetworkInfo = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/settings/network-info`);
+      if (res.ok) {
+        const data = await res.json();
+        setNetworkInfo(data);
+      }
+    } catch {
+      // silently ignore
+    }
+  }, [authFetch, API_BASE]);
+
+  useEffect(() => {
+    fetchNetworkInfo();
+    const interval = setInterval(fetchNetworkInfo, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNetworkInfo]);
 
   // Keep clock running
   useEffect(() => {
@@ -450,22 +470,22 @@ export const DashboardScreen = () => {
   const downloadPDF = () => {
     if (!chartInstanceRef.current) return;
     const img = chartInstanceRef.current.toBase64Image();
-    const w = window.open('');
-    w.document.write(`
-      <html>
-        <body style="margin:20px; font-family: sans-serif;">
-          <h2>Live Trend — ${selectedParam}</h2>
-          <img src="${img}" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px;">
-          <script>
-            window.onload = () => {
-              window.print();
-              setTimeout(() => window.close(), 800);
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    w.document.close();
+    const html = [
+      '<html><head><style>body{margin:20px;font-family:sans-serif}img{width:100%;border:1px solid #cbd5e1;border-radius:8px}</style></head>',
+      `<body><h2>Live Trend — ${selectedParam}</h2><img src="${img}" />`,
+      '<script>window.onload=function(){window.print();setTimeout(function(){window.close()},800)};<\/script>',
+      '</body></html>'
+    ].join('');
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = url;
+    document.body.appendChild(iframe);
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+      URL.revokeObjectURL(url);
+    }, 60000);
     showToast('PDF print dialog opened.');
   };
 
@@ -487,6 +507,26 @@ export const DashboardScreen = () => {
     a.download = `LiveTrend_${selectedParam}_${Date.now()}.csv`;
     a.click();
     showToast('Live trend telemetry exported to CSV.');
+  };
+
+  const exportExcel = () => {
+    if (!selectedParam || !dataPointsRef.current.datasets[selectedParam]) return;
+    const rows = [['Timestamp', 'Parameter', 'Value', 'Unit']];
+    const currentParamObj = parameters.find(p => p.tag_name === selectedParam) || {};
+    const unit = currentParamObj.unit || '';
+
+    dataPointsRef.current.labels.forEach((ts, idx) => {
+      const val = dataPointsRef.current.datasets[selectedParam][idx];
+      rows.push([ts, selectedParam, val !== undefined ? val : '', unit]);
+    });
+
+    const tsvContent = rows.map(r => r.join('\t')).join('\n');
+    const blob = new Blob([tsvContent], { type: 'application/vnd.ms-excel' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `LiveTrend_${selectedParam}_${Date.now()}.xls`;
+    a.click();
+    showToast('Live trend telemetry exported to Excel.');
   };
 
   // Performance memoizations
@@ -517,7 +557,7 @@ export const DashboardScreen = () => {
         {/* KPI Cards */}
         <div className="card">
           <div className="section-title">System Summary</div>
-          <div className="grid-4">
+          <div className="grid-5">
             <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Stations</div>
@@ -562,6 +602,33 @@ export const DashboardScreen = () => {
                 </div>
               </div>
             </div>
+
+            <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.info}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ width: '100%' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>PC Network</div>
+                <div style={{ fontSize: '13px', fontWeight: '800', color: T.text, fontFamily: T.fontMono, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>{networkInfo?.lan_ip || '---'}</span>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    fontSize: '10px', fontWeight: '700', textTransform: 'uppercase',
+                    color: networkInfo?.internet_connected ? T.success : T.danger
+                  }}>
+                    <span style={{
+                      width: '7px', height: '7px', borderRadius: '50%',
+                      backgroundColor: networkInfo?.internet_connected ? T.success : T.danger,
+                      boxShadow: networkInfo?.internet_connected ? `0 0 6px ${T.success}` : `0 0 6px ${T.danger}`,
+                      display: 'inline-block'
+                    }}></span>
+                    {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+                {networkInfo?.hostname && (
+                  <div style={{ fontSize: '10px', fontWeight: '600', color: T.textFaint, marginTop: '4px' }}>
+                    {networkInfo.hostname}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -587,7 +654,7 @@ export const DashboardScreen = () => {
       {/* KPI Cards */}
       <div className="card">
         <div className="section-title">System Summary</div>
-        <div className="grid-4">
+        <div className="grid-5">
           <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Stations</div>
@@ -652,6 +719,33 @@ export const DashboardScreen = () => {
               </div>
             </div>
           </div>
+
+          <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.info}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ width: '100%' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>PC Network</div>
+              <div style={{ fontSize: '13px', fontWeight: '800', color: T.text, fontFamily: T.fontMono, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>{networkInfo?.lan_ip || '---'}</span>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  fontSize: '10px', fontWeight: '700', textTransform: 'uppercase',
+                  color: networkInfo?.internet_connected ? T.success : T.danger
+                }}>
+                  <span style={{
+                    width: '7px', height: '7px', borderRadius: '50%',
+                    backgroundColor: networkInfo?.internet_connected ? T.success : T.danger,
+                    boxShadow: networkInfo?.internet_connected ? `0 0 6px ${T.success}` : `0 0 6px ${T.danger}`,
+                    display: 'inline-block'
+                  }}></span>
+                  {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
+                </span>
+              </div>
+              {networkInfo?.hostname && (
+                <div style={{ fontSize: '10px', fontWeight: '600', color: T.textFaint, marginTop: '4px' }}>
+                  {networkInfo.hostname}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -702,6 +796,7 @@ export const DashboardScreen = () => {
                   <button onClick={downloadPNG} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PNG</button>
                   <button onClick={downloadPDF} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PDF</button>
                   <button onClick={exportCSV} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>CSV</button>
+                  <button onClick={exportExcel} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>Excel</button>
                 </div>
               </div>
             </div>
