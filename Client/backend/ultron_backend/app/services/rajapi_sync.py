@@ -6,20 +6,19 @@ Pushes live telemetry to https://rajapi.com/api/v1/tgpcb/ using the
 RAJAPI_API_KEY configured in .env for this specific client installation.
 
 NO UI configuration required. Completely invisible to the plant operator.
-Just set RAJAPI_API_KEY in .env (or bake it into the .env.enc during build)
-and data starts flowing automatically.
 """
 
 import asyncio
 import httpx
 from datetime import datetime, timezone
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSessionLocal
 from app.models.telemetry import LiveData
 from app.models.parameter import Parameter
-from app.models.station import Station
 from app.models.device import Device
+from app.models.station import Station
 from app.config import settings
 from app.core.logger import get_logger
 
@@ -40,17 +39,22 @@ async def push_to_rajapi():
 
     try:
         async with AsyncSessionLocal() as db:
-            # Join LiveData → Parameter → Device → Station for tag names
+            # Query: LiveData -> Parameter -> Device -> Station
+            # LiveData has parameter_id FK
+            # Parameter has device_id FK
+            # Device has station_id FK
             stmt = (
                 select(LiveData, Parameter, Device, Station)
                 .join(Parameter, LiveData.parameter_id == Parameter.id)
                 .join(Device, Parameter.device_id == Device.id)
                 .join(Station, Device.station_id == Station.id)
+                .where(Parameter.is_active == True)
             )
             result = await db.execute(stmt)
             rows = result.all()
 
         if not rows:
+            log.debug("[RajAPI] No live data rows found — skipping sync.")
             return
 
         # Build TGPCB-format variables list
@@ -70,14 +74,18 @@ async def push_to_rajapi():
                 "Flags": "",
             })
 
+        # Use the most recent timestamp from the live data rows
+        timestamps = [row[0].timestamp for row in rows if row[0].timestamp]
+        latest_ts = max(timestamps) if timestamps else datetime.now(timezone.utc)
+
         payload = {
             "DeviceID": settings.RAJAPI_STATION_ID,
             "FunctionName": 53,
-            "Datetime": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+            "Datetime": latest_ts.strftime("%Y-%m-%d %H:%M:%S"),
             "Name": settings.RAJAPI_API_KEY,   # API key in the Name field
             "Password": "",
             "additionalInfo": {
-                "SoftwareVersion": settings.APP_VERSION,
+                "SoftwareVersion": getattr(settings, "APP_VERSION", "1.04"),
             },
             "Variables": variables,
         }
@@ -85,18 +93,18 @@ async def push_to_rajapi():
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(settings.RAJAPI_SYNC_URL, json=payload)
             if resp.status_code < 300:
-                log.debug(
+                log.info(
                     f"[RajAPI] ✓ Synced {len(variables)} parameters "
-                    f"(HTTP {resp.status_code})"
+                    f"to {settings.RAJAPI_SYNC_URL} (HTTP {resp.status_code})"
                 )
             else:
                 log.warning(
-                    f"[RajAPI] ✗ Sync failed HTTP {resp.status_code}: "
-                    f"{resp.text[:200]}"
+                    f"[RajAPI] ✗ Sync HTTP {resp.status_code}: "
+                    f"{resp.text[:300]}"
                 )
 
     except httpx.ConnectError:
         # Network offline — silently skip, will retry next minute
         log.debug("[RajAPI] Offline — sync skipped, will retry next cycle.")
     except Exception as e:
-        log.warning(f"[RajAPI] Sync error: {e}")
+        log.warning(f"[RajAPI] Sync error: {type(e).__name__}: {e}")
