@@ -151,13 +151,16 @@ def _check_and_download_update():
     try:
         import urllib.request
         import json as _json
+        import ssl
+
+        _ssl_ctx = ssl._create_unverified_context()
 
         req = urllib.request.Request(
             GITHUB_API_LATEST,
             headers={"User-Agent": "UltrON-Updater/1.0",
                      "Accept": "application/vnd.github.v3+json"},
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=15, context=_ssl_ctx) as resp:
             data = _json.loads(resp.read().decode("utf-8"))
 
         latest_tag = data.get("tag_name", "")
@@ -192,7 +195,7 @@ def _check_and_download_update():
             exe_url,
             headers={"User-Agent": "UltrON-Updater/1.0"},
         )
-        with urllib.request.urlopen(dl_req, timeout=120) as dl_resp, \
+        with urllib.request.urlopen(dl_req, timeout=120, context=_ssl_ctx) as dl_resp, \
              open(partial_exe, "wb") as f:
             while True:
                 chunk = dl_resp.read(65536)
