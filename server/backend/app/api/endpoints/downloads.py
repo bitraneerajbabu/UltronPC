@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 router = APIRouter()
 
 # Current release version hosted on GitHub
-CURRENT_VERSION = "v1.0.8"
+CURRENT_VERSION = "v1.0.9"
 GITHUB_RELEASE_URL = f"https://github.com/bitraneerajbabu/UltronPC/releases/download/{CURRENT_VERSION}/UltrON.exe"
 
 @router.get("/latest-client")
@@ -24,5 +24,5 @@ async def get_latest_version():
     return {
         "version": CURRENT_VERSION,
         "download_url": GITHUB_RELEASE_URL,
-        "release_notes": "v1.0.8: Broadcasts, Master token, lock queue, AMC warning, pending retry",
+        "release_notes": "v1.0.9: LED username auth, hard refresh fix, static files, sleep prevention",
     }
