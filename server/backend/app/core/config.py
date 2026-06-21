@@ -2,7 +2,7 @@ import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "RajAPI Central Server v1.0.8"
+    PROJECT_NAME: str = "RajAPI Central Server v1.0.9"
     API_V1_STR: str = "/api/v1"
     
     # Generate a strong key for JWTs: openssl rand -hex 32
