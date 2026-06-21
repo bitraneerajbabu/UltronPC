@@ -202,9 +202,9 @@ class Settings(BaseSettings):
     ALERT_RECIPIENTS: str = ""
 
     # ─── LED Board LAN Endpoint ───────────────────────────────────
-    # Token checked on GET /api/v1/led?auth=<token>&PCB=...
-    # Change this in .env (LED_AUTH_TOKEN=yourtoken) to secure the endpoint.
-    LED_AUTH_TOKEN: str = "menakshi"
+    # Auth is validated against active user usernames in the DB.
+    # LED_AUTH_TOKEN in .env can override as a static fallback if needed.
+    LED_AUTH_TOKEN: str = ""
     # Port for the dedicated LED board HTTP server (default 80 for LAN cards)
     # Set LED_HTTP_PORT=0 to disable the secondary LED server.
     LED_HTTP_PORT: int = 80

@@ -75,7 +75,7 @@ async def _start_led_http_server(port: int):
     This runs silently alongside the main app — errors are logged but never crash the app.
 
     URL the card should use:
-        http://<PC-LAN-IP>/api/v1/led?auth=menakshi&PCB=7005,7004,7003
+        http://<PC-LAN-IP>/api/v1/led?auth=username&PCB=1,2,3
     """
     try:
         import uvicorn
@@ -313,16 +313,22 @@ if _UI_DIST.is_dir():
     _assets = _UI_DIST / "assets"
     if _assets.is_dir():
         app.mount("/assets", StaticFiles(directory=str(_assets)), name="ui_assets")
+    # Serve /fonts (woff2 files referenced by CSS)
+    _fonts = _UI_DIST / "fonts"
+    if _fonts.is_dir():
+        app.mount("/fonts", StaticFiles(directory=str(_fonts)), name="ui_fonts")
 
     @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(full_path: str):
+    async def serve_ui(full_path: str):
         """
-        SPA catch-all: serve index.html for any non-API path.
-        Allows React Router / client-side routing to work on hard refresh.
+        Serve static files from ui_dist/ root (favicon.svg, icons.svg, etc.)
+        and fall back to index.html for SPA client-side routes.
         """
-        # Don't intercept API or WebSocket paths
         if full_path.startswith("api/") or full_path.startswith("ws"):
             return JSONResponse({"detail": "Not Found"}, status_code=404)
+        file = _UI_DIST / full_path
+        if file.is_file() and file != _UI_DIST / "index.html":
+            return FileResponse(str(file))
         index = _UI_DIST / "index.html"
         if index.is_file():
             return FileResponse(str(index))

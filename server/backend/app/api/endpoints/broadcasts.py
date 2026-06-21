@@ -1,0 +1,68 @@
+from fastapi import APIRouter, Depends, HTTPException, Header
+from sqlalchemy.orm import Session
+from typing import List, Optional
+from datetime import datetime, timezone
+from app.db.database import get_db
+from app.models.core import Broadcast
+from app.schemas.api_models import BroadcastCreate, BroadcastResponse
+from app.core.config import settings
+
+router = APIRouter()
+
+def _require_admin(x_admin_key: Optional[str] = Header(default=None)):
+    if x_admin_key != settings.ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing admin key")
+
+@router.get("/", response_model=List[BroadcastResponse])
+def get_broadcasts(db: Session = Depends(get_db)):
+    return db.query(Broadcast).order_by(Broadcast.created_at.desc()).all()
+
+@router.get("/active", response_model=List[BroadcastResponse])
+def get_active_broadcasts(db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    return db.query(Broadcast).filter(
+        Broadcast.is_active == True,
+        (Broadcast.expires_at == None) | (Broadcast.expires_at > now)
+    ).order_by(Broadcast.created_at.desc()).all()
+
+@router.post("/", response_model=BroadcastResponse)
+def create_broadcast(payload: BroadcastCreate, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    bcast = Broadcast(
+        message=payload.message,
+        message_type=payload.message_type,
+        expires_at=payload.expires_at
+    )
+    db.add(bcast)
+    db.commit()
+    db.refresh(bcast)
+    return bcast
+
+@router.put("/{broadcast_id}", response_model=BroadcastResponse)
+def update_broadcast(broadcast_id: int, payload: BroadcastCreate, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    bcast = db.query(Broadcast).filter(Broadcast.id == broadcast_id).first()
+    if not bcast:
+        raise HTTPException(status_code=404, detail="Broadcast not found")
+    bcast.message = payload.message
+    bcast.message_type = payload.message_type
+    bcast.expires_at = payload.expires_at
+    db.commit()
+    db.refresh(bcast)
+    return bcast
+
+@router.delete("/{broadcast_id}")
+def delete_broadcast(broadcast_id: int, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    bcast = db.query(Broadcast).filter(Broadcast.id == broadcast_id).first()
+    if not bcast:
+        raise HTTPException(status_code=404, detail="Broadcast not found")
+    db.delete(bcast)
+    db.commit()
+    return {"status": "deleted", "id": broadcast_id}
+
+@router.put("/{broadcast_id}/toggle")
+def toggle_broadcast(broadcast_id: int, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    bcast = db.query(Broadcast).filter(Broadcast.id == broadcast_id).first()
+    if not bcast:
+        raise HTTPException(status_code=404, detail="Broadcast not found")
+    bcast.is_active = not bcast.is_active
+    db.commit()
+    return {"status": "toggled", "id": broadcast_id, "is_active": bcast.is_active}

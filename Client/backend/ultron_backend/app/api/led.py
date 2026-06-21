@@ -5,25 +5,19 @@ Provides a GET endpoint that LED control cards can poll directly on the LAN.
 The card just needs its URL changed from the remote server to the PC's LAN IP.
 
 Usage (paste this URL into the LED card's URL field):
-  http://<PC-LAN-IP>:8000/api/v1/led?auth=menakshi&PCB=7005,7004,7003
+  http://<PC-LAN-IP>/api/v1/led?auth=username&PCB=1,2,3
 
-Response format (exactly what the LED card expects):
-  [
-    {"listchannelData": [{"ChannelId": 7003, "ChannelName": "NOX",
-                          "ChannelValue": "39", "StationName": "AAQMS",
-                          "Units": "mg/Nm3"}]},
-    ...
-  ]
-
-Auth token is configured in .env as LED_AUTH_TOKEN (default: "menakshi").
+Auth is validated against the logged-in user's username for simplicity.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import Optional
 
 from app.database import get_db
+from app.models.user import User
 from app.config import settings
 from app.services.led_push import build_led_response
 from app.core.logger import get_logger
@@ -39,26 +33,41 @@ router = APIRouter(prefix="/led", tags=["LED Board"])
     description=(
         "Serves live telemetry in the format LED control cards expect. "
         "Paste this URL into the LED card: "
-        "`http://<PC-LAN-IP>:8000/api/v1/led?auth=<token>&PCB=7005,7004,7003`"
+        "`http://<PC-LAN-IP>/api/v1/led?auth=username&PCB=1,2,3`"
     ),
 )
 async def get_led_data(
-    auth: Optional[str] = Query(default=None, description="Auth token (set LED_AUTH_TOKEN in .env)"),
-    PCB: Optional[str] = Query(default=None, description="Comma-separated PCB/ChannelId list, e.g. 7005,7004,7003"),
+    auth: Optional[str] = Query(default=None, description="Username of an active UltrON user"),
+    PCB: Optional[str] = Query(default=None, description="Comma-separated channel IDs, e.g. 1,2,3"),
     db: AsyncSession = Depends(get_db),
 ):
     """
     LED card polls this endpoint. Returns the listchannelData JSON array.
 
-    - **auth**: must match LED_AUTH_TOKEN in settings (default: menakshi)
-    - **PCB**: comma-separated list of PCB channel IDs to include.
+    - **auth**: must match an active user's username
+    - **PCB**: comma-separated list of channel IDs to include.
                Omit to return ALL active LED channels.
     """
     # ── Auth check ────────────────────────────────────────────────
-    expected_token = settings.LED_AUTH_TOKEN
-    if expected_token and auth != expected_token:
-        log.warning(f"[LED] Unauthorized access attempt with auth='{auth}'")
-        raise HTTPException(status_code=401, detail="Unauthorized — invalid auth token")
+    if not auth:
+        raise HTTPException(status_code=401, detail="Auth parameter required — use ?auth=username")
+
+    # 1. Check static token from .env first (backward compatible)
+    if settings.LED_AUTH_TOKEN:
+        if auth == settings.LED_AUTH_TOKEN:
+            pass  # valid static token
+        else:
+            log.warning(f"[LED] Unauthorized access attempt with auth='{auth}'")
+            raise HTTPException(status_code=401, detail="Unauthorized — invalid auth")
+    else:
+        # 2. Validate against active user usernames
+        result = await db.execute(
+            select(User).where(User.username == auth, User.is_active == True)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            log.warning(f"[LED] Unauthorized access attempt with auth='{auth}'")
+            raise HTTPException(status_code=401, detail="Unauthorized — invalid username")
 
     # ── Parse PCB channel IDs ──────────────────────────────────────
     channel_ids: list[int] = []
@@ -89,7 +98,6 @@ async def get_led_data(
 )
 async def get_led_info(db: AsyncSession = Depends(get_db)):
     """Returns a helpful summary of the LED endpoint URL and active channels."""
-    from sqlalchemy import select
     from app.models.server_config import ServerConfig
 
     result = await db.execute(
@@ -111,11 +119,12 @@ async def get_led_info(db: AsyncSession = Depends(get_db)):
     pcb_ids = ",".join(str(s.led_channel_id) for s in led_servers if s.led_channel_id)
 
     return {
-        "endpoint": f"/api/v1/led?auth=<token>&PCB={pcb_ids or '...'}",
-        "auth_required": bool(settings.LED_AUTH_TOKEN),
+        "endpoint": f"/api/v1/led?auth=username&PCB={pcb_ids or '...'}",
+        "auth_required": True,
         "active_led_channels": channels,
         "hint": (
             "Paste the full URL into the LED card's URL field. "
-            "Replace <PC-LAN-IP> with this machine's LAN IP address."
+            "Replace <PC-LAN-IP> with this machine's LAN IP address, "
+            "and 'username' with an active UltrON user name."
         ),
     }

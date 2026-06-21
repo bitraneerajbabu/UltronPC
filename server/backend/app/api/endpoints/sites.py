@@ -6,7 +6,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from app.db.database import get_db
 from app.models.core import IndustrySite, TelemetryData, Parameter
-from app.schemas.api_models import SiteCreate, SiteResponse, LatestTelemetryPoint
+from app.schemas.api_models import SiteCreate, SiteResponse, LatestTelemetryPoint, LockUpdate, LockSummary
 from app.core.config import settings
 
 router = APIRouter()
@@ -188,4 +188,26 @@ def prune_all_telemetry(keep_days: int = 7, db: Session = Depends(get_db), _: No
     )
     db.commit()
     return {"status": "pruned_all", "deleted_rows": result.rowcount, "kept_days": keep_days}
+
+
+@router.get("/locks/summary", response_model=List[LockSummary])
+def get_locks_summary(db: Session = Depends(get_db)):
+    return db.query(IndustrySite).with_entities(
+        IndustrySite.id,
+        IndustrySite.lock_status,
+        IndustrySite.lock_reason,
+        IndustrySite.lock_updated_at
+    ).all()
+
+
+@router.put("/{site_id}/lock")
+def update_lock(site_id: int, payload: LockUpdate, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    site.lock_status = payload.lock_status
+    site.lock_reason = payload.lock_reason
+    site.lock_updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"status": "updated", "id": site_id, "lock_status": site.lock_status}
 

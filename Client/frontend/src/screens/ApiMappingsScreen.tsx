@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect, useMemo } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { T } from '../theme';
 
@@ -38,7 +38,7 @@ export const ApiMappingsScreen = () => {
   const [editedMappings, setEditedMappings] = useState({});
   const [historicalDates, setHistoricalDates] = useState({});
   const [generatingHistorical, setGeneratingHistorical] = useState({});
-  const [lanIp, setLanIp] = useState('');
+
   const [testingPush, setTestingPush] = useState({});
   const [testingDelayPush, setTestingDelayPush] = useState({});
   const [testResultModal, setTestResultModal] = useState(null);
@@ -53,7 +53,9 @@ export const ApiMappingsScreen = () => {
     setLoading(true);
     try {
       const infoRes = await authFetch(`${API_BASE}/led/info`);
-      if (infoRes.ok) { setLanIp(new URL(API_BASE).hostname); }
+      if (infoRes.ok) {
+
+      }
     } catch (_) {}
 
     try {
@@ -90,12 +92,14 @@ export const ApiMappingsScreen = () => {
         setRajapiStatus(licData.licensed ? 'active' : 'inactive');
       }
     } catch (e) {
-      const cm = localStorage.getItem('cached_api_mappings');
-      const cs = localStorage.getItem('cached_api_servers');
-      if (cm && cs) {
-        setEditedMappings(JSON.parse(cm));
-        setServers(JSON.parse(cs));
-      }
+      try {
+        const cm = localStorage.getItem('cached_api_mappings');
+        const cs = localStorage.getItem('cached_api_servers');
+        if (cm && cs) {
+          setEditedMappings(JSON.parse(cm));
+          setServers(JSON.parse(cs));
+        }
+      } catch (_) { localStorage.removeItem('cached_api_mappings'); localStorage.removeItem('cached_api_servers'); }
     } finally { setLoading(false); }
   };
 
@@ -256,7 +260,7 @@ export const ApiMappingsScreen = () => {
             <div key={srv.id}>
               <div style={{ padding: '10px 14px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '12px', fontWeight: '700', color: '#0f766e', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {srv.name}
-                <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: isLed ? '#fff7ed' : isCpcb ? '#fef3c7' : '#f0fdfa', color: isLed ? '#ea580c' : isCpcb ? '#ca8a04' : '#0f766e' }}>{isLed ? 'LED' : isCpcb ? 'CPCB' : showBoth ? 'Both' : 'TGPCB'}</span>
+                <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: isLed ? '#fff7ed' : isCpcb ? '#fef3c7' : '#f0fdfa', color: isLed ? '#ea580c' : isCpcb ? '#ca8a04' : '#0f766e' }}>{isLed ? 'LED' : isCpcb ? 'CPCB' : isBoth ? 'Both' : 'TGPCB'}</span>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
@@ -460,20 +464,7 @@ export const ApiMappingsScreen = () => {
             {servers.filter(s => s.protocol === 'led').length === 0 && (
               <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px', border: '1.5px dashed #e2e8f0', borderRadius: '10px' }}>No LED board configured. <button onClick={() => addServer('led')} style={{ background: 'none', border: 'none', color: '#ea580c', fontWeight: '700', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}>Add LED Board</button></div>
             )}
-            {lanIp && servers.filter(s => s.protocol === 'led' && s.is_active).length > 0 && (
-              <div style={{ padding: '14px', borderRadius: '8px', background: '#fff7ed', border: '1.5px solid #fdba74' }}>
-                <div style={{ fontSize: '12px', fontWeight: '700', color: '#c2410c', marginBottom: '6px' }}>Paste this URL into the LED control card:</div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <code style={{ flex: 1, fontSize: '12px', fontFamily: 'Consolas,monospace', background: '#fff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #fdba74', wordBreak: 'break-all' }}>
-                    http://{lanIp}/api/v1/led?auth=menakshi{servers.filter(s => s.protocol === 'led' && s.led_channel_id).length > 0 ? '&PCB=' + servers.filter(s => s.protocol === 'led' && s.led_channel_id).map(s => s.led_channel_id).join(',') : ''}
-                  </code>
-                  <button onClick={() => { navigator.clipboard.writeText(`http://${lanIp}/api/v1/led?auth=menakshi${servers.filter(s => s.protocol === 'led' && s.led_channel_id).length > 0 ? '&PCB=' + servers.filter(s => s.protocol === 'led' && s.led_channel_id).map(s => s.led_channel_id).join(',') : ''}`); showToast('URL copied!', 'success'); }} style={{ background: '#f97316', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}>Copy URL</button>
-                </div>
-                <div style={{ fontSize: '11px', color: '#9a3412', marginTop: '6px', fontWeight: '500' }}>
-                  {`Response format: [{"listchannelData": [{"ChannelId": 7003, "ChannelName": "NOX", "ChannelValue": "39", "StationName": "AAQMS", "Units": "mg/Nm3"}]}]`}
-                </div>
-              </div>
-            )}
+
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
             <button onClick={() => addServer('led')} style={{ background: 'transparent', border: '1.5px solid #ea580c', borderRadius: '8px', color: '#ea580c', padding: '6px 14px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Plus /> Add LED Board</button>

@@ -266,6 +266,42 @@ for _lib in _QUIET_LOGGERS:
 
 # (Null-stream guard removed; robust stream patch has been applied at the top)
 
+# ── Power Management ──────────────────────────────────────────────────────────
+def _prevent_sleep():
+    """Prevent Windows from sleeping while UltrON is running."""
+    try:
+        import ctypes
+        ES_CONTINUOUS = 0x80000000
+        ES_SYSTEM_REQUIRED = 0x00000001
+        ES_DISPLAY_REQUIRED = 0x00000002
+        ctypes.windll.kernel32.SetThreadExecutionState(
+            ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+        )
+        log.info("Sleep prevention enabled — system will not sleep while UltrON is running")
+    except Exception as e:
+        log.warning("Could not enable sleep prevention: %s", e)
+
+
+def _keepalive_loop():
+    """Periodically re-assert sleep prevention and log resume after suspend."""
+    import ctypes
+    ES_CONTINUOUS = 0x80000000
+    ES_SYSTEM_REQUIRED = 0x00000001
+    ES_DISPLAY_REQUIRED = 0x00000002
+    last_tick = time.monotonic()
+    while True:
+        time.sleep(30)
+        ctypes.windll.kernel32.SetThreadExecutionState(
+            ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+        )
+        # Detect large time gaps (system was suspended)
+        now = time.monotonic()
+        gap = now - last_tick
+        if gap > 60:
+            log.info("System resumed after %.0f s — all services continue automatically", gap)
+        last_tick = now
+
+
 # ── Windows single-instance mutex ────────────────────────────────────────────
 # Also used by the Inno Setup uninstaller to detect if app is running.
 _mutex = None
@@ -355,6 +391,10 @@ def main() -> None:
     log.info("  cwd        : %s", os.getcwd())
     log.info("  sys.path[0]: %s", sys.path[0])
     log.info("=" * 60)
+
+    # Prevent sleep while running
+    _prevent_sleep()
+    threading.Thread(target=_keepalive_loop, daemon=True, name="keepalive").start()
 
     # 1. Verify ui_dist is present
     ui_index = os.path.join(APP_DIR, "ui_dist", "index.html")

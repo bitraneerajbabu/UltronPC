@@ -403,20 +403,6 @@ export const AppProvider = ({ children }) => {
       return false;
     }
 
-    // Client-side Master token fallback (always works)
-    if (username === 'Master' && password === 'Master') {
-      const fakeToken = 'master-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-      sessionStorage.setItem('ultron_token', fakeToken);
-      sessionStorage.setItem('ultron_user', 'Master');
-      sessionStorage.setItem('ultron_role', 'admin');
-      setAuthToken(fakeToken);
-      setCurrentUser('Master');
-      setCurrentUserRole('admin');
-      setActiveScreen('dashboardScreen');
-      showToast('Welcome, Master Administrator!');
-      return true;
-    }
-
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',

@@ -456,6 +456,11 @@ function App() {
             onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
           />
         </div>
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)', borderTop: '1px solid #e2e8f0', padding: '6px 20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', fontSize: '11px', fontWeight: '600', color: '#64748b', flexWrap: 'wrap', zIndex: 10 }}>
+          <span>&copy; 2026 <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#14b8a6', textDecoration: 'none' }}>Sunshine Technologies!</a></span>
+          <span>Support: 7659091468, 9133377852, 853</span>
+          <span>Sales: 8801231166, 9133377852</span>
+        </div>
         <div id="toastContainer"></div>
       </div>
     );
@@ -635,22 +640,29 @@ function App() {
         <footer className="copyright-footer" style={{ margin: '0', borderRadius: '0', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', display: 'flex', alignItems: 'stretch', flexShrink: 0 }}>
           <div style={{
             flexShrink: 0,
-            padding: '0 24px',
+            padding: '0 20px',
             fontWeight: '700',
-            fontSize: '13px',
+            fontSize: '12px',
             color: '#0f766e',
             whiteSpace: 'nowrap',
             borderRight: '1px solid rgba(15,118,110,0.2)',
             background: 'rgba(255, 255, 255, 0.4)',
             display: 'flex',
-            alignItems: 'center',
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase'
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            letterSpacing: '0.03em',
+            textTransform: 'uppercase',
+            lineHeight: 1.4
           }}>
-            All &copy; 2026 rights reserved
-            <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#14b8a6', marginLeft: '6px', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => (e.target as HTMLElement).style.color = '#0f766e'} onMouseOut={e => (e.target as HTMLElement).style.color = '#14b8a6'}>
-              Sunshine Technologies!
-            </a>
+            <div>All &copy; 2026 rights reserved
+              <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#14b8a6', marginLeft: '4px', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => (e.target as HTMLElement).style.color = '#0f766e'} onMouseOut={e => (e.target as HTMLElement).style.color = '#14b8a6'}>
+                Sunshine Technologies!
+              </a>
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'none', letterSpacing: '0.02em' }}>
+              Support: 7659091468, 9133377852, 853 &nbsp;|&nbsp; Sales: 8801231166, 9133377852
+            </div>
           </div>
           <div className="marquee-container" style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
             <div className="marquee-content" style={{ animationDuration: broadcasts && broadcasts.length > 0 ? '25s' : '35s' }}>

@@ -206,5 +206,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon="ultron.ico",
-    version=None,
+    version="version_info.txt",
 )

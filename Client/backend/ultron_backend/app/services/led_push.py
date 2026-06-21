@@ -11,7 +11,7 @@ Builds the payload that LED control cards expect when polling a URL:
   ]
 
 The LED card is configured with:
-  http://<PC-LAN-IP>:8000/api/v1/led?auth=menakshi&PCB=7005,7004,7003
+  http://<PC-LAN-IP>/api/v1/led?auth=username&PCB=1,2,3
 
 Usage:
   from app.services.led_push import build_led_response

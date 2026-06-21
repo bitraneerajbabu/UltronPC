@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import models so they are registered with Base.metadata before create_all
-from app.models.core import IndustrySite, Device, Parameter, TelemetryData
+from app.models.core import IndustrySite, Device, Parameter, TelemetryData, Broadcast
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -51,6 +51,37 @@ def _run_auto_migrations():
             except Exception as e:
                 logger.warning(f"Index '{idx_name}' skipped: {e}")
 
+        # Add lock fields to industry_sites if missing
+        existing_cols = {c["name"] for c in inspector.get_columns("industry_sites")}
+        for col_name, col_def in [
+            ("lock_status", "VARCHAR(50) DEFAULT 'unlocked'"),
+            ("lock_reason", "TEXT"),
+            ("lock_updated_at", "TIMESTAMP"),
+        ]:
+            if col_name not in existing_cols:
+                try:
+                    conn.execute(text(f"ALTER TABLE industry_sites ADD COLUMN {col_name} {col_def}"))
+                    conn.commit()
+                    logger.info(f"Auto-migration: added '{col_name}' to industry_sites")
+                except Exception as e:
+                    logger.warning(f"Auto-migration for '{col_name}' skipped: {e}")
+
+        # Create broadcasts table if it doesn't exist
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS broadcasts (
+                    id SERIAL PRIMARY KEY,
+                    message TEXT NOT NULL,
+                    message_type VARCHAR(50) DEFAULT 'info',
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    expires_at TIMESTAMP
+                )
+            """))
+            conn.commit()
+            logger.info("Auto-migration: ensured 'broadcasts' table")
+        except Exception as e:
+            logger.warning(f"Auto-migration for broadcasts table skipped: {e}")
 
 _run_auto_migrations()
 
@@ -69,12 +100,13 @@ app.add_middleware(
 )
 
 
-from app.api.endpoints import sync, sites, downloads, tgpcb_sync
+from app.api.endpoints import sync, sites, downloads, tgpcb_sync, broadcasts
 
 app.include_router(sync.router, prefix=f"{settings.API_V1_STR}/sync", tags=["sync"])
 app.include_router(tgpcb_sync.router, prefix=f"{settings.API_V1_STR}/tgpcb", tags=["tgpcb-sync"])
 app.include_router(sites.router, prefix=f"{settings.API_V1_STR}/sites", tags=["sites"])
 app.include_router(downloads.router, prefix=f"{settings.API_V1_STR}/downloads", tags=["downloads"])
+app.include_router(broadcasts.router, prefix=f"{settings.API_V1_STR}/broadcasts", tags=["broadcasts"])
 
 # Serve frontend build if it exists
 frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))

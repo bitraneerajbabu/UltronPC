@@ -1,7 +1,17 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Boolean, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.db.database import Base
+
+class Broadcast(Base):
+    __tablename__ = "broadcasts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    message = Column(Text, nullable=False)
+    message_type = Column(String, default="info")  # info, warning, critical
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    expires_at = Column(DateTime, nullable=True)
 
 class IndustrySite(Base):
     __tablename__ = "industry_sites"
@@ -14,6 +24,9 @@ class IndustrySite(Base):
     amc_expiry = Column(DateTime, nullable=True)
     last_sync = Column(DateTime, nullable=True)   # Updated on every UltrON client sync
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    lock_status = Column(String, default="unlocked")  # unlocked, manual_lock, amc_expired
+    lock_reason = Column(Text, nullable=True)
+    lock_updated_at = Column(DateTime, nullable=True)
 
     devices = relationship("Device", back_populates="site", cascade="all, delete-orphan")
     telemetry = relationship("TelemetryData", back_populates="site", cascade="all, delete-orphan")

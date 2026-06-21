@@ -93,7 +93,7 @@ def write_env(api_key: str, station_id: str, template: str) -> None:
         new_lines.append(f"RAJAPI_STATION_ID={station_id}")
 
     ENV_FILE.write_text("\n".join(new_lines), encoding="utf-8")
-    print(f"    ✓ .env written with key: {api_key[:20]}...")
+    print(f"    OK .env written with key: {api_key[:20]}...")
 
 
 def clean_enc() -> None:
@@ -116,13 +116,13 @@ def collect_installer(client_name: str) -> bool:
     """Copy the built UltrON_Installer.exe to clients/ folder with client name."""
     src = DIST_DIR / "UltrON_Installer.exe"
     if not src.exists():
-        print(f"    ✗ UltrON_Installer.exe not found after build!")
+        print(f"    FAIL UltrON_Installer.exe not found after build!")
         return False
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     dst = OUTPUT_DIR / f"UltrON_Installer_{client_name}.exe"
     shutil.copy2(src, dst)
-    print(f"    ✓ Saved: {dst.name}  ({dst.stat().st_size // 1024} KB)")
+    print(f"    OK Saved: {dst.name}  ({dst.stat().st_size // 1024} KB)")
     return True
 
 
@@ -165,7 +165,7 @@ def main():
             ok = collect_installer(name)
             results.append((name, ok))
         else:
-            print(f"    ✗ Build FAILED for {name}")
+            print(f"    FAIL Build FAILED for {name}")
             results.append((name, False))
 
         # 5. Clean up .env
@@ -176,7 +176,7 @@ def main():
     print("  BUILD SUMMARY")
     print("=" * 60)
     for name, ok in results:
-        status = "✓ OK" if ok else "✗ FAILED"
+        status = "OK" if ok else "FAILED"
         print(f"  {status}  {name}")
 
     print(f"\n  Installers saved to: {OUTPUT_DIR}")

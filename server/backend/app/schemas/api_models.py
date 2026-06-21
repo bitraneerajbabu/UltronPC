@@ -25,6 +25,9 @@ class SiteResponse(BaseModel):
     is_active: bool
     amc_expiry: Optional[datetime] = None
     last_sync: Optional[datetime] = None
+    lock_status: str = "unlocked"
+    lock_reason: Optional[str] = None
+    lock_updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -36,6 +39,35 @@ class LatestTelemetryPoint(BaseModel):
     value: Optional[float] = None
     quality: str
     timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+class BroadcastCreate(BaseModel):
+    message: str
+    message_type: str = "info"
+    expires_at: Optional[datetime] = None
+
+class BroadcastResponse(BaseModel):
+    id: int
+    message: str
+    message_type: str
+    is_active: bool
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class LockUpdate(BaseModel):
+    lock_status: str = "unlocked"
+    lock_reason: Optional[str] = None
+
+class LockSummary(BaseModel):
+    id: int
+    lock_status: str
+    lock_reason: Optional[str] = None
+    lock_updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
