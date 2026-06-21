@@ -4,17 +4,21 @@ from typing import Optional, List, Dict, Literal
 
 class ServerConfigBase(BaseModel):
     name: str
-    protocol: str = "tspcb"          # "tspcb" | "cpcb"
+    protocol: str = "tspcb"          # "tspcb" | "cpcb" | "led"
     live_url: Optional[str] = None   # TSPCB: Live push URL (every 1 min)
     delay_url: Optional[str] = None  # TSPCB: Delay push URL (every 15 min)
     cpcb_file_path: Optional[str] = None  # CPCB: Output CSV file path
     is_active: bool = True
     is_cpcb_active: bool = True
 
+    # LED Board (LAN)
+    led_channel_id: Optional[int] = None          # PCB/ChannelId shown to LED card (e.g. 7003)
+    led_station_name: Optional[str] = None        # Station label on the LED board
+
     @field_validator("protocol")
     @classmethod
     def validate_protocol(cls, v):
-        allowed = {"tspcb", "cpcb", "both"}
+        allowed = {"tspcb", "cpcb", "both", "led"}
         if v not in allowed:
             raise ValueError(f"protocol must be one of {allowed}")
         return v
@@ -41,6 +45,10 @@ class ServerMappingBase(BaseModel):
     api_unit: Optional[str] = None      # Unit override
     cpcb_station_name: Optional[str] = None
     cpcb_parameter: Optional[str] = None
+
+    # LED Board (LAN)
+    led_channel_name: Optional[str] = None  # Label on LED display (e.g. "NOX", "PM10")
+    led_unit: Optional[str] = None          # Unit override for LED display
 
 class ServerMappingUpdate(ServerMappingBase):
     pass

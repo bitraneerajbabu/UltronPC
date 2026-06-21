@@ -1,0 +1,109 @@
+# UltrON v1.0.6 — Daily CSV File Reader
+
+## What This Does
+
+UltrON already has a `csv` protocol that reads a **fixed file path**. The v1.0.6 feature upgrades this to support **daily rotating CSV files** — where each day's data is in a separate file in a folder, with a date-based filename pattern. New rows are appended every minute.
+
+### Reference CSV Format (from image)
+```
+Row 1: Header (skipped)
+Row 2+: Data rows  
+  Column A (0) → timestamp  e.g. "5/27/2026 0:02"
+  Column B (1) → Parameter 1  (12.2)
+  Column C (2) → Parameter 2  (6.4)
+  Column D (3) → Parameter 3  (30.5)
+  Column E (4) → Parameter 4  (25)
+```
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> **Filename pattern** — What is the exact CSV filename format per day?
+> - `20260527.csv` (YYYYMMDD)
+> - `2026-05-27.csv` (YYYY-MM-DD)  
+> - `27-05-2026.csv` (DD-MM-YYYY)
+> - Something custom like `data_27052026.csv`?
+>
+> Please confirm the filename pattern so I can implement exact date-matching.
+
+---
+
+## Proposed Changes
+
+### Device Model — 2 new fields
+
+#### [MODIFY] [device.py](file:///c:\Users\sunsh\OneDrive\Music\UltrON\client\backend\ultron_backend\app\models\device.py)
+- Add `csv_folder` — base folder to watch (e.g. `C:\Data\Station1\`)
+- Add `csv_filename_pattern` — date pattern for filename (e.g. `{date}.csv`, `data_{date}.csv`)
+
+---
+
+### CSV Watcher — Daily file resolution
+
+#### [MODIFY] [csv_watcher.py](file:///c:\Users\sunsh\OneDrive\Music\UltrON\client\backend\ultron_backend\app\services\csv_watcher.py)
+- New `DailyCSVWatcher` class that:
+  - Takes `folder` + `filename_pattern` (date format string)
+  - Resolves today's file path automatically each poll
+  - Falls back to yesterday's file if today's doesn't exist yet (e.g. at midnight)
+  - Reads the **last row** (most recent minute)
+  - Column mapping: `register_address` = column index (0=A, 1=B, 2=C…)
+  - Timestamp col = 0 (column A) by default
+  - Skips row 1 (header), reads from row 2
+
+---
+
+### Polling Engine — Wire new watcher
+
+#### [MODIFY] [polling_engine.py](file:///c:\Users\sunsh\OneDrive\Music\UltrON\client\backend\ultron_backend\app\services\polling_engine.py)
+- `_get_csv_watcher()` checks if `device.csv_folder` is set → uses `DailyCSVWatcher`
+- Falls back to original `CSVWatcher` (fixed path) if only `csv_path` is set
+
+---
+
+### DB Migration — Auto add new columns
+
+#### [MODIFY] [main.py](file:///c:\Users\sunsh\OneDrive\Music\UltrON\client\backend\ultron_backend\app\main.py)
+- Auto-migrate: `ALTER TABLE devices ADD COLUMN csv_folder VARCHAR(500)`
+- Auto-migrate: `ALTER TABLE devices ADD COLUMN csv_filename_pattern VARCHAR(200)`
+
+---
+
+### API — Expose new fields
+
+#### [MODIFY] [devices.py](file:///c:\Users\sunsh\OneDrive\Music\UltrON\client\backend\ultron_backend\app\api\devices.py)
+- Include `csv_folder` and `csv_filename_pattern` in device create/update schemas
+
+---
+
+### Frontend — Configure CSV folder in Device settings
+
+#### [MODIFY] DeviceModal / Device config screen
+- When protocol = `csv`:
+  - Option 1: **Fixed file** (existing `csv_path`)
+  - Option 2: **Daily rotating file** (new `csv_folder` + `csv_filename_pattern`)
+  - Show example: "Today's file: `C:\Data\20260618.csv`"
+  - Column mapping guide showing A=col 0, B=col 1, C=col 2, D=col 3, E=col 4
+
+---
+
+## Filename Pattern Format
+
+Will support these date tokens in the pattern:
+| Token | Example | Result |
+|---|---|---|
+| `{YYYYMMDD}` | `{YYYYMMDD}.csv` | `20260618.csv` |
+| `{YYYY-MM-DD}` | `{YYYY-MM-DD}.csv` | `2026-06-18.csv` |
+| `{DD-MM-YYYY}` | `data_{DD-MM-YYYY}.csv` | `data_18-06-2026.csv` |
+| `{DDMMYYYY}` | `{DDMMYYYY}.csv` | `18062026.csv` |
+
+User just types the pattern in the UI — the system resolves it daily.
+
+## Verification Plan
+
+1. Create a test CSV file in a folder with today's date as the name
+2. Configure a device with CSV protocol pointing to that folder
+3. Set parameters with column indexes B=1, C=2, D=3, E=4
+4. Watch UltrON live data update every poll interval
+5. At midnight rollover — verify tomorrow's file is automatically picked up

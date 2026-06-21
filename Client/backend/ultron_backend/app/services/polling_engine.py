@@ -11,6 +11,7 @@ from typing import Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
 from sqlalchemy.orm import selectinload
+import httpx
 
 from app.database import AsyncSessionLocal
 from app.models.station import Station, StationStatus
@@ -21,7 +22,7 @@ from app.models.telemetry import LiveData, HistoricalData, AverageType, DataQual
 from app.services.modbus_tcp import ModbusTCPReader
 from app.services.modbus_rtu import ModbusRTUReader
 from app.services.tcp_custom import TCPCustomReader
-from app.services.csv_watcher import CSVWatcher
+from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher
 from app.services.data_quality import dq_engine
 from app.services.alarm_engine import alarm_engine
 from app.websocket_manager import ws_manager
@@ -72,15 +73,24 @@ def _get_tcp_custom(device: Device) -> TCPCustomReader:
 
 
 def _get_csv_watcher(device: Device) -> Optional[CSVWatcher]:
-    if not device.csv_path:
+    if not device.csv_folder and not device.csv_path:
         return None
     if device.id not in _csv_watchers:
-        _csv_watchers[device.id] = CSVWatcher(
-            device.csv_path,
-            device.csv_delimiter or ",",
-            device.poll_interval or 60,
-            device.csv_timestamp_col,
-        )
+        if device.csv_folder:
+            _csv_watchers[device.id] = DailyCSVWatcher(
+                device.csv_folder,
+                device.csv_filename_pattern or "{YYYYMMDD}.csv",
+                device.csv_delimiter or ",",
+                device.poll_interval or 60,
+                device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
+            )
+        else:
+            _csv_watchers[device.id] = CSVWatcher(
+                device.csv_path,
+                device.csv_delimiter or ",",
+                device.poll_interval or 60,
+                device.csv_timestamp_col,
+            )
     return _csv_watchers[device.id]
 
 
@@ -154,7 +164,7 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             if watcher:
                 readings = watcher.get_latest_values(param_dicts)
             else:
-                log.warning(f"Device {device.id}: CSV protocol but no csv_path configured")
+                log.warning(f"Device {device.id}: CSV protocol but no CSV source configured")
                 readings = [
                     {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "comms_fail"}
                     for p in param_dicts
@@ -298,6 +308,24 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
                     .values(status=station_status, last_seen=now)
                 )
 
+        # ─── SystemLog for device events ─────────────────────────────────────
+        if not any_good:
+            db.add(SystemLog(log_type="comm", level="ERROR", source="ultron.polling",
+                message=f"Device {device.name} ({device.id}): OFFLINE — no data"))
+        else:
+            bad_params = []
+            for r in readings:
+                q = r.get("quality")
+                if q in ("comms_fail", "bad", "sensor_fail"):
+                    p = param_by_id.get(r["parameter_id"])
+                    bad_params.append(p.tag_name if p else f"#{r['parameter_id']}")
+                elif q == "out_of_range":
+                    p = param_by_id.get(r["parameter_id"])
+                    bad_params.append(f"{p.tag_name if p else '#'+str(r['parameter_id'])}={r.get('value')} OOR")
+            if bad_params:
+                db.add(SystemLog(log_type="comm", level="WARNING", source="ultron.polling",
+                    message=f"Device {device.name} ({device.id}): {', '.join(bad_params)}"))
+
         await db.commit()
 
     # ─── WebSocket Live Push ──────────────────────────────────────────────────
@@ -352,6 +380,69 @@ async def _device_poll_loop(device_id: int, interval: int):
         await asyncio.sleep(interval)
 
 
+async def _central_sync_worker():
+    """Background task to push telemetry data to RajAPI.com"""
+    log.info("Central Sync Worker started")
+    
+    # These would ideally be configured in the UI, but we can load from env for now
+    import os
+    central_url = os.environ.get("CENTRAL_API_URL", "https://rajapi.com/api/v1/sync/")
+
+    while _running:
+        api_key = os.environ.get("CENTRAL_API_KEY", "")
+        if not api_key:
+            # If AMC is expired or setup is pending, we don't sync, but we wait in the loop
+            log.debug("No CENTRAL_API_KEY configured or AMC pending. Central sync paused.")
+            await asyncio.sleep(60)
+            continue
+
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(select(LiveData).join(Parameter).options(selectinload(LiveData.parameter)))
+                live_data = result.scalars().all()
+                
+                if live_data:
+                    payload = {
+                        "client_id": "ultron_client_01",
+                        "points": [
+                            {
+                                "tag_name": ld.parameter.tag_name,
+                                "value": ld.value,
+                                "quality": ld.quality.value if hasattr(ld.quality, "value") else str(ld.quality),
+                                "timestamp": ld.timestamp.isoformat()
+                            } for ld in live_data
+                        ]
+                    }
+                    
+                    async with httpx.AsyncClient() as client:
+                        response = await client.post(
+                            central_url, 
+                            json=payload,
+                            headers={"X-API-Key": api_key},
+                            timeout=10.0
+                        )
+                        if response.status_code != 200:
+                            log.warning(f"Central sync failed: {response.status_code} {response.text}")
+                            # Important: the API key might have been deleted on the server (AMC expired)
+                            if response.status_code == 401:
+                                log.error("AMC Token expired or invalid! Locking out client.")
+                                if "CENTRAL_API_KEY" in os.environ:
+                                    del os.environ["CENTRAL_API_KEY"]
+                                
+                                from app.config import APP_DIR
+                                from app.core.config_crypt import write_env_enc_from_dict
+                                enc_file = str(APP_DIR / ".env.enc")
+                                write_env_enc_from_dict({"CENTRAL_API_URL": central_url, "CENTRAL_API_KEY": ""}, enc_file)
+                        else:
+                            log.debug("Successfully synced telemetry to RajAPI")
+                            
+        except Exception as e:
+            log.error(f"Central sync error: {e}")
+            
+        await asyncio.sleep(60) # Sync every 60 seconds
+
+
+
 
 async def start_polling():
     """
@@ -380,6 +471,9 @@ async def start_polling():
         )
         _device_tasks[device.id] = task
 
+    # Start the central sync worker
+    _device_tasks[-1] = asyncio.create_task(_central_sync_worker(), name="central-sync")
+
     log.info(f"Polling engine started: {len(devices)} device(s)")
 
 
@@ -404,6 +498,7 @@ async def reload_device(device_id: int):
     # Clear cached readers so fresh connections are made with new config
     _tcp_readers.pop(device_id, None)
     _tcp_custom.pop(device_id, None)
+    _csv_watchers.pop(device_id, None)
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Device).where(Device.id == device_id))

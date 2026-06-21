@@ -1,69 +1,98 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
+import { T, GLASS_CARD, BTN, INP, SEL } from '../theme';
 
 export const SettingsScreen = () => {
-  const { API_BASE, showToast, loadAllData, saveLocalSettings, authFetch } = useContext(AppContext);
+  const { API_BASE, showToast, loadAllData, authFetch } = useContext(AppContext);
   const [appInfo, setAppInfo] = useState(null);
   const [healthStatus, setHealthStatus] = useState(null);
   const [pollingStatus, setPollingStatus] = useState(null);
+  const [pushStatus, setPushStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState('');
+  const [fwInfo, setFwInfo] = useState(null);
+  const [fwLoading, setFwLoading] = useState(false);
+  const [fwProgress, setFwProgress] = useState(null);
+  const [fwChecking, setFwChecking] = useState(false);
 
-
-
-  // Editable settings stored in local state (synced with localStorage for persistence)
   const [formData, setFormData] = useState({
-    dbType: 'postgresql',
-    retentionDays: 90,
-    timezone: 'Asia/Kolkata',
-    pollingInterval: 60,
-    alarmCheckInterval: 30,
-    emailEnabled: false,
-    smtpHost: 'smtp.gmail.com',
-    smtpPort: 587,
-    smtpUser: '',
-    alertRecipients: '',
-    plantName: 'UltrON Industrial Plant',
-    plantAddress: 'Industrial Zone, Block A',
-    plantLogo: ''
+    plantName: '', plantAddress: '', plantLogo: '',
+    retentionDays: 90, timezone: 'Asia/Kolkata',
+    pollingInterval: 60, alarmCheckInterval: 30,
+    emailEnabled: false, smtpHost: '', smtpPort: 587, smtpUser: '', alertRecipients: '',
   });
 
   const loadInfo = async () => {
     setLoading(true);
     try {
-      const [infoRes, healthRes, pollRes] = await Promise.all([
-        fetch(`${API_BASE}/settings/info`),
-        fetch(`${API_BASE}/settings/health`),
-        fetch(`${API_BASE}/settings/polling-status`)
+      const [infoRes, healthRes, pollRes, plantRes, generalRes, pushRes] = await Promise.all([
+        authFetch(`${API_BASE}/settings/info`),
+        authFetch(`${API_BASE}/settings/health`),
+        authFetch(`${API_BASE}/settings/polling-status`),
+        authFetch(`${API_BASE}/settings/plant`),
+        authFetch(`${API_BASE}/settings/general`),
+        authFetch(`${API_BASE}/settings/push-status`),
       ]);
-
       if (infoRes.ok) setAppInfo(await infoRes.json());
       if (healthRes.ok) setHealthStatus(await healthRes.json());
       if (pollRes.ok) setPollingStatus(await pollRes.json());
+      if (pushRes.ok) setPushStatus(await pushRes.json());
+
+      if (plantRes.ok) {
+        const plant = await plantRes.json();
+        setFormData(prev => ({ ...prev, plantName: plant.plantName, plantAddress: plant.plantAddress, plantLogo: plant.plantLogo }));
+      }
+      if (generalRes.ok) {
+        const gen = await generalRes.json();
+        setFormData(prev => ({ ...prev, ...gen }));
+      }
     } catch (e) {
-      console.error('Failed to load settings info:', e);
-    } finally {
-      setLoading(false);
-    }
+      showToast('Failed to load settings.', 'error');
+    } finally { setLoading(false); }
+  };
+
+  const checkFirmware = async () => {
+    setFwChecking(true);
+    try {
+      const res = await authFetch(`${API_BASE}/settings/firmware`);
+      if (res.ok) setFwInfo(await res.json());
+      else showToast('Failed to check for updates.', 'error');
+    } catch { showToast('Update check failed.', 'error'); }
+    finally { setFwChecking(false); }
+  };
+
+  const startFirmwareDownload = async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/settings/firmware/download`, { method: 'POST' });
+      if (!res.ok) throw new Error();
+      showToast('Download started…');
+      setFwProgress({ state: 'downloading', percent: 0, message: 'Starting download…' });
+    } catch { showToast('Failed to start download.', 'error'); }
   };
 
   useEffect(() => {
-    loadInfo();
-    // Load persisted local settings
-    const saved = localStorage.getItem('ultron_local_settings');
-    if (saved) {
+    if (!fwProgress || fwProgress.state !== 'downloading') return;
+    const iv = setInterval(async () => {
       try {
-        const parsed = JSON.parse(saved);
-        setFormData(prev => ({
-          ...prev,
-          ...parsed,
-          plantName: parsed.plantName ?? 'UltrON Industrial Plant',
-          plantAddress: parsed.plantAddress ?? 'Industrial Zone, Block A',
-          plantLogo: parsed.plantLogo ?? ''
-        }));
-      } catch (e) { /* ignore */ }
-    }
-  }, []);
+        const res = await authFetch(`${API_BASE}/settings/firmware/download-status`);
+        if (res.ok) {
+          const st = await res.json();
+          setFwProgress(st);
+          if (st.state === 'done') {
+            showToast('Update downloaded! Restart to apply.');
+            clearInterval(iv);
+            checkFirmware();
+          } else if (st.state === 'error') {
+            showToast(`Download failed: ${st.message}`, 'error');
+            clearInterval(iv);
+          }
+        }
+      } catch {}
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [fwProgress?.state === 'downloading']);
+
+  useEffect(() => { loadInfo(); }, []);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -74,31 +103,40 @@ export const SettingsScreen = () => {
     }));
   };
 
-
-
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) { showToast('Image size should be less than 2MB.', 'warn'); return; }
     const reader = new FileReader();
-    reader.onload = (evt) => {
-      setFormData(prev => ({ ...prev, plantLogo: evt.target.result as string }));
-      showToast('Logo image uploaded to configuration.');
-    };
+    reader.onload = (evt) => setFormData(prev => ({ ...prev, plantLogo: evt.target.result as string }));
     reader.readAsDataURL(file);
   };
 
-  const handleRemoveLogo = () => {
-    setFormData(prev => ({ ...prev, plantLogo: '' }));
-    showToast('Logo image removed.');
-  };
-
   const handleSave = async () => {
-    saveLocalSettings(formData);
-    loadInfo();
+    try {
+      const [plantRes, generalRes] = await Promise.all([
+        authFetch(`${API_BASE}/settings/plant`, {
+          method: 'POST', body: JSON.stringify({
+            plantName: formData.plantName, plantAddress: formData.plantAddress, plantLogo: formData.plantLogo,
+          })
+        }),
+        authFetch(`${API_BASE}/settings/general`, {
+          method: 'POST', body: JSON.stringify({
+            retentionDays: formData.retentionDays, timezone: formData.timezone,
+            pollingInterval: formData.pollingInterval, alarmCheckInterval: formData.alarmCheckInterval,
+            emailEnabled: formData.emailEnabled, smtpHost: formData.smtpHost,
+            smtpPort: formData.smtpPort, smtpUser: formData.smtpUser,
+            alertRecipients: formData.alertRecipients,
+          })
+        }),
+      ]);
+      if (!plantRes.ok || !generalRes.ok) throw new Error('Save failed');
+      showToast('Settings saved.', 'success');
+      loadInfo();
+    } catch (e) {
+      showToast(`Save failed: ${e.message}`, 'error');
+    }
   };
-
-  // ── Real Backend Actions ──────────────────────────────────────────────────
 
   const handleReloadPolling = async () => {
     if (!window.confirm('Reload the polling engine? It will restart all device poll loops.')) return;
@@ -107,255 +145,235 @@ export const SettingsScreen = () => {
       const res = await authFetch(`${API_BASE}/settings/reload-polling`, { method: 'POST' });
       if (!res.ok) throw new Error();
       const data = await res.json();
-      showToast(`Polling engine reloaded — ${data.active_poll_loops} device loop(s) running.`);
+      showToast(`Polling engine reloaded — ${data.active_poll_loops} loop(s) running.`);
       loadInfo();
-    } catch (e) {
-      showToast('Failed to reload polling engine.', 'error');
-    } finally {
-      setActionLoading('');
-    }
+    } catch { showToast('Failed to reload polling.', 'error'); }
+    finally { setActionLoading(''); }
   };
 
   const handleResetTelemetry = async () => {
-    if (!window.confirm(
-      'Clear ALL telemetry data? (live readings, history, averages, alarms)\n\n' +
-      'Station / device / parameter CONFIG will be kept intact.\nThis cannot be undone.'
-    )) return;
+    if (!window.confirm('Clear ALL telemetry data? (readings, history, averages, alarms)\nConfig kept intact. Cannot be undone.')) return;
     setActionLoading('resetTel');
     try {
-      const res = await authFetch(`${API_BASE}/settings/reset-telemetry`, { method: 'POST' });
-      if (!res.ok) throw new Error();
-      showToast('All telemetry data cleared. Config preserved.');
-      loadAllData();
-      loadInfo();
-    } catch (e) {
-      showToast('Failed to reset telemetry.', 'error');
-    } finally {
-      setActionLoading('');
-    }
+      await authFetch(`${API_BASE}/settings/reset-telemetry`, { method: 'POST' });
+      showToast('Telemetry cleared.');
+      loadAllData(); loadInfo();
+    } catch { showToast('Failed.', 'error'); }
+    finally { setActionLoading(''); }
   };
 
   const handleFactoryReset = async () => {
-    const answer = window.prompt(
-      'DANGER: This will wipe ALL data including config (stations, devices, parameters).\n\n' +
-      'Type RESET to confirm factory reset:'
-    );
-    if (answer !== 'RESET') { showToast('Factory reset cancelled.', 'warn'); return; }
+    if (window.prompt('Type RESET to confirm factory reset (ALL data including config):') !== 'RESET') return;
     setActionLoading('resetAll');
     try {
-      const res = await authFetch(`${API_BASE}/settings/reset-all`, { method: 'POST' });
-      if (!res.ok) throw new Error();
-      showToast('Full factory reset complete. All data removed. Please re-configure.');
-      loadAllData();
-      loadInfo();
-    } catch (e) {
-      showToast('Failed to perform factory reset.', 'error');
-    } finally {
-      setActionLoading('');
-    }
+      await authFetch(`${API_BASE}/settings/reset-all`, { method: 'POST' });
+      showToast('Factory reset complete.');
+      loadAllData(); loadInfo();
+    } catch { showToast('Failed.', 'error'); }
+    finally { setActionLoading(''); }
   };
 
   const handleResetFrontend = () => {
-    if (!window.confirm('Reset all frontend UI settings to defaults?')) return;
-    localStorage.removeItem('ultron_local_settings');
-    localStorage.removeItem('ultron_theme_config');
-    localStorage.removeItem('cached_api_mappings');
-    localStorage.removeItem('cached_api_servers');
-    
-    // Force clean state restoration from native build file definitions
+    if (!window.confirm('Reset frontend UI settings to defaults?')) return;
+    ['ultron_local_settings', 'ultron_theme_config', 'cached_api_mappings', 'cached_api_servers'].forEach(k => localStorage.removeItem(k));
     window.location.reload();
   };
 
+  const labelS = { fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: '4px' };
+  const sectionTitleS = { fontSize: '13px', fontWeight: '700', color: T.primary, marginBottom: '10px', gridColumn: '1 / -1', borderBottom: `1.5px solid ${T.primaryBorder}`, paddingBottom: '6px' };
+
   return (
-    <div className="screen active" id="settingsScreen">
+    <div className="screen active" id="settingsScreen" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-      {/* App Info Panel */}
-      <div className="card">
-        <div className="section-title">System Information</div>
-        <div className="live-status-grid" style={{ marginBottom: '12px' }}>
-          <div className="live-status-item">
-            <label style={{ display: 'block' }}>Application:</label>
-            <span>{appInfo?.app_name || 'UltrON'} v{appInfo?.version || '1.0.0'}</span>
-          </div>
-          <div className="live-status-item">
-            <label style={{ display: 'block' }}>Database Status:</label>
-            <span className={healthStatus?.database === 'ok' ? 'status-online' : 'status-offline'} style={{ fontWeight: '600' }}>
-              {healthStatus?.status?.toUpperCase() || 'CHECKING…'} ({healthStatus?.db_type || '…'})
-            </span>
-          </div>
-          <div className="live-status-item">
-            <label style={{ display: 'block' }}>Polling Engine:</label>
-            <span className={pollingStatus?.running ? 'status-online' : 'status-offline'}>
-              {pollingStatus?.running ? `RUNNING — ${pollingStatus?.active_poll_loops} loop(s)` : 'STOPPED'}
-            </span>
-          </div>
+      {/* System Info */}
+      <div style={{ ...GLASS_CARD, padding: '20px' }}>
+        <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>System Information</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '14px' }}>
+          {[
+            { label: 'Application', value: `${appInfo?.app_name || 'UltrON'} v${appInfo?.version || '1.0.0'}` },
+            { label: 'Database', value: healthStatus?.status?.toUpperCase() || '…', ok: healthStatus?.database === 'ok' },
+            { label: 'Polling Engine', value: pollingStatus?.running ? `RUNNING — ${pollingStatus?.active_poll_loops} loop(s)` : 'STOPPED', ok: pollingStatus?.running },
+            { label: 'Internet', value: pushStatus?.internet_ok ? 'Connected' : 'Disconnected', ok: pushStatus?.internet_ok },
+            { label: 'Pending Uploads', value: `${pushStatus?.pending_uploads ?? '?'} record(s)` },
+          ].map(item => (
+            <div key={item.label} style={{ flex: '1 1 120px' }}>
+              <div style={{ fontSize: '10px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase' }}>{item.label}</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: item.ok === undefined ? T.text : item.ok ? '#10b981' : '#ef4444', marginTop: '2px' }}>{item.value}</div>
+            </div>
+          ))}
         </div>
-
-        <div className="live-status-grid">
-          <div className="live-status-item">
-            <label style={{ display: 'block' }}>Total Stations:</label>
-            <span>{appInfo?.stations ?? 0} Stations</span>
-          </div>
-          <div className="live-status-item">
-            <label style={{ display: 'block' }}>Configured Devices:</label>
-            <span>{appInfo?.devices ?? 0} Devices</span>
-          </div>
-          <div className="live-status-item">
-            <label style={{ display: 'block' }}>Mapped Registers:</label>
-            <span>{appInfo?.parameters ?? 0} Channels</span>
-          </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px' }}>
+          {[
+            { label: 'Stations', value: appInfo?.stations ?? 0 },
+            { label: 'Devices', value: appInfo?.devices ?? 0 },
+            { label: 'Parameters', value: appInfo?.parameters ?? 0 },
+            { label: 'DB Type', value: appInfo?.db_type || '…' },
+          ].map(item => (
+            <div key={item.label} style={{ padding: '8px 14px', background: T.primaryBg, borderRadius: T.r }}>
+              <div style={{ fontSize: '10px', fontWeight: '600', color: T.textMuted }}>{item.label}</div>
+              <div style={{ fontSize: '15px', fontWeight: '800', color: T.primary }}>{item.value}</div>
+            </div>
+          ))}
         </div>
-
-        <div className="toolbar" style={{ marginTop: '20px' }}>
-          <button className="btn" onClick={loadInfo} disabled={loading}>
-            {loading ? 'Refreshing…' : 'Refresh Status'}
-          </button>
-          <button className="btn" onClick={handleReloadPolling} disabled={!!actionLoading}>
-            {actionLoading === 'reload' ? 'Reloading…' : 'Reload Polling Engine'}
-          </button>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
+          <button style={BTN.primary} onClick={loadInfo} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</button>
+          <button style={BTN.ghost} onClick={handleReloadPolling} disabled={!!actionLoading}>{actionLoading === 'reload' ? '…' : 'Reload Polling'}</button>
         </div>
       </div>
 
-      {/* Settings Configuration Form */}
-      <div className="card">
-        <div className="section-title">System Settings</div>
-
-        <div className="settings-grid">
-          <div className="settings-section-title">Plant Identification</div>
-
-          <div className="form-group" style={{ gridColumn: '1/3' }}>
-            <label className="form-label">Plant Name</label>
-            <input type="text" className="form-input" name="plantName" value={formData.plantName} onChange={handleChange} placeholder="e.g. Sunshine Chemicals Ltd." />
-          </div>
-
-          <div className="form-group" style={{ gridColumn: '3/4' }}>
-            <label className="form-label">Plant Address</label>
-            <input type="text" className="form-input" name="plantAddress" value={formData.plantAddress} onChange={handleChange} placeholder="e.g. Block C, Industrial Corridor" />
-          </div>
-
-          <div className="form-group" style={{ gridColumn: '1/-1' }}>
-            <label className="form-label">Industry Logo</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-              {formData.plantLogo && (
-                <div style={{ border: '1px solid rgba(15, 118, 110, 0.2)', padding: '6px', borderRadius: '8px', background: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <img src={formData.plantLogo} alt="Logo Preview" style={{ maxHeight: '48px', maxWidth: '160px', objectFit: 'contain' }} />
+      {/* Software Update */}
+      <div style={{ ...GLASS_CARD, padding: '20px' }}>
+        <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>Software Update</div>
+        {!fwInfo && !fwChecking && (
+          <button style={BTN.primary} onClick={checkFirmware}>Check for Updates</button>
+        )}
+        {fwChecking && <div style={{ fontSize: '12px', color: T.textMuted }}>Checking for updates…</div>}
+        {fwInfo && (
+          <div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '12px' }}>
+              <div>
+                <div style={labelS}>Current Version</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: T.text }}>{fwInfo.current_version}</div>
+              </div>
+              <div>
+                <div style={labelS}>Latest Version</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: fwInfo.update_available ? '#f59e0b' : '#10b981' }}>{fwInfo.latest_version}</div>
+              </div>
+              <div>
+                <div style={labelS}>Status</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: fwInfo.update_available ? '#f59e0b' : '#10b981' }}>
+                  {fwInfo.update_available ? 'Update Available' : 'Up to Date'}
                 </div>
-              )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} id="plantLogoInput" />
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button type="button" className="btn" onClick={() => document.getElementById('plantLogoInput').click()}>
-                    Select Logo Image
-                  </button>
-                  {formData.plantLogo && (
-                    <button type="button" className="btn btn-danger" onClick={handleRemoveLogo} style={{ height: '38px' }}>
-                      Remove Logo
-                    </button>
+              </div>
+            </div>
+            {fwInfo.update_available && (
+              <>
+                {fwInfo.release_notes && (
+                  <div style={{ marginBottom: '10px' }}>
+                    <div style={labelS}>Release Notes</div>
+                    <div style={{ fontSize: '11px', color: T.textMuted, maxHeight: '100px', overflowY: 'auto', background: T.primaryBg, padding: '8px', borderRadius: '6px', whiteSpace: 'pre-wrap' }}>{fwInfo.release_notes}</div>
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {!fwProgress || fwProgress.state === 'idle' ? (
+                    <button style={BTN.accent} onClick={startFirmwareDownload}>Download Update</button>
+                  ) : fwProgress.state === 'downloading' ? (
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: T.textMuted, marginBottom: '4px' }}>
+                        <span>{fwProgress.message}</span>
+                        <span>{fwProgress.percent}%</span>
+                      </div>
+                      <div style={{ width: '100%', height: '6px', background: T.primaryBg, borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{ width: `${fwProgress.percent}%`, height: '100%', background: T.primary, borderRadius: '3px', transition: 'width 0.3s' }} />
+                      </div>
+                    </div>
+                  ) : null}
+                  {fwProgress?.state === 'done' && (
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#10b981' }}>{fwProgress.message}</div>
+                  )}
+                  {fwProgress?.state === 'error' && (
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#ef4444' }}>{fwProgress.message}</div>
                   )}
                 </div>
-                <span style={{ fontSize: '11px', color: '#64748b' }}>
-                  Supports PNG, JPEG, SVG. Recommended height 40–60px with transparent background.
-                </span>
-              </div>
+              </>
+            )}
+            <button style={{ ...BTN.ghost, marginTop: '10px' }} onClick={() => { setFwInfo(null); setFwProgress(null); }}>Close</button>
+          </div>
+        )}
+      </div>
+
+      {/* Settings Form */}
+      <div style={{ ...GLASS_CARD, padding: '20px' }}>
+        <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>System Settings</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+
+          <div style={sectionTitleS}>Plant Identification</div>
+
+          <div style={{ gridColumn: 'span 2' }}>
+            <div style={labelS}>Plant Name</div>
+            <input name="plantName" style={INP} value={formData.plantName} onChange={handleChange} placeholder="e.g. Sunshine Chemicals Ltd." />
+          </div>
+          <div>
+            <div style={labelS}>Plant Address</div>
+            <input name="plantAddress" style={INP} value={formData.plantAddress} onChange={handleChange} placeholder="e.g. Block C, Industrial Zone" />
+          </div>
+          <div style={{ gridColumn: 'span 3' }}>
+            <div style={labelS}>Industry Logo</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              {formData.plantLogo && <img src={formData.plantLogo} alt="Logo" style={{ maxHeight: '48px', maxWidth: '160px', borderRadius: '6px', border: `1px solid ${T.primaryBorder}` }} />}
+              <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} id="logoInput" />
+              <button style={BTN.ghost} onClick={() => document.getElementById('logoInput').click()}>Select Logo</button>
+              {formData.plantLogo && <button style={BTN.danger} onClick={() => setFormData(prev => ({ ...prev, plantLogo: '' }))}>Remove</button>}
             </div>
           </div>
 
-          <div className="settings-section-title" style={{ marginTop: '20px' }}>Database &amp; Retention</div>
+          <div style={sectionTitleS}>Database & Retention</div>
 
-
-
-          <div className="form-group">
-            <label className="form-label">Data Retention (Days)</label>
-            <input type="number" className="form-input" name="retentionDays" value={formData.retentionDays} onChange={handleChange} min="7" />
+          <div>
+            <div style={labelS}>Data Retention (Days)</div>
+            <input type="number" name="retentionDays" style={INP} value={formData.retentionDays} onChange={handleChange} min="7" />
           </div>
-
-          <div className="form-group">
-            <label className="form-label">System Timezone</label>
-            <select className="form-select" name="timezone" value={formData.timezone} onChange={handleChange}>
-              <option value="UTC">UTC (Coordinated Universal Time)</option>
+          <div>
+            <div style={labelS}>System Timezone</div>
+            <select name="timezone" style={SEL} value={formData.timezone} onChange={handleChange}>
+              <option value="UTC">UTC</option>
               <option value="Asia/Kolkata">IST (Asia/Kolkata)</option>
-              <option value="America/New_York">EST (America/New_York)</option>
-              <option value="Europe/London">GMT (Europe/London)</option>
+              <option value="America/New_York">EST</option>
+              <option value="Europe/London">GMT</option>
             </select>
           </div>
 
-          <div className="settings-section-title">Polling &amp; Heartbeat</div>
+          <div style={sectionTitleS}>Polling & Heartbeat</div>
 
-          <div className="form-group">
-            <label className="form-label">Default Poll Interval (sec)</label>
-            <input type="number" className="form-input" name="pollingInterval" value={formData.pollingInterval} onChange={handleChange} min="5" />
+          <div>
+            <div style={labelS}>Poll Interval (sec)</div>
+            <input type="number" name="pollingInterval" style={INP} value={formData.pollingInterval} onChange={handleChange} min="5" />
+          </div>
+          <div>
+            <div style={labelS}>Alarm Check (sec)</div>
+            <input type="number" name="alarmCheckInterval" style={INP} value={formData.alarmCheckInterval} onChange={handleChange} min="5" />
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Alarm Check Interval (sec)</label>
-            <input type="number" className="form-input" name="alarmCheckInterval" value={formData.alarmCheckInterval} onChange={handleChange} min="5" />
-          </div>
+          <div style={sectionTitleS}>Email Alert Engine</div>
 
-
-
-          <div className="settings-section-title">Email Alert Engine</div>
-
-          <div className="form-group" style={{ gridColumn: '1/2' }}>
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '10px' }}>
-              <input type="checkbox" name="emailEnabled" checked={formData.emailEnabled} onChange={handleChange} style={{ width: '16px', height: '16px' }} />
-              Enable Email Alerts
-            </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <input type="checkbox" name="emailEnabled" checked={formData.emailEnabled} onChange={handleChange} style={{ width: '16px', height: '16px' }} />
+            <span style={{ fontSize: '12px', fontWeight: '600', color: T.text }}>Enable Email Alerts</span>
           </div>
 
           {formData.emailEnabled && (
             <>
-              <div className="form-group">
-                <label className="form-label">SMTP Server Host</label>
-                <input type="text" className="form-input" name="smtpHost" value={formData.smtpHost} onChange={handleChange} />
+              <div>
+                <div style={labelS}>SMTP Host</div>
+                <input name="smtpHost" style={INP} value={formData.smtpHost} onChange={handleChange} />
               </div>
-              <div className="form-group">
-                <label className="form-label">SMTP Port</label>
-                <input type="number" className="form-input" name="smtpPort" value={formData.smtpPort} onChange={handleChange} />
+              <div>
+                <div style={labelS}>SMTP Port</div>
+                <input type="number" name="smtpPort" style={INP} value={formData.smtpPort} onChange={handleChange} />
               </div>
-              <div className="form-group">
-                <label className="form-label">SMTP User</label>
-                <input type="text" className="form-input" name="smtpUser" value={formData.smtpUser} onChange={handleChange} placeholder="smtp@company.com" />
+              <div>
+                <div style={labelS}>SMTP User</div>
+                <input name="smtpUser" style={INP} value={formData.smtpUser} onChange={handleChange} />
               </div>
-              <div className="form-group" style={{ gridColumn: '2/-1' }}>
-                <label className="form-label">Alert Recipients (comma separated)</label>
-                <input type="text" className="form-input" name="alertRecipients" value={formData.alertRecipients} onChange={handleChange} placeholder="admin@company.com, safety@company.com" />
+              <div style={{ gridColumn: 'span 2' }}>
+                <div style={labelS}>Alert Recipients (comma separated)</div>
+                <input name="alertRecipients" style={INP} value={formData.alertRecipients} onChange={handleChange} />
               </div>
             </>
           )}
-
-          {/* CPCB section removed */}
-
-
         </div>
 
-        <div className="divider" />
-
-        <div className="toolbar" style={{ justifyContent: 'space-between', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              className="btn btn-danger"
-              onClick={handleResetTelemetry}
-              disabled={!!actionLoading}
-              title="Clears all readings/history/alarms. Keeps station/device/parameter config."
-            >
-              {actionLoading === 'resetTel' ? 'Clearing…' : 'Clear Telemetry Data'}
-            </button>
-            <button
-              className="btn btn-danger"
-              onClick={handleFactoryReset}
-              disabled={!!actionLoading}
-              title="WIPES EVERYTHING including config. Requires typing RESET to confirm."
-            >
-              {actionLoading === 'resetAll' ? 'Resetting…' : 'Factory Reset DB'}
-            </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button style={BTN.danger} onClick={handleResetTelemetry} disabled={!!actionLoading}>{actionLoading === 'resetTel' ? '…' : 'Clear Telemetry'}</button>
+            <button style={BTN.danger} onClick={handleFactoryReset} disabled={!!actionLoading}>{actionLoading === 'resetAll' ? '…' : 'Factory Reset'}</button>
           </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="btn" onClick={handleResetFrontend}>Reset UI Defaults</button>
-            <button className="btn btn-primary" onClick={handleSave}>Save Settings</button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button style={BTN.ghost} onClick={handleResetFrontend}>Reset UI</button>
+            <button style={BTN.primary} onClick={handleSave}>Save Settings</button>
           </div>
         </div>
       </div>
-
     </div>
   );
 };

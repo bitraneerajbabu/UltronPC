@@ -8,11 +8,12 @@ Never store the service_role key or other true secrets.
 """
 
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
+from pydantic import Field
 from typing import Optional
 import os
 import sys
 import io
+import secrets
 from pathlib import Path
 import dotenv
 
@@ -84,31 +85,71 @@ elif ENV_ENC_FILE.is_file():
 
 
 
+
+
+def _load_or_create_secret_key() -> str:
+    """
+    Return a stable secret key that persists across restarts.
+
+    On first launch the key is generated with secrets.token_urlsafe(32) and
+    written to  <APP_DIR>/secret.key  (next to the EXE in frozen mode, or next
+    to the package root in dev mode).  Subsequent launches read the file, so
+    all previously issued JWT tokens remain valid.
+
+    Falls back to a fresh random key if the file cannot be read or written
+    (e.g. read-only filesystem) — this matches the old behaviour.
+    """
+    key_file = APP_DIR / "secret.key"
+    try:
+        if key_file.is_file():
+            key = key_file.read_text(encoding="utf-8").strip()
+            if key:
+                return key
+        # Generate a new key and persist it
+        key = secrets.token_urlsafe(32)
+        key_file.write_text(key, encoding="utf-8")
+        return key
+    except Exception as e:
+        print(f"[UltrON] Could not persist secret key ({e}) — using ephemeral key.", file=sys.stderr)
+        return secrets.token_urlsafe(32)
+
+
 class Settings(BaseSettings):
+
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "1.0.8"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    # ─── Database (PostgreSQL ONLY) ───────────────────────────
-    DB_TYPE: str = "postgresql"
+    CORS_ALLOW_ORIGINS: str = (
+        "http://localhost:8000,"
+        "http://127.0.0.1:8000,"
+        "http://localhost:5173,"
+        "http://127.0.0.1:5173"
+    )
+    # ─── Database ───────────────────────────
+    DB_TYPE: str = "sqlite"
     DB_HOST: str = "localhost"
     DB_PORT: int = 5432
     DB_USER: str = "postgres"
-    DB_PASSWORD: str = "postgres"
+    DB_PASSWORD: str = ""
     DB_NAME: str = "ultron"
 
     @property
     def DATABASE_URL(self) -> str:
-        return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        if self.DB_TYPE == "postgresql":
+            return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        return f"sqlite+aiosqlite:///{APP_DIR}/ultron.db"
 
     @property
     def SYNC_DATABASE_URL(self) -> str:
-        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        if self.DB_TYPE == "postgresql":
+            return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        return f"sqlite:///{APP_DIR}/ultron.db"
 
     # ─── Security ─────────────────────────────────────────────
-    SECRET_KEY: str = "ultron-super-secret-key-change-in-production"
+    SECRET_KEY: str = Field(default_factory=lambda: _load_or_create_secret_key())
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
     ADMIN_USERNAME: str = "Master"
@@ -116,6 +157,19 @@ class Settings(BaseSettings):
 
     # ─── WebSocket ────────────────────────────────────────────
     WS_LIVE_PUSH_INTERVAL: int = 5
+
+    # ─── RajAPI Central Sync (background, invisible to user) ────
+    RAJAPI_API_KEY: str = ""                  # Site API key from rajapi.com — set per client
+    RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/tgpcb/"
+    RAJAPI_SYNC_ENABLED: bool = True
+
+    # ─── RajAPI MQTT Remote Control ───────────────────────────
+    RAJAPI_MQTT_ENABLED: bool = True
+    RAJAPI_MQTT_HOST: str = "rajapi.com"
+    RAJAPI_MQTT_PORT: int = 1883
+    RAJAPI_MQTT_USER: str = ""
+    RAJAPI_MQTT_PASSWORD: str = ""
+    RAJAPI_STATION_ID: str = "default_station"
 
     # ─── Polling Engine ───────────────────────────────────────
     POLLING_DEFAULT_INTERVAL: int = 60
@@ -139,7 +193,7 @@ class Settings(BaseSettings):
     BACKUPS_DIR: str = "./backups"
     UPLOADS_DIR: str = "./uploads"
 
-    # ─── Security ────────────────────────────────────────────────
+    # ─── Security ────────────────────────────────────────────────────
     EMAIL_ENABLED: bool = False
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
@@ -147,9 +201,17 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     ALERT_RECIPIENTS: str = ""
 
+    # ─── LED Board LAN Endpoint ───────────────────────────────────
+    # Auth is validated against active user usernames in the DB.
+    # LED_AUTH_TOKEN in .env can override as a static fallback if needed.
+    LED_AUTH_TOKEN: str = ""
+    # Port for the dedicated LED board HTTP server (default 80 for LAN cards)
+    # Set LED_HTTP_PORT=0 to disable the secondary LED server.
+    LED_HTTP_PORT: int = 80
+
     class Config:
         # Overrides loading of unencrypted .env if .env.enc exists and was already loaded
-        env_file = None if os.path.exists(str(APP_DIR / ".env.enc")) else ".env"
+        env_file = None if os.path.exists(str(APP_DIR / ".env.enc")) else str(APP_DIR / ".env")
         env_file_encoding = "utf-8"
         case_sensitive = False
 
@@ -157,6 +219,15 @@ class Settings(BaseSettings):
         """Create all required storage directories on startup."""
         for d in [self.REPORTS_DIR, self.LOGS_DIR, self.BACKUPS_DIR, self.UPLOADS_DIR]:
             os.makedirs(d, exist_ok=True)
+
+    @property
+    def cors_allow_origins(self) -> list[str]:
+        """Return configured CORS origins as a clean list."""
+        return [
+            origin.strip()
+            for origin in self.CORS_ALLOW_ORIGINS.split(",")
+            if origin.strip()
+        ]
 
 
 # Singleton instance — import this everywhere

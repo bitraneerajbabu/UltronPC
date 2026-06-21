@@ -16,7 +16,7 @@ if not TOKEN:
     sys.exit(1)
 
 REPO = "bitraneerajbabu/UltronPC"
-TAG = "v1.0.0"
+TAG = "v1.0.7"
 FILE_PATH = "backend/ultron_backend/dist/UltrON.exe"
 
 def make_request(url, method="GET", headers=None, data=None):
@@ -42,7 +42,44 @@ def main():
         sys.exit(1)
 
     print(f"Fetching release {TAG}...")
-    release = make_request(f"https://api.github.com/repos/{REPO}/releases/tags/{TAG}")
+    try:
+        release = make_request(f"https://api.github.com/repos/{REPO}/releases/tags/{TAG}")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            print(f"Release {TAG} not found. Creating it...")
+            create_data = json.dumps({
+                "tag_name": TAG,
+                "name": f"UltrON {TAG}",
+                "body": (
+                    "## What's New in v1.0.7\n\n"
+                    "### 🖥️ All Screens Redesigned\n"
+                    "- **Dashboard**: Modern teal-themed layout with PC IP KPI card\n"
+                    "- **Devices**: 8 simplified data types, RS485 serial fields, CSV daily/fixed mode, protocol labels\n"
+                    "- **API Mappings**: 4 organized sections (SPCB, CPCB, Central Sync, LED Board) with per-protocol mapping tables\n"
+                    "- **Trends**: PDF export via Blob+hidden iframe (no popup blocker), resolution dropdown for all intervals\n"
+                    "- **Reports**: Two-section design (Normal / Average), fixed PDF/Excel via authFetch+Blob, YYYY/MM/DD HH:MM format\n"
+                    "- **Logs**: Teal theme, colored level/type badges, sticky header, source/type filtering\n"
+                    "- **Settings**: Real backend persistence, push-status with internet & pending count\n\n"
+                    "### ⏫ Software Update UI\n"
+                    "- In-app update checker: checks GitHub Releases for new versions\n"
+                    "- One-click download with progress bar\n"
+                    "- Background download + restart flag for seamless upgrade\n\n"
+                    "### 📤 Pending Uploads Queue\n"
+                    "- Failed HTTP POSTs queued in database, retried every 15 min via delay_url\n"
+                    "- Amber pending-count badge per server with Clear button, auto-refresh every 30s\n"
+                    "- API endpoints: GET /pending-counts, GET /{id}/pending-count, DELETE /{id}/pending-records\n\n"
+                    "### 🔌 Enhanced Connectivity Logging\n"
+                    "- Internet connectivity logs only on state transitions (up→down, down→up)\n"
+                    "- Parameter snapshot logged every 60 sec as one consolidated SystemLog entry\n"
+                    "- Quality events (comm_fail, out_of_range, sensor_fail, device OFFLINE) — one log per device per cycle\n"
+                ),
+                "draft": False,
+                "prerelease": False
+            }).encode('utf-8')
+            release = make_request(f"https://api.github.com/repos/{REPO}/releases", method="POST", data=create_data)
+        else:
+            sys.exit(1)
+
     release_id = release["id"]
     
     # Check if UltrON.exe asset already exists

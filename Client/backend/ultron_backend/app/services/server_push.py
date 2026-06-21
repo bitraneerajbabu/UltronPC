@@ -21,11 +21,12 @@ from collections import defaultdict
 
 from app.database import AsyncSessionLocal
 from app.models.server_config import ServerConfig, ServerParameterMapping
-from app.models.telemetry import LiveData, Averages, AverageType, DataQuality
+from app.models.telemetry import LiveData, Averages, AverageType, DataQuality, PendingUpload, SystemLog
 from app.models.parameter import Parameter
 from app.models.device import Device
 from app.models.station import Station
 from app.core.logger import get_logger
+from app.services.lock_store import is_push_allowed, get_lock_status
 
 log = get_logger("ultron.server_push")
 
@@ -125,6 +126,11 @@ async def _push_tgpcb(config: ServerConfig, db, mode: str):
     """HTTP POST each payload to the configured TGPCB URL."""
     target_url = config.live_url if mode == "live" else config.delay_url
     if not target_url:
+        if mode == "delay":
+            log.warning(
+                f"[TGPCB/DELAY] ⚠ Server '{config.name}' has no Delay URL configured — "
+                f"delay push skipped. Set a Delay URL in Server Push Mappings to fix this."
+            )
         return
 
     try:
@@ -164,8 +170,18 @@ async def _push_tgpcb(config: ServerConfig, db, mode: str):
                         f"[TGPCB/{mode.upper()}] Push error DeviceID={device_id} → "
                         f"'{config.name}' (Parameters: [{param_summary}]): {e}"
                     )
+                    # Queue the failed payload for retry
+                    db.add(PendingUpload(
+                        server_config_id=config.id,
+                        url=target_url,
+                        payload=payload,
+                        mode=mode,
+                        last_error=str(e)[:500],
+                    ))
+                    await db.commit()
     except Exception as e:
         log.error(f"[TGPCB/{mode.upper()}] Build/push failed for '{config.name}': {e}")
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -485,6 +501,81 @@ async def generate_historical_cpcb_file(db, config: ServerConfig, date_str: str)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Internet Connectivity Check
+# ─────────────────────────────────────────────────────────────────────────────
+
+_last_net_ok = True
+
+async def check_connectivity():
+    """
+    Quick connectivity test by reaching a reliable endpoint.
+    Logs a WARNING when internet goes down and INFO when it recovers.
+    """
+    global _last_net_ok
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.get("https://clients3.google.com/generate_204")
+        if not _last_net_ok:
+            log.info("[NET] ✓ Internet connectivity restored")
+            _last_net_ok = True
+    except Exception:
+        if _last_net_ok:
+            log.warning("[NET] ✗ Internet connectivity lost — pushes will be queued as pending")
+            _last_net_ok = False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pending Upload Retry
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def retry_pending_uploads(db):
+    """
+    Attempt to send all queued pending uploads (called every 15 min in delay mode).
+    Uses each server config's delay_url for retry.
+    On success, the PendingUpload record is deleted.
+    On failure, retry_count is incremented and last_error updated.
+    """
+    result = await db.execute(
+        select(PendingUpload).order_by(PendingUpload.created_at.asc())
+    )
+    pending = result.scalars().all()
+
+    if not pending:
+        return
+
+    log.info(f"[RETRY] Attempting {len(pending)} pending upload(s)...")
+
+    # Preload server configs for delay URL lookup
+    config_ids = {p.server_config_id for p in pending}
+    configs = {}
+    for cid in config_ids:
+        c_res = await db.execute(select(ServerConfig).where(ServerConfig.id == cid))
+        c = c_res.scalar_one_or_none()
+        if c:
+            configs[cid] = c
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for p in pending:
+            cfg = configs.get(p.server_config_id)
+            target_url = cfg.delay_url if (cfg and cfg.delay_url) else p.url
+            try:
+                res = await client.post(target_url, json=p.payload)
+                if res.status_code < 300:
+                    await db.delete(p)
+                    log.info(f"[RETRY] ✓ Delivered pending #{p.id} via {target_url}")
+                else:
+                    p.retry_count += 1
+                    p.last_error = f"HTTP {res.status_code}"
+                    log.warning(f"[RETRY] ✗ Pending #{p.id} HTTP {res.status_code}")
+            except Exception as e:
+                p.retry_count += 1
+                p.last_error = str(e)[:500]
+                log.warning(f"[RETRY] ✗ Pending #{p.id} failed: {e}")
+
+    await db.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main scheduler entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -493,8 +584,47 @@ async def run_server_push(mode: str = "live"):
     Called by APScheduler:
       mode="live"  → every  1 minute  — TGPCB live push, check CPCB files
       mode="delay" → every 15 minutes — TGPCB delay push, check CPCB files
+
+    When lock is active or AMC expired:
+      - Polling continues (device reading NEVER stops)
+      - Live data is queued as PendingUpload instead of pushed live
+      - When lock is removed, queued data is posted from delay queue
     """
     async with AsyncSessionLocal() as db:
+        # Check internet connectivity (logs state transitions)
+        await check_connectivity()
+
+        # Check lock status — if push blocked, queue instead of push
+        push_allowed = await is_push_allowed()
+        lock_info = await get_lock_status()
+
+        if not push_allowed and mode == "live":
+            log.info(f"[PUSH] Locked ({lock_info.get('lock_status')}) — queueing live data as pending")
+            # Queue current live data as pending uploads instead of pushing
+            ld_stmt = select(LiveData).options(selectinload(LiveData.parameter))
+            ld_res = await db.execute(ld_stmt)
+            live_data_list = ld_res.scalars().all()
+            conf_result = await db.execute(
+                select(ServerConfig).filter(ServerConfig.is_active == True)
+            )
+            servers = conf_result.scalars().all()
+            for config in servers:
+                payloads = await _build_tgpcb_payloads(db, config.id)
+                for payload in payloads:
+                    db.add(PendingUpload(
+                        server_config_id=config.id,
+                        url=config.live_url or config.delay_url or "",
+                        payload=payload,
+                        mode="delay",
+                        last_error="Queued (locked/AMC expired)",
+                    ))
+            await db.commit()
+            log.info(f"[PUSH] ✓ Queued {len(servers)} server config(s) for delayed push")
+            # Skip live push, still process delay retry
+            if mode == "delay":
+                await retry_pending_uploads(db)
+            return
+
         conf_result = await db.execute(
             select(ServerConfig).filter(ServerConfig.is_active == True)
         )
@@ -504,18 +634,64 @@ async def run_server_push(mode: str = "live"):
             proto = (config.protocol or "tspcb").lower()
 
             if proto == "cpcb":
-                # Check CPCB flat-file on every run (both live & delay)
                 await _push_cpcb(config, db)
 
             elif proto == "both":
-                # Both — TGPCB (live + delay) and CPCB (on every run)
                 if mode == "live":
                     await _push_tgpcb(config, db, "live")
                 elif mode == "delay":
                     await _push_tgpcb(config, db, "delay")
-                
                 await _push_cpcb(config, db)
 
             else:
-                # TGPCB — HTTP JSON push (live + delay)
                 await _push_tgpcb(config, db, mode)
+
+        # Always push latest live telemetry to RajAPI MQTT broker (if enabled)
+        if mode == "live":
+            ld_stmt = select(LiveData).options(selectinload(LiveData.parameter))
+            ld_res = await db.execute(ld_stmt)
+            live_data_list = ld_res.scalars().all()
+
+            from app.services.remote_control import publish_telemetry
+            from app.config import settings
+            if settings.RAJAPI_MQTT_ENABLED:
+                payload = {
+                    "station_id": settings.RAJAPI_STATION_ID,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": []
+                }
+                for ld in live_data_list:
+                    if ld.parameter:
+                        val = ld.value
+                        if val is not None:
+                            try:
+                                val = round(float(val), 2)
+                            except (ValueError, TypeError):
+                                pass
+                        payload["data"].append({
+                            "tag": ld.parameter.tag_name,
+                            "value": val,
+                            "unit": ld.parameter.unit
+                        })
+                if payload["data"]:
+                    await publish_telemetry(payload)
+
+            param_vals = []
+            for ld in live_data_list:
+                if ld.parameter and ld.value is not None:
+                    try:
+                        v = round(float(ld.value), 2)
+                    except (ValueError, TypeError):
+                        v = ld.value
+                    param_vals.append(f"{ld.parameter.tag_name}={v}")
+            if param_vals:
+                db.add(SystemLog(
+                    log_type="comm",
+                    level="INFO",
+                    source="ultron.server_push",
+                    message=f"Live parameters: {', '.join(param_vals)}",
+                ))
+                await db.commit()
+
+        if mode == "delay":
+            await retry_pending_uploads(db)

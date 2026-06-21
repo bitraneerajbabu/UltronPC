@@ -4,10 +4,11 @@ Reads the latest row from a CSV file for poll-based ingestion.
 Supports header-row CSVs and headerless (positional) CSVs.
 """
 
-import os
 import csv
+import os
+from pathlib import Path
 from typing import Optional
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from app.core.logger import get_logger
 
 log = get_logger("ultron.csv_watcher")
@@ -22,12 +23,16 @@ def parse_csv_timestamp(raw_str: str) -> Optional[datetime]:
         "%d-%m-%Y %H:%M:%S",
         "%Y/%m/%d %H:%M:%S",
         "%d/%m/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M:%S",
         "%Y-%m-%dT%H:%M:%S",
         "%Y-%m-%dT%H:%M:%S.%fZ",
         "%Y-%m-%d %H:%M",
         "%d-%m-%Y %H:%M",
+        "%m/%d/%Y %H:%M",
         "%d-%m-%y %H:%M:%S",
         "%d-%m-%y %H:%M",
+        "%m/%d/%y %H:%M:%S",
+        "%m/%d/%y %H:%M",
     ]
     for fmt in formats:
         try:
@@ -149,3 +154,63 @@ class CSVWatcher:
             log.warning(f"CSV watcher: no data available from {self.path}")
 
         return results
+
+
+def render_daily_csv_filename(pattern: str, target_date: date) -> str:
+    """
+    Render UltrON's daily CSV date tokens for a target date.
+    Supported tokens are literal, e.g. {YYYYMMDD}.csv or data_{DD-MM-YYYY}.csv.
+    """
+    token_values = {
+        "{YYYYMMDD}": target_date.strftime("%Y%m%d"),
+        "{YYYY-MM-DD}": target_date.strftime("%Y-%m-%d"),
+        "{DD-MM-YYYY}": target_date.strftime("%d-%m-%Y"),
+        "{DDMMYYYY}": target_date.strftime("%d%m%Y"),
+        "{date}": target_date.strftime("%Y%m%d"),
+    }
+    filename = pattern or "{YYYYMMDD}.csv"
+    for token, value in token_values.items():
+        filename = filename.replace(token, value)
+    return filename
+
+
+class DailyCSVWatcher(CSVWatcher):
+    """
+    Resolves a date-patterned CSV file in a folder each poll.
+    Today's file is preferred; yesterday is used as a midnight rollover fallback.
+    """
+
+    def __init__(
+        self,
+        folder: str,
+        filename_pattern: str = "{YYYYMMDD}.csv",
+        delimiter: str = ",",
+        poll_interval: int = 60,
+        csv_timestamp_col: Optional[int] = 0,
+    ):
+        super().__init__("", delimiter, poll_interval, csv_timestamp_col)
+        self.folder = folder
+        self.filename_pattern = filename_pattern or "{YYYYMMDD}.csv"
+
+    def resolve_path(self, now: Optional[datetime] = None) -> str:
+        now = now or datetime.now()
+        folder = Path(self.folder)
+        today_path = folder / render_daily_csv_filename(self.filename_pattern, now.date())
+        if today_path.exists():
+            return str(today_path)
+
+        yesterday = now.date() - timedelta(days=1)
+        yesterday_path = folder / render_daily_csv_filename(self.filename_pattern, yesterday)
+        if yesterday_path.exists():
+            log.warning(f"Daily CSV today's file missing, using yesterday fallback: {yesterday_path}")
+            return str(yesterday_path)
+
+        return str(today_path)
+
+    def _read_last_row(self) -> Optional[dict]:
+        resolved_path = self.resolve_path()
+        if resolved_path != self.path:
+            self.path = resolved_path
+            self._last_mtime = None
+            self._last_row = None
+        return super()._read_last_row()

@@ -1,6 +1,0 @@
-# Supabase CLI Project Configuration
-project_id = "luoccetkyufrqlkfesav"
-
-[api]
-port = 54321
-schemas = ["public"]

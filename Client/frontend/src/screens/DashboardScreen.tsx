@@ -173,12 +173,14 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
 });
 
 export const DashboardScreen = () => {
-  const { kpis, stations, devices, parameters, liveData, showToast, authFetch, API_BASE, parseUtcDate, fetchLatestTelemetryAndKpis } = useContext(AppContext);
+  const { kpis, stations, devices, parameters, liveData, showToast, authFetch, API_BASE, parseUtcDate, fetchLatestTelemetryAndKpis, amcExpiry, broadcasts } = useContext(AppContext);
   const [selectedParam, setSelectedParam] = useState('');
   const [currentTime, setCurrentTime] = useState(formatCurrentTime());
   const [showAlarmsModal, setShowAlarmsModal] = useState(false);
   const [isTrendsModalOpen, setIsTrendsModalOpen] = useState(false);
   const [avg15Mins, setAvg15Mins] = useState({});
+  const [networkInfo, setNetworkInfo] = useState<{ lan_ip: string; internet_connected: boolean; hostname: string } | null>(null);
+  const [dismissedBroadcast, setDismissedBroadcast] = useState<number | null>(null);
 
   // Poll latest telemetry and KPIs every 5 seconds for dashboard updates
   useEffect(() => {
@@ -198,6 +200,25 @@ export const DashboardScreen = () => {
     datasets: {}
   });
   const lastTimestampRef = useRef('');
+
+  // Fetch network info (PC IP + internet)
+  const fetchNetworkInfo = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/settings/network-info`);
+      if (res.ok) {
+        const data = await res.json();
+        setNetworkInfo(data);
+      }
+    } catch {
+      // silently ignore
+    }
+  }, [authFetch, API_BASE]);
+
+  useEffect(() => {
+    fetchNetworkInfo();
+    const interval = setInterval(fetchNetworkInfo, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNetworkInfo]);
 
   // Keep clock running
   useEffect(() => {
@@ -450,22 +471,22 @@ export const DashboardScreen = () => {
   const downloadPDF = () => {
     if (!chartInstanceRef.current) return;
     const img = chartInstanceRef.current.toBase64Image();
-    const w = window.open('');
-    w.document.write(`
-      <html>
-        <body style="margin:20px; font-family: sans-serif;">
-          <h2>Live Trend — ${selectedParam}</h2>
-          <img src="${img}" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px;">
-          <script>
-            window.onload = () => {
-              window.print();
-              setTimeout(() => window.close(), 800);
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    w.document.close();
+    const html = [
+      '<html><head><style>body{margin:20px;font-family:sans-serif}img{width:100%;border:1px solid #cbd5e1;border-radius:8px}</style></head>',
+      `<body><h2>Live Trend — ${selectedParam}</h2><img src="${img}" />`,
+      '<script>window.onload=function(){window.print();setTimeout(function(){window.close()},800)};<\/script>',
+      '</body></html>'
+    ].join('');
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = url;
+    document.body.appendChild(iframe);
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+      URL.revokeObjectURL(url);
+    }, 60000);
     showToast('PDF print dialog opened.');
   };
 
@@ -489,6 +510,26 @@ export const DashboardScreen = () => {
     showToast('Live trend telemetry exported to CSV.');
   };
 
+  const exportExcel = () => {
+    if (!selectedParam || !dataPointsRef.current.datasets[selectedParam]) return;
+    const rows = [['Timestamp', 'Parameter', 'Value', 'Unit']];
+    const currentParamObj = parameters.find(p => p.tag_name === selectedParam) || {};
+    const unit = currentParamObj.unit || '';
+
+    dataPointsRef.current.labels.forEach((ts, idx) => {
+      const val = dataPointsRef.current.datasets[selectedParam][idx];
+      rows.push([ts, selectedParam, val !== undefined ? val : '', unit]);
+    });
+
+    const tsvContent = rows.map(r => r.join('\t')).join('\n');
+    const blob = new Blob([tsvContent], { type: 'application/vnd.ms-excel' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `LiveTrend_${selectedParam}_${Date.now()}.xls`;
+    a.click();
+    showToast('Live trend telemetry exported to Excel.');
+  };
+
   // Performance memoizations
   const groupedParametersByStation = useMemo(() => {
     const grouped = {};
@@ -510,14 +551,35 @@ export const DashboardScreen = () => {
     return parameters.filter(p => !devices.some(d => d.id === p.device_id));
   }, [devices, parameters]);
 
+  // AMC expiry warning (45 days early)
+  const amcWarning = (() => {
+    if (!amcExpiry) return null;
+    try {
+      const expiry = new Date(amcExpiry);
+      const now = new Date();
+      const diffDays = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays <= 0) return { msg: `AMC has expired! Please renew immediately.`, severity: 'critical' };
+      if (diffDays <= 45) return { msg: `AMC expires in ${diffDays} day${diffDays === 1 ? '' : 's'} (${amcExpiry}). Contact Sunshine Technologies for renewal.`, severity: 'warn' };
+    } catch {}
+    return null;
+  })();
+
   if (!parameters || parameters.length === 0) {
     return (
       <div className="screen active" id="dashboardScreen">
         
+        {/* AMC Warning Banner */}
+        {amcWarning && (
+          <div className="card" style={{ padding: '12px 20px', marginBottom: '16px', background: amcWarning.severity === 'critical' ? '#fef2f2' : '#fffbeb', border: `1px solid ${amcWarning.severity === 'critical' ? '#fecaca' : '#fde68a'}`, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? '🚨' : '⚠️'}</span>
+            <span style={{ fontSize: '13px', fontWeight: '600', color: amcWarning.severity === 'critical' ? '#991b1b' : '#92400e', flex: 1 }}>{amcWarning.msg}</span>
+          </div>
+        )}
+
         {/* KPI Cards */}
         <div className="card">
           <div className="section-title">System Summary</div>
-          <div className="grid-4">
+          <div className="grid-5">
             <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Stations</div>
@@ -562,6 +624,33 @@ export const DashboardScreen = () => {
                 </div>
               </div>
             </div>
+
+            <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.info}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ width: '100%' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>PC Network</div>
+                <div style={{ fontSize: '13px', fontWeight: '800', color: T.text, fontFamily: T.fontMono, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>{networkInfo?.lan_ip || '---'}</span>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    fontSize: '10px', fontWeight: '700', textTransform: 'uppercase',
+                    color: networkInfo?.internet_connected ? T.success : T.danger
+                  }}>
+                    <span style={{
+                      width: '7px', height: '7px', borderRadius: '50%',
+                      backgroundColor: networkInfo?.internet_connected ? T.success : T.danger,
+                      boxShadow: networkInfo?.internet_connected ? `0 0 6px ${T.success}` : `0 0 6px ${T.danger}`,
+                      display: 'inline-block'
+                    }}></span>
+                    {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+                {networkInfo?.hostname && (
+                  <div style={{ fontSize: '10px', fontWeight: '600', color: T.textFaint, marginTop: '4px' }}>
+                    {networkInfo.hostname}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -577,6 +666,30 @@ export const DashboardScreen = () => {
 
         <AlarmsInspectorModal isOpen={showAlarmsModal} onClose={() => setShowAlarmsModal(false)} />
 
+        {broadcasts && broadcasts.length > 0 && (() => {
+          const critical = broadcasts.find((b: any) => b.severity === 'critical' && b.id !== dismissedBroadcast);
+          if (!critical) return null;
+          return (
+            <div style={{
+              position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999,
+              maxWidth: '400px', padding: '16px 20px',
+              background: '#fef2f2', border: '1px solid #fecaca',
+              borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+              display: 'flex', alignItems: 'flex-start', gap: '12px',
+            }}>
+              <span style={{ fontSize: '24px', flexShrink: 0 }}>🚨</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#991b1b', marginBottom: '4px' }}>Broadcast Message</div>
+                <div style={{ fontSize: '12px', color: '#7f1d1d' }}>{critical.message}</div>
+              </div>
+              <button onClick={() => setDismissedBroadcast(critical.id)} style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '18px', color: '#991b1b', padding: '0 0 0 8px', lineHeight: 1
+              }}>×</button>
+            </div>
+          );
+        })()}
+
       </div>
     );
   }
@@ -584,10 +697,18 @@ export const DashboardScreen = () => {
   return (
     <div className="screen active" id="dashboardScreen">
       
+      {/* AMC Warning Banner */}
+      {amcWarning && (
+        <div style={{ padding: '12px 20px', marginBottom: '16px', background: amcWarning.severity === 'critical' ? '#fef2f2' : '#fffbeb', border: `1px solid ${amcWarning.severity === 'critical' ? '#fecaca' : '#fde68a'}`, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? '🚨' : '⚠️'}</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: amcWarning.severity === 'critical' ? '#991b1b' : '#92400e', flex: 1 }}>{amcWarning.msg}</span>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="card">
         <div className="section-title">System Summary</div>
-        <div className="grid-4">
+        <div className="grid-5">
           <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Stations</div>
@@ -652,6 +773,33 @@ export const DashboardScreen = () => {
               </div>
             </div>
           </div>
+
+          <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.info}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ width: '100%' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>PC Network</div>
+              <div style={{ fontSize: '13px', fontWeight: '800', color: T.text, fontFamily: T.fontMono, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>{networkInfo?.lan_ip || '---'}</span>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  fontSize: '10px', fontWeight: '700', textTransform: 'uppercase',
+                  color: networkInfo?.internet_connected ? T.success : T.danger
+                }}>
+                  <span style={{
+                    width: '7px', height: '7px', borderRadius: '50%',
+                    backgroundColor: networkInfo?.internet_connected ? T.success : T.danger,
+                    boxShadow: networkInfo?.internet_connected ? `0 0 6px ${T.success}` : `0 0 6px ${T.danger}`,
+                    display: 'inline-block'
+                  }}></span>
+                  {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
+                </span>
+              </div>
+              {networkInfo?.hostname && (
+                <div style={{ fontSize: '10px', fontWeight: '600', color: T.textFaint, marginTop: '4px' }}>
+                  {networkInfo.hostname}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -702,6 +850,7 @@ export const DashboardScreen = () => {
                   <button onClick={downloadPNG} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PNG</button>
                   <button onClick={downloadPDF} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PDF</button>
                   <button onClick={exportCSV} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>CSV</button>
+                  <button onClick={exportExcel} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>Excel</button>
                 </div>
               </div>
             </div>
@@ -856,6 +1005,31 @@ export const DashboardScreen = () => {
 
 
       <AlarmsInspectorModal isOpen={showAlarmsModal} onClose={() => setShowAlarmsModal(false)} />
+
+      {/* Broadcast Popup — latest critical broadcast shown as dismissible overlay */}
+      {broadcasts && broadcasts.length > 0 && (() => {
+        const critical = broadcasts.find((b: any) => b.severity === 'critical' && b.id !== dismissedBroadcast);
+        if (!critical) return null;
+        return (
+          <div style={{
+            position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999,
+            maxWidth: '400px', padding: '16px 20px',
+            background: '#fef2f2', border: '1px solid #fecaca',
+            borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+            display: 'flex', alignItems: 'flex-start', gap: '12px',
+          }}>
+            <span style={{ fontSize: '24px', flexShrink: 0 }}>🚨</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#991b1b', marginBottom: '4px' }}>Broadcast Message</div>
+              <div style={{ fontSize: '12px', color: '#7f1d1d' }}>{critical.message}</div>
+            </div>
+            <button onClick={() => setDismissedBroadcast(critical.id)} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: '18px', color: '#991b1b', padding: '0 0 0 8px', lineHeight: 1
+            }}>×</button>
+          </div>
+        );
+      })()}
 
     </div>
   );

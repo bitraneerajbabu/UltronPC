@@ -108,4 +108,5 @@ exe = EXE(
     console=True,        # ← CONSOLE WINDOW ON — see all errors
     icon="ultron.ico",   # place ultron.ico next to this .spec file
     disable_windowed_traceback=False,
+    version="version_info.txt",
 )

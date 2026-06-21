@@ -8,8 +8,13 @@ from app.database import get_db
 from app.models.parameter import Parameter
 from app.schemas.parameter import ParameterCreate, ParameterUpdate, ParameterOut
 from app.services import polling_engine
+from app.core.security import get_current_user, require_admin
 
-router = APIRouter(prefix="/parameters", tags=["Parameters"])
+router = APIRouter(
+    prefix="/parameters",
+    tags=["Parameters"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/", response_model=List[ParameterOut])
@@ -21,7 +26,12 @@ async def list_parameters(device_id: int = None, db: AsyncSession = Depends(get_
     return result.scalars().all()
 
 
-@router.post("/", response_model=ParameterOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=ParameterOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
+)
 async def create_parameter(
     payload: ParameterCreate,
     background_tasks: BackgroundTasks,
@@ -93,7 +103,7 @@ async def get_parameter(param_id: int, db: AsyncSession = Depends(get_db)):
     return param
 
 
-@router.patch("/{param_id}", response_model=ParameterOut)
+@router.patch("/{param_id}", response_model=ParameterOut, dependencies=[Depends(require_admin)])
 async def update_parameter(
     param_id: int,
     payload: ParameterUpdate,
@@ -139,7 +149,7 @@ async def update_parameter(
     return param
 
 
-@router.delete("/{param_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{param_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_admin)])
 async def delete_parameter(
     param_id: int,
     background_tasks: BackgroundTasks,
@@ -155,7 +165,7 @@ async def delete_parameter(
     background_tasks.add_task(polling_engine.reload_device, device_id)
 
 
-@router.post("/{param_id}/test-read")
+@router.post("/{param_id}/test-read", dependencies=[Depends(require_admin)])
 async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db)):
     """
     Read the parameter directly from the analyser on demand to check data receiving.
@@ -256,13 +266,22 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
                 value, quality = None, "sensor_fail"
                 
         elif protocol == "csv":
-            from app.services.csv_watcher import CSVWatcher
-            watcher = CSVWatcher(
-                device.csv_path or "",
-                device.csv_delimiter or ",",
-                device.poll_interval or 60,
-                device.csv_timestamp_col,
-            )
+            from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher
+            if device.csv_folder:
+                watcher = DailyCSVWatcher(
+                    device.csv_folder,
+                    device.csv_filename_pattern or "{YYYYMMDD}.csv",
+                    device.csv_delimiter or ",",
+                    device.poll_interval or 60,
+                    device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
+                )
+            else:
+                watcher = CSVWatcher(
+                    device.csv_path or "",
+                    device.csv_delimiter or ",",
+                    device.poll_interval or 60,
+                    device.csv_timestamp_col,
+                )
             param_dict = {
                 "id": param.id,
                 "register_address": param.register_address,

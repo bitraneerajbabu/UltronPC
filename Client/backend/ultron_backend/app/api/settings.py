@@ -1,7 +1,7 @@
 """UltrON — Settings API (app-level configuration, user management, DB utilities)"""
 
 from fastapi import APIRouter, Depends, HTTPException
-from app.core.security import require_admin
+from app.core.security import get_current_user, require_admin
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text, delete
 from datetime import datetime
@@ -11,13 +11,19 @@ from app.database import get_db, engine, Base
 from app.models.station import Station, StationStatus, StationType
 from app.models.device import Device, DeviceProtocol, DeviceType
 from app.models.parameter import Parameter, RegisterType, DataType, ByteOrder, AlarmSeverity
-from app.models.telemetry import LiveData, HistoricalData, Averages, Alarm, SystemLog
-from app.config import settings
+from app.models.telemetry import LiveData, HistoricalData, Averages, Alarm, SystemLog, PendingUpload
+from app.config import APP_DIR, settings
 from app.core.logger import get_logger, get_audit_logger
+import socket
+import asyncio
 
 log = get_logger("ultron.settings")
 audit = get_audit_logger()
-router = APIRouter(prefix="/settings", tags=["Settings"])
+router = APIRouter(
+    prefix="/settings",
+    tags=["Settings"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 # ─── App Info ─────────────────────────────────────────────────────────────────
@@ -37,6 +43,49 @@ async def app_info(db: AsyncSession = Depends(get_db)):
         "devices":     device_count.scalar(),
         "parameters":  param_count.scalar(),
         "timestamp":   datetime.utcnow().isoformat(),
+    }
+
+
+# ─── Network Info ──────────────────────────────────────────────────────────────
+async def _get_lan_ip() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.5)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            return "127.0.0.1"
+
+
+async def _check_internet() -> bool:
+    try:
+        import urllib.request
+        import ssl
+        ctx = ssl.create_default_context()
+        req = urllib.request.Request(
+            "https://clients3.google.com/generate_204",
+            method="GET",
+        )
+        with urllib.request.urlopen(req, context=ctx, timeout=5) as resp:
+            return resp.status == 204
+    except Exception:
+        return False
+
+
+@router.get("/network-info")
+async def network_info():
+    lan_ip = await _get_lan_ip()
+    internet_ok = await _check_internet()
+    return {
+        "lan_ip": lan_ip,
+        "internet_connected": internet_ok,
+        "hostname": socket.gethostname(),
+        "timestamp": datetime.utcnow().isoformat(),
     }
 
 
@@ -127,10 +176,8 @@ class PlantSettingsSchema(BaseModel):
 @router.get("/plant")
 async def get_plant_settings():
     import json
-    import os
-    db_dir = os.path.dirname(settings.DB_PATH) or "."
-    settings_file = os.path.join(db_dir, "plant_settings.json")
-    if os.path.exists(settings_file):
+    settings_file = APP_DIR / "plant_settings.json"
+    if settings_file.exists():
         try:
             with open(settings_file, "r", encoding="utf-8") as f:
                 return json.load(f)
@@ -146,17 +193,76 @@ async def get_plant_settings():
 @router.post("/plant", dependencies=[Depends(require_admin)])
 async def save_plant_settings(payload: PlantSettingsSchema):
     import json
-    import os
     try:
-        db_dir = os.path.dirname(settings.DB_PATH) or "."
-        settings_file = os.path.join(db_dir, "plant_settings.json")
-        os.makedirs(db_dir, exist_ok=True)
+        settings_file = APP_DIR / "plant_settings.json"
+        APP_DIR.mkdir(parents=True, exist_ok=True)
         with open(settings_file, "w", encoding="utf-8") as f:
             json.dump(payload.model_dump(), f, ensure_ascii=False, indent=2)
         return {"success": True, "data": payload.model_dump()}
     except Exception as e:
         log.error(f"Error saving plant settings: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to save plant settings: {str(e)}")
+
+
+# ─── General System Settings ────────────────────────────────────────────────────
+class GeneralSettingsSchema(BaseModel):
+    retentionDays: int = 90
+    timezone: str = "Asia/Kolkata"
+    pollingInterval: int = 60
+    alarmCheckInterval: int = 30
+    emailEnabled: bool = False
+    smtpHost: str = ""
+    smtpPort: int = 587
+    smtpUser: str = ""
+    alertRecipients: str = ""
+
+@router.get("/general")
+async def get_general_settings():
+    import json
+    settings_file = APP_DIR / "general_settings.json"
+    if settings_file.exists():
+        try:
+            with open(settings_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            log.error(f"Error reading general settings: {e}")
+    return {
+        "retentionDays": 90,
+        "timezone": "Asia/Kolkata",
+        "pollingInterval": 60,
+        "alarmCheckInterval": 30,
+        "emailEnabled": False,
+        "smtpHost": "",
+        "smtpPort": 587,
+        "smtpUser": "",
+        "alertRecipients": "",
+    }
+
+@router.post("/general", dependencies=[Depends(require_admin)])
+async def save_general_settings(payload: GeneralSettingsSchema):
+    import json
+    try:
+        settings_file = APP_DIR / "general_settings.json"
+        APP_DIR.mkdir(parents=True, exist_ok=True)
+        with open(settings_file, "w", encoding="utf-8") as f:
+            json.dump(payload.model_dump(), f, ensure_ascii=False, indent=2)
+        return {"success": True, "data": payload.model_dump()}
+    except Exception as e:
+        log.error(f"Error saving general settings: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save general settings: {str(e)}")
+
+
+# ─── Push Engine Status ────────────────────────────────────────────────────────
+@router.get("/push-status")
+async def push_engine_status():
+    from app.services.server_push import _last_net_ok
+    from app.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        pend_count = await db.execute(select(func.count(PendingUpload.id)))
+    return {
+        "internet_ok": _last_net_ok,
+        "pending_uploads": pend_count.scalar() or 0,
+    }
 
 
 # ─── Firmware Update Check ────────────────────────────────────────────────────
@@ -175,7 +281,7 @@ async def check_firmware():
     current_version = settings.APP_VERSION
 
     try:
-        ctx = ssl._create_unverified_context()
+        ctx = ssl.create_default_context()
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(
             url,
@@ -274,7 +380,7 @@ def _do_firmware_download():
     _fw_download_state = {"state": "downloading", "percent": 0, "message": "Fetching release info…", "restart_required": False}
 
     try:
-        ctx = ssl._create_unverified_context()
+        ctx = ssl.create_default_context()
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(url, headers={"User-Agent": "UltrON-Updater/1.0", "Accept": "application/vnd.github.v3+json"})
         with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:

@@ -11,9 +11,14 @@ from app.models.device import Device, DeviceProtocol
 from app.schemas.device import DeviceCreate, DeviceUpdate, DeviceOut
 from app.services import polling_engine
 from app.core.logger import get_logger
+from app.core.security import get_current_user, require_admin
 
 log = get_logger("ultron.api.devices")
-router = APIRouter(prefix="/devices", tags=["Devices"])
+router = APIRouter(
+    prefix="/devices",
+    tags=["Devices"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 def generate_tag_name(name: str) -> str:
@@ -36,7 +41,12 @@ async def list_devices(station_id: int = None, db: AsyncSession = Depends(get_db
     return result.scalars().all()
 
 
-@router.post("/", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=DeviceOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_admin)],
+)
 async def create_device(payload: DeviceCreate, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     from app.models.station import Station
     from app.models.parameter import Parameter
@@ -124,7 +134,7 @@ async def get_device(device_id: int, db: AsyncSession = Depends(get_db)):
     return device
 
 
-@router.patch("/{device_id}", response_model=DeviceOut)
+@router.patch("/{device_id}", response_model=DeviceOut, dependencies=[Depends(require_admin)])
 async def update_device(
     device_id: int,
     payload: DeviceUpdate,
@@ -232,7 +242,7 @@ async def update_device(
     return device
 
 
-@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_admin)])
 async def delete_device(
     device_id: int,
     background_tasks: BackgroundTasks,
@@ -247,7 +257,7 @@ async def delete_device(
     background_tasks.add_task(polling_engine.reload_device, device_id)
 
 
-@router.post("/{device_id}/test-connection")
+@router.post("/{device_id}/test-connection", dependencies=[Depends(require_admin)])
 async def test_device_connection(device_id: int, db: AsyncSession = Depends(get_db)):
     """
     Attempt a real connection to the device using its configured protocol.
@@ -354,9 +364,20 @@ async def test_device_connection(device_id: int, db: AsyncSession = Depends(get_
 
         elif protocol == "csv":
             import os
-            csv_path = device.csv_path or ""
+            if device.csv_folder:
+                from app.services.csv_watcher import DailyCSVWatcher
+                watcher = DailyCSVWatcher(
+                    device.csv_folder,
+                    device.csv_filename_pattern or "{YYYYMMDD}.csv",
+                    device.csv_delimiter or ",",
+                    device.poll_interval or 60,
+                    device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
+                )
+                csv_path = watcher.resolve_path()
+            else:
+                csv_path = device.csv_path or ""
             if not csv_path:
-                return {"success": False, "message": "No CSV path configured", "latency_ms": None}
+                return {"success": False, "message": "No CSV source configured", "latency_ms": None}
             exists = os.path.exists(csv_path)
             if not exists:
                 return {"success": False, "message": f"CSV file not found: {csv_path}", "latency_ms": None}

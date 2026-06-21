@@ -123,9 +123,37 @@ function App() {
     plantLogo,
     fetchLatestTelemetryAndKpis,
     showToast,
+    broadcasts,
+    amcExpiry,
   } = useContext(AppContext);
 
   const [refreshing, setRefreshing] = useState(false);
+
+  // License / Setup state
+  const [hasLicense, setHasLicense] = useState<boolean | null>(null);
+  const [showSetupLogin, setShowSetupLogin] = useState(false);
+  const [setupUsername, setSetupUsername] = useState('');
+  const [setupPassword, setSetupPassword] = useState('');
+  const [setupAuthError, setSetupAuthError] = useState('');
+  const [isSetupAuthenticated, setIsSetupAuthenticated] = useState(false);
+  
+  const [setupApiUrl, setSetupApiUrl] = useState('https://rajapi.com/api/v1/sync/');
+  const [setupApiKey, setSetupApiKey] = useState('');
+  const [setupTesting, setSetupTesting] = useState(false);
+  const [setupResult, setSetupResult] = useState('');
+
+  // Check License on mount
+  useEffect(() => {
+    fetch('/api/v1/license/status')
+      .then(res => res.json())
+      .then(data => {
+        setHasLicense(data.licensed);
+      })
+      .catch(err => {
+        console.error("Failed to check license status:", err);
+        setHasLicense(false);
+      });
+  }, []);
 
   const handleLogoClick = async () => {
     if (refreshing) return;
@@ -191,7 +219,7 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleLoginSubmit = async (e) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) {
       setLoginError('Both username and password are required.');
@@ -221,6 +249,140 @@ function App() {
     }
   }, [currentUserRole, activeScreen, setActiveScreen]);
 
+  // ─── License / Setup Screen ──────────────────────────────────────────────────
+  if (hasLicense === false) {
+    if (!isSetupAuthenticated) {
+      return (
+        <div className="login-screen">
+          <div className="login-card">
+            <img 
+              src="/assets/Ultron_logo.png" 
+              className="login-logo cursor-pointer" 
+              alt="UltrON Logo" 
+              onClick={() => setShowSetupLogin(true)}
+              title="Click here to authenticate setup"
+            />
+            <h2 className="login-title login-title-error">Access Denied</h2>
+            <p className="access-denied-description">
+              AMC Token is expired or not configured. Please contact Sunshine Technologies.
+            </p>
+
+            {showSetupLogin && (
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (setupUsername === 'token' && setupPassword === 'Ultron123.0') {
+                  setIsSetupAuthenticated(true);
+                  setSetupAuthError('');
+                } else {
+                  setSetupAuthError('Invalid setup credentials.');
+                }
+              }} className="override-form">
+                <h3 className="override-form-title">AMC Token Renewal Override</h3>
+                <div className="form-group">
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={setupUsername}
+                    onChange={e => setSetupUsername(e.target.value)}
+                    placeholder="Username"
+                  />
+                </div>
+                <div className="form-group">
+                  <input
+                    type="password"
+                    className="form-input"
+                    value={setupPassword}
+                    onChange={e => setSetupPassword(e.target.value)}
+                    placeholder="Password"
+                  />
+                </div>
+                {setupAuthError && <div className="auth-error-message">{setupAuthError}</div>}
+                <button type="submit" className="btn btn-primary full-width">Authenticate</button>
+              </form>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Setup configuration screen (isSetupAuthenticated === true)
+    return (
+      <div className="login-screen">
+        <div className="login-card setup-card">
+          <h2 className="login-title">License & AMC Setup</h2>
+          <p className="setup-description">
+            Paste the AMC Token from rajapi.com to unlock UltrON.
+          </p>
+
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            setSetupTesting(true);
+            setSetupResult('');
+            try {
+              const res = await fetch('/api/v1/license/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_url: setupApiUrl, api_key: setupApiKey })
+              });
+              if (res.ok) {
+                setSetupResult("Success! Configuration saved.");
+                setTimeout(() => {
+                  setHasLicense(true);
+                }, 1500);
+              } else {
+                const data = await res.json();
+                setSetupResult(`Failed: ${data.detail || 'Unknown error'}`);
+              }
+            } catch (err) {
+              setSetupResult(`Error connecting to server.`);
+            } finally {
+              setSetupTesting(false);
+            }
+          }}>
+            <div className="form-group">
+              <label htmlFor="setupApiUrl" className="form-label">Central API URL</label>
+              <input
+                id="setupApiUrl"
+                type="text"
+                className="form-input"
+                value={setupApiUrl}
+                onChange={e => setSetupApiUrl(e.target.value)}
+                required
+                placeholder="https://api.example.com"
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="setupApiKey" className="form-label">AMC Token</label>
+              <input
+                id="setupApiKey"
+                type="text"
+                className="form-input"
+                value={setupApiKey}
+                onChange={e => setSetupApiKey(e.target.value)}
+                required
+                placeholder="uk_..."
+              />
+            </div>
+            
+            {setupResult && (
+              <div className={`setup-result-msg ${setupResult.startsWith('Success') ? 'msg-success' : 'msg-error'}`}>
+                {setupResult}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="btn btn-primary full-width btn-tall"
+              disabled={setupTesting}
+            >
+              {setupTesting ? 'Testing Connection...' : 'Test & Activate'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   // ─── Login Screen ──────────────────────────────────────────────────────────
   if (!currentUser) {
     return (
@@ -228,7 +390,7 @@ function App() {
         <div className="login-card">
           <img src="/assets/Ultron_logo.png" className="login-logo" alt="UltrON Logo" />
           <h2 className="login-title">Industrial Monitoring Platform</h2>
-          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '20px', textAlign: 'center' }}>
+          <p className="login-description">
             Sign in with your credentials to access the system
           </p>
 
@@ -246,26 +408,21 @@ function App() {
               />
             </div>
 
-            <div className="form-group" style={{ position: 'relative' }}>
+            <div className="form-group relative-group">
               <label className="form-label">Password</label>
               <input
                 id="login-password"
                 type={showPassword ? 'text' : 'password'}
-                className={`form-input ${loginError ? 'error' : ''}`}
+                className={`form-input password-input ${loginError ? 'error' : ''}`}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Enter password"
                 autoComplete="current-password"
-                style={{ paddingRight: '44px' }}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(v => !v)}
-                style={{
-                  position: 'absolute', right: '12px', bottom: '10px',
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: '#64748b', padding: '0', display: 'flex', alignItems: 'center'
-                }}
+                className="password-toggle-btn"
               >
                 {showPassword ? <EyeOffIcon /> : <EyeIcon />}
               </button>
@@ -298,6 +455,11 @@ function App() {
             onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
           />
+        </div>
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)', borderTop: '1px solid #e2e8f0', padding: '6px 20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', fontSize: '11px', fontWeight: '600', color: '#64748b', flexWrap: 'wrap', zIndex: 10 }}>
+          <span>&copy; 2026 <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#14b8a6', textDecoration: 'none' }}>Sunshine Technologies!</a></span>
+          <span>Support: 7659091468, 9133377852, 853</span>
+          <span>Sales: 8801231166, 9133377852</span>
         </div>
         <div id="toastContainer"></div>
       </div>
@@ -478,26 +640,41 @@ function App() {
         <footer className="copyright-footer" style={{ margin: '0', borderRadius: '0', borderLeft: 'none', borderRight: 'none', borderBottom: 'none', display: 'flex', alignItems: 'stretch', flexShrink: 0 }}>
           <div style={{
             flexShrink: 0,
-            padding: '0 24px',
+            padding: '0 20px',
             fontWeight: '700',
-            fontSize: '13px',
+            fontSize: '12px',
             color: '#0f766e',
             whiteSpace: 'nowrap',
             borderRight: '1px solid rgba(15,118,110,0.2)',
             background: 'rgba(255, 255, 255, 0.4)',
             display: 'flex',
-            alignItems: 'center',
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase'
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            letterSpacing: '0.03em',
+            textTransform: 'uppercase',
+            lineHeight: 1.4
           }}>
-            All &copy; 2026 rights reserved
-            <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#14b8a6', marginLeft: '6px', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => (e.target as HTMLElement).style.color = '#0f766e'} onMouseOut={e => (e.target as HTMLElement).style.color = '#14b8a6'}>
-              Sunshine Technologies!
-            </a>
+            <div>All &copy; 2026 rights reserved
+              <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#14b8a6', marginLeft: '4px', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => (e.target as HTMLElement).style.color = '#0f766e'} onMouseOut={e => (e.target as HTMLElement).style.color = '#14b8a6'}>
+                Sunshine Technologies!
+              </a>
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'none', letterSpacing: '0.02em' }}>
+              Support: 7659091468, 9133377852, 853 &nbsp;|&nbsp; Sales: 8801231166, 9133377852
+            </div>
           </div>
           <div className="marquee-container" style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-            <div className="marquee-content" style={{ animationDuration: '35s' }}>
-              <span>Data available at this portal is as per CPCB prescribed procedure published at cpcb.nic.in!</span>
+            <div className="marquee-content" style={{ animationDuration: broadcasts && broadcasts.length > 0 ? '25s' : '35s' }}>
+              {broadcasts && broadcasts.length > 0 ? (
+                broadcasts.map((b, i) => (
+                  <span key={b.id} style={{ color: b.severity === 'critical' ? '#ef4444' : b.severity === 'warn' ? '#f59e0b' : 'inherit' }}>
+                    {b.message}{i < broadcasts.length - 1 ? '  ◆  ' : ''}
+                  </span>
+                ))
+              ) : (
+                <span>Data available at this portal is as per CPCB prescribed procedure published at cpcb.nic.in!</span>
+              )}
             </div>
           </div>
         </footer>

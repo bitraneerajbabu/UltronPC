@@ -22,7 +22,12 @@ WINDOWS = [
     (AverageType.avg_1min,  timedelta(minutes=1)),
     (AverageType.avg_5min,  timedelta(minutes=5)),
     (AverageType.avg_15min, timedelta(minutes=15)),
+    (AverageType.avg_30min, timedelta(minutes=30)),
     (AverageType.avg_1hr,   timedelta(hours=1)),
+    (AverageType.avg_3hr,   timedelta(hours=3)),
+    (AverageType.avg_6hr,   timedelta(hours=6)),
+    (AverageType.avg_12hr,  timedelta(hours=12)),
+    (AverageType.avg_24hr,  timedelta(hours=24)),
     (AverageType.avg_8hr,   timedelta(hours=8)),
     (AverageType.avg_daily, timedelta(days=1)),
 ]

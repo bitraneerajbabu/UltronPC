@@ -15,9 +15,11 @@ log = get_logger("ultron.database")
 # ─── Connection Pool ──────────────────────────────────────────────────────────
 engine_kwargs: dict = {
     "echo": False,  # Never log SQL statements (performance + security)
-    "pool_size": 10,
-    "max_overflow": 20,
 }
+
+if settings.DB_TYPE == "postgresql":
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
 
 engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 
@@ -109,6 +111,19 @@ async def init_db():
                     log.info("Migrated: added 'cpcb_parameter' column to server_parameter_mapping")
         except Exception as mig_err:
             log.warning(f"server_parameter_mapping migration skipped: {mig_err}")
+
+        # 2.6 Migrate: add daily CSV device columns if they don't exist yet
+        try:
+            existing_device_cols = await conn.run_sync(get_columns, "devices")
+            if existing_device_cols:
+                if "csv_folder" not in existing_device_cols:
+                    await conn.execute(text("ALTER TABLE devices ADD COLUMN csv_folder VARCHAR(500)"))
+                    log.info("Migrated: added 'csv_folder' column to devices")
+                if "csv_filename_pattern" not in existing_device_cols:
+                    await conn.execute(text("ALTER TABLE devices ADD COLUMN csv_filename_pattern VARCHAR(200)"))
+                    log.info("Migrated: added 'csv_filename_pattern' column to devices")
+        except Exception as mig_err:
+            log.warning(f"devices migration skipped: {mig_err}")
 
         pass
 

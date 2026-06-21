@@ -17,15 +17,18 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.database import init_db
+
 from app.websocket_manager import ws_manager
 from app.services import polling_engine
 from app.services.averaging_engine import run_averaging_for_all_parameters
 from app.core.logger import get_logger
 
 # ─── API Routers ──────────────────────────────────────────────────────────────
-from app.api import stations, devices, parameters, telemetry, trends, reports, alarms, logs, settings as settings_api, server_config
+from app.api import stations, devices, parameters, telemetry, trends, reports, alarms, logs, settings as settings_api, server_config, license
 from app.api import auth as auth_api
 from app.api import users as users_api
+from app.api import led as led_api
+from app.api import broadcasts as broadcasts_api
 
 log = get_logger("ultron.main")
 
@@ -57,8 +60,57 @@ async def _seed_admin():
             await db.commit()
             log.info(
                 f"Default admin user seeded: username='{settings.ADMIN_USERNAME}' "
-                f"password='{settings.ADMIN_PASSWORD}' — CHANGE THIS IN PRODUCTION!"
+                "Change the default password in production."
             )
+
+
+
+# ─── LED Board Secondary HTTP Server (port 80) ───────────────────────────────
+async def _start_led_http_server(port: int):
+    """
+    Spawn a lightweight second ASGI/uvicorn server on the given port (default 80)
+    that serves ONLY the LED board endpoint.
+
+    LED control cards need to poll a URL without a port number (plain HTTP = port 80).
+    This runs silently alongside the main app — errors are logged but never crash the app.
+
+    URL the card should use:
+        http://<PC-LAN-IP>/api/v1/led?auth=username&PCB=1,2,3
+    """
+    try:
+        import uvicorn
+        from fastapi import FastAPI
+        from fastapi.middleware.cors import CORSMiddleware
+        from app.api import led as led_api
+
+        led_app = FastAPI(title="UltrON LED", docs_url=None, redoc_url=None)
+        led_app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["GET"],
+            allow_headers=["*"],
+        )
+        led_app.include_router(led_api.router, prefix="/api/v1")
+
+        cfg = uvicorn.Config(
+            led_app,
+            host="0.0.0.0",
+            port=port,
+            log_level="warning",   # quiet — main app already logs everything
+        )
+        server = uvicorn.Server(cfg)
+        log.info(f"LED board HTTP server starting on port {port} — "
+                 f"Card URL: http://<PC-LAN-IP>/api/v1/led?auth=<token>&PCB=...")
+        await server.serve()
+    except OSError as e:
+        # Port 80 might need admin rights on Windows — log clearly and continue
+        log.warning(
+            f"LED HTTP server could not bind to port {port}: {e}. "
+            f"The LED board URL on port {port} will NOT be available. "
+            f"Try running UltrON as Administrator, or set LED_HTTP_PORT=0 to disable."
+        )
+    except Exception as e:
+        log.error(f"LED HTTP server error on port {port}: {e}")
 
 
 # ─── Lifecycle ────────────────────────────────────────────────────────────────
@@ -78,8 +130,16 @@ async def lifespan(app: FastAPI):
     # 3. Start polling engine
     await polling_engine.start_polling()
 
+    # 3.5 Start RajAPI MQTT client
+    from app.services.remote_control import start_mqtt_client
+    asyncio.create_task(start_mqtt_client())
+
     # 4. Seed default admin user if no users exist
     await _seed_admin()
+
+    # 4.5 Start dedicated LED board HTTP server on port 80 (LAN LED cards use port 80)
+    if settings.LED_HTTP_PORT and settings.LED_HTTP_PORT > 0:
+        asyncio.create_task(_start_led_http_server(settings.LED_HTTP_PORT))
 
     # 5. Start APScheduler for averaging (every 1 minute)
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -99,6 +159,7 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
     )
     from app.services.server_push import run_server_push
+    from app.services.rajapi_sync import push_to_rajapi
 
     scheduler.add_job(
         run_server_push,
@@ -114,6 +175,14 @@ async def lifespan(app: FastAPI):
         trigger="interval",
         minutes=15,
         id="server_push_delay",
+        replace_existing=True,
+    )
+    # RajAPI Central Sync — silently push live data every minute (if API key is configured)
+    scheduler.add_job(
+        push_to_rajapi,
+        trigger="interval",
+        minutes=1,
+        id="rajapi_sync",
         replace_existing=True,
     )
     scheduler.start()
@@ -152,7 +221,7 @@ Real-time industrial telemetry platform supporting:
 # ─── CORS ─────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # tighten in production
+    allow_origins=settings.cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -172,7 +241,9 @@ app.include_router(settings_api.router, prefix=PREFIX)
 app.include_router(server_config.router, prefix=PREFIX)
 app.include_router(auth_api.router,     prefix=PREFIX)
 app.include_router(users_api.router,    prefix=PREFIX)
-
+app.include_router(license.router,      prefix=PREFIX)
+app.include_router(led_api.router,      prefix=PREFIX)  # LED Board LAN endpoint
+app.include_router(broadcasts_api.router, prefix=PREFIX)
 
 # ─── WebSocket Live Push ──────────────────────────────────────────────────────
 @app.websocket("/ws/live")
@@ -242,16 +313,22 @@ if _UI_DIST.is_dir():
     _assets = _UI_DIST / "assets"
     if _assets.is_dir():
         app.mount("/assets", StaticFiles(directory=str(_assets)), name="ui_assets")
+    # Serve /fonts (woff2 files referenced by CSS)
+    _fonts = _UI_DIST / "fonts"
+    if _fonts.is_dir():
+        app.mount("/fonts", StaticFiles(directory=str(_fonts)), name="ui_fonts")
 
     @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(full_path: str):
+    async def serve_ui(full_path: str):
         """
-        SPA catch-all: serve index.html for any non-API path.
-        Allows React Router / client-side routing to work on hard refresh.
+        Serve static files from ui_dist/ root (favicon.svg, icons.svg, etc.)
+        and fall back to index.html for SPA client-side routes.
         """
-        # Don't intercept API or WebSocket paths
         if full_path.startswith("api/") or full_path.startswith("ws"):
             return JSONResponse({"detail": "Not Found"}, status_code=404)
+        file = _UI_DIST / full_path
+        if file.is_file() and file != _UI_DIST / "index.html":
+            return FileResponse(str(file))
         index = _UI_DIST / "index.html"
         if index.is_file():
             return FileResponse(str(index))

