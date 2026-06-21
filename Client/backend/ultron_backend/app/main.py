@@ -29,6 +29,7 @@ from app.api import auth as auth_api
 from app.api import users as users_api
 from app.api import led as led_api
 from app.api import broadcasts as broadcasts_api
+from app.api import cpcb as cpcb_api
 
 log = get_logger("ultron.main")
 
@@ -137,6 +138,12 @@ async def lifespan(app: FastAPI):
     # 4. Seed default admin user if no users exist
     await _seed_admin()
 
+    # 4.25 Seed default CPCB parameter mappings
+    from app.services.cpcb.mapping_service import seed_default_mappings
+    async with AsyncSessionLocal() as seed_db:
+        await seed_default_mappings(seed_db)
+        await seed_db.commit()
+
     # 4.5 Start dedicated LED board HTTP server on port 80 (LAN LED cards use port 80)
     if settings.LED_HTTP_PORT and settings.LED_HTTP_PORT > 0:
         asyncio.create_task(_start_led_http_server(settings.LED_HTTP_PORT))
@@ -183,6 +190,15 @@ async def lifespan(app: FastAPI):
         trigger="interval",
         minutes=1,
         id="rajapi_sync",
+        replace_existing=True,
+    )
+    # CPCB CAAQM Legacy Export — run every 15 minutes at 0,15,30,45
+    from app.services.cpcb.scheduler_service import run_cpcb_pipeline
+    scheduler.add_job(
+        run_cpcb_pipeline,
+        trigger="cron",
+        minute="0,15,30,45",
+        id="cpcb_export",
         replace_existing=True,
     )
     scheduler.start()
@@ -244,6 +260,7 @@ app.include_router(users_api.router,    prefix=PREFIX)
 app.include_router(license.router,      prefix=PREFIX)
 app.include_router(led_api.router,      prefix=PREFIX)  # LED Board LAN endpoint
 app.include_router(broadcasts_api.router, prefix=PREFIX)
+app.include_router(cpcb_api.router, prefix=PREFIX)
 
 # ─── WebSocket Live Push ──────────────────────────────────────────────────────
 @app.websocket("/ws/live")
