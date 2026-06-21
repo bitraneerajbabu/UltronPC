@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 
 from app.config import settings
-from app.database import init_db
+from app.database import init_db, AsyncSessionLocal
 
 from app.websocket_manager import ws_manager
 from app.services import polling_engine
