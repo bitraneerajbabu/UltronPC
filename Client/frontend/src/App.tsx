@@ -10,6 +10,10 @@ import { LogsScreen } from './screens/LogsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { ApiMappingsScreen } from './screens/ApiMappingsScreen';
 import { UsersScreen } from './screens/UsersScreen';
+import { CPCBSettingsScreen } from './screens/CPCBSettingsScreen';
+import { CPCBMappingScreen } from './screens/CPCBMappingScreen';
+import { CPCBLogsScreen } from './screens/CPCBLogsScreen';
+import { CPCBExportScreen } from './screens/CPCBExportScreen';
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 const DashboardIcon = () => (
@@ -96,6 +100,16 @@ const MappingsIcon = () => (
   </svg>
 );
 
+const CPCBIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/>
+    <line x1="16" y1="17" x2="8" y2="17"/>
+    <circle cx="12" cy="15" r="1" fill="currentColor"/>
+  </svg>
+);
+
 
 // ─── Nav definitions ──────────────────────────────────────────────────────────
 const ALL_NAV = [
@@ -107,6 +121,10 @@ const ALL_NAV = [
   { key: 'logsScreen', label: 'System Logs', Icon: LogsIcon, roles: ['admin'] },
   { key: 'settingsScreen', label: 'System Settings', Icon: SettingsIcon, roles: ['admin'] },
   { key: 'usersScreen', label: 'User Management', Icon: UsersIcon, roles: ['admin'] },
+  { key: 'cpcbSettingsScreen', label: 'CPCB Config', Icon: CPCBIcon, roles: ['admin'] },
+  { key: 'cpcbMappingScreen', label: 'CPCB Mappings', Icon: CPCBIcon, roles: ['admin'] },
+  { key: 'cpcbExportScreen', label: 'CPCB Export', Icon: CPCBIcon, roles: ['admin'] },
+  { key: 'cpcbLogsScreen', label: 'CPCB Logs', Icon: CPCBIcon, roles: ['admin'] },
 ];
 
 
@@ -477,6 +495,10 @@ function App() {
       case 'logsScreen': return currentUserRole === 'admin' ? <LogsScreen /> : <DashboardScreen />;
       case 'settingsScreen': return currentUserRole === 'admin' ? <SettingsScreen /> : <DashboardScreen />;
       case 'usersScreen': return currentUserRole === 'admin' ? <UsersScreen /> : <DashboardScreen />;
+      case 'cpcbSettingsScreen': return currentUserRole === 'admin' ? <CPCBSettingsScreen /> : <DashboardScreen />;
+      case 'cpcbMappingScreen': return currentUserRole === 'admin' ? <CPCBMappingScreen /> : <DashboardScreen />;
+      case 'cpcbExportScreen': return currentUserRole === 'admin' ? <CPCBExportScreen /> : <DashboardScreen />;
+      case 'cpcbLogsScreen': return currentUserRole === 'admin' ? <CPCBLogsScreen /> : <DashboardScreen />;
       default: return <DashboardScreen />;
     }
   };

@@ -5,6 +5,7 @@ from app.models.parameter import Parameter, RegisterType, DataType, AlarmSeverit
 from app.models.telemetry import LiveData, HistoricalData, Averages, Alarm, SystemLog, Broadcast, DataQuality, AverageType, AlarmState
 from app.models.user import User
 from app.models.server_config import ServerConfig
+from app.models.cpcb import CPCBStationConfig, CPCBParameterMapping, CPCBExportRecord, CPCBExportLog
 
 __all__ = [
     "Station", "StationStatus", "StationType",
@@ -12,5 +13,6 @@ __all__ = [
     "Parameter", "RegisterType", "DataType", "AlarmSeverity",
     "LiveData", "HistoricalData", "Averages", "Alarm", "SystemLog",
     "DataQuality", "AverageType", "AlarmState",
-    "User", "ServerConfig"
+    "User", "ServerConfig",
+    "CPCBStationConfig", "CPCBParameterMapping", "CPCBExportRecord", "CPCBExportLog",
 ]
