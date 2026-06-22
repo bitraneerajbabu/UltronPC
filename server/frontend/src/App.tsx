@@ -530,7 +530,7 @@ function App() {
           </a>
           <button 
             onClick={handlePruneAll}
-            title="Prune old telemetry (keep 7 days) â€” speeds up rajapi.com"
+            title="Prune old telemetry (keep 7 days) — speeds up rajapi.com"
             className="p-2 rounded-full text-gray-600 hover:bg-red-800/30 hover:text-red-600 transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -827,7 +827,7 @@ function App() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-btn opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-btn"></span>
               </span>
-              <span className="text-xs text-brand-accent font-medium">Live â€” refreshing every 10s</span>
+              <span className="text-xs text-brand-accent font-medium">Live — refreshing every 10s</span>
               {liveDataLoading && <span className="ml-auto text-xs text-gray-500 animate-pulse">Fetching...</span>}
             </div>
 
@@ -868,7 +868,7 @@ function App() {
                             {pt.name !== pt.tag_name && <div className="text-gray-500 truncate max-w-[130px]">{pt.name}</div>}
                           </td>
                           <td className="px-3 py-2 text-right font-bold text-gray-800">
-                            {pt.value !== null && pt.value !== undefined ? pt.value.toFixed(2) : 'â€”'}
+                            {pt.value !== null && pt.value !== undefined ? pt.value.toFixed(2) : '—'}
                             {pt.unit && <span className="ml-1 text-gray-600 font-normal">{pt.unit}</span>}
                           </td>
                           <td className="px-3 py-2 text-center">
