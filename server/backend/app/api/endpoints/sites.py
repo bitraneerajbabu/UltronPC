@@ -5,8 +5,8 @@ from sqlalchemy import func
 import secrets
 from datetime import datetime, timedelta, timezone
 from app.db.database import get_db
-from app.models.core import IndustrySite, TelemetryData, Parameter
-from app.schemas.api_models import SiteCreate, SiteResponse, LatestTelemetryPoint, LockUpdate, LockSummary
+from app.models.core import IndustrySite, TelemetryData, Parameter, Device
+from app.schemas.api_models import SiteCreate, SiteResponse, DeviceResponse, DeviceCreate, LatestTelemetryPoint, LockUpdate, LockSummary
 from app.core.config import settings
 
 router = APIRouter()
@@ -47,6 +47,41 @@ def delete_site(site_id: int, db: Session = Depends(get_db), _: None = Depends(_
     db.delete(db_site)
     db.commit()
     return {"status": "deleted", "id": site_id}
+
+@router.get("/{site_id}/devices", response_model=List[DeviceResponse])
+def list_devices(site_id: int, db: Session = Depends(get_db)):
+    return db.query(Device).filter(Device.site_id == site_id).all()
+
+@router.post("/{site_id}/devices", response_model=DeviceResponse)
+def create_device(site_id: int, payload: DeviceCreate, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    db_site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
+    if not db_site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    device = Device(site_id=site_id, name=payload.name, status=payload.status)
+    db.add(device)
+    db.commit()
+    db.refresh(device)
+    return device
+
+@router.patch("/{site_id}/devices/{device_id}", response_model=DeviceResponse)
+def update_device(site_id: int, device_id: int, payload: DeviceCreate, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    device = db.query(Device).filter(Device.id == device_id, Device.site_id == site_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    device.name = payload.name
+    device.status = payload.status
+    db.commit()
+    db.refresh(device)
+    return device
+
+@router.delete("/{site_id}/devices/{device_id}")
+def delete_device(site_id: int, device_id: int, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+    device = db.query(Device).filter(Device.id == device_id, Device.site_id == site_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="Device not found")
+    db.delete(device)
+    db.commit()
+    return {"status": "deleted", "id": device_id}
 
 @router.put("/{site_id}/status", response_model=SiteResponse)
 def update_site_status(site_id: int, is_active: bool, db: Session = Depends(get_db), _: None = Depends(_require_admin)):

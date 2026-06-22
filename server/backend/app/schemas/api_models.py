@@ -17,6 +17,19 @@ class SiteCreate(BaseModel):
     location: Optional[str] = None
     amc_expiry: Optional[datetime] = None
 
+class DeviceResponse(BaseModel):
+    id: int
+    site_id: int
+    name: str
+    status: str = "offline"
+
+    class Config:
+        from_attributes = True
+
+class DeviceCreate(BaseModel):
+    name: str
+    status: str = "offline"
+
 class SiteResponse(BaseModel):
     id: int
     name: str
@@ -32,6 +45,7 @@ class SiteResponse(BaseModel):
     last_error_at: Optional[datetime] = None
     client_version: Optional[str] = None
     notes: Optional[str] = None
+    devices: List[DeviceResponse] = []
 
     class Config:
         from_attributes = True

@@ -869,6 +869,119 @@ function App() {
                 </table>
               )}
             </div>
+
+            {/* Devices Section */}
+            {(() => {
+              const [devices, setDevices] = useState<{id:number;site_id:number;name:string;status:string}[]>([]);
+              const [loadingDevices, setLoadingDevices] = useState(true);
+              const [newDeviceName, setNewDeviceName] = useState('');
+              const [editingDeviceId, setEditingDeviceId] = useState<number|null>(null);
+              const [editingDeviceName, setEditingDeviceName] = useState('');
+              useEffect(() => {
+                if (!activeSite) return;
+                setLoadingDevices(true);
+                fetch(`/api/v1/sites/${activeSite.id}/devices`)
+                  .then(r => r.json())
+                  .then(d => { setDevices(d); setLoadingDevices(false); })
+                  .catch(() => setLoadingDevices(false));
+              }, [activeSite]);
+              return (
+                <div className="border-t border-brand-border/30 px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Devices / Stations</h3>
+                    {loadingDevices && <span className="text-xs text-gray-500">Loading...</span>}
+                  </div>
+                  {devices.length === 0 && !loadingDevices && (
+                    <p className="text-xs text-gray-500 mb-2">No devices yet. They appear when the client syncs.</p>
+                  )}
+                  <div className="flex flex-col gap-1.5">
+                    {devices.map(d => (
+                      <div key={d.id} className="flex items-center justify-between bg-brand-bg rounded-lg px-3 py-2">
+                        {editingDeviceId === d.id ? (
+                          <input type="text" value={editingDeviceName}
+                            onChange={e => setEditingDeviceName(e.target.value)}
+                            className="flex-1 bg-white border border-brand-border rounded text-xs px-2 py-1"
+                            autoFocus
+                            onKeyDown={async e => {
+                              if (e.key === 'Escape') setEditingDeviceId(null);
+                              if (e.key === 'Enter' && editingDeviceName.trim()) {
+                                await adminFetch(`/api/v1/sites/${activeSite.id}/devices/${d.id}`, {
+                                  method: 'PATCH',
+                                  headers: {'Content-Type':'application/json'},
+                                  body: JSON.stringify({name: editingDeviceName.trim(), status: d.status})
+                                });
+                                setDevices(devices.map(x => x.id === d.id ? {...x, name: editingDeviceName.trim()} : x));
+                                setEditingDeviceId(null);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div className="flex-1">
+                            <span className="text-sm font-medium text-gray-800">{d.name}</span>
+                            <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${
+                              d.status === 'online' ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-500'
+                            }`}>{d.status}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1 ml-2">
+                          <button onClick={() => { setEditingDeviceId(d.id); setEditingDeviceName(d.name); }}
+                            className="p-1 rounded hover:bg-brand-border/50 text-gray-500 hover:text-brand-btn transition-colors"
+                            title="Rename"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button onClick={async () => {
+                            if (!confirm(`Delete device "${d.name}"?`)) return;
+                            const res = await adminFetch(`/api/v1/sites/${activeSite.id}/devices/${d.id}`, {method: 'DELETE'});
+                            if (res.ok) setDevices(devices.filter(x => x.id !== d.id));
+                          }} className="p-1 rounded hover:bg-red-100 text-gray-500 hover:text-red-600 transition-colors" title="Delete">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <input type="text" value={newDeviceName}
+                      onChange={e => setNewDeviceName(e.target.value)}
+                      placeholder="Add device..."
+                      className="flex-1 bg-brand-bg border border-brand-border rounded text-xs px-2 py-1.5 text-gray-800 placeholder-gray-400"
+                      onKeyDown={async e => {
+                        if (e.key === 'Enter' && newDeviceName.trim()) {
+                          const res = await adminFetch(`/api/v1/sites/${activeSite.id}/devices`, {
+                            method: 'POST',
+                            headers: {'Content-Type':'application/json'},
+                            body: JSON.stringify({name: newDeviceName.trim()})
+                          });
+                          if (res.ok) {
+                            const created = await res.json();
+                            setDevices([...devices, created]);
+                            setNewDeviceName('');
+                          }
+                        }
+                      }}
+                    />
+                    <button onClick={async () => {
+                      if (!newDeviceName.trim()) return;
+                      const res = await adminFetch(`/api/v1/sites/${activeSite.id}/devices`, {
+                        method: 'POST',
+                        headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify({name: newDeviceName.trim()})
+                      });
+                      if (res.ok) {
+                        const created = await res.json();
+                        setDevices([...devices, created]);
+                        setNewDeviceName('');
+                      }
+                    }} className="bg-brand-btn hover:bg-brand-btn-hover text-white rounded-lg px-3 py-1.5 text-xs font-bold transition-colors">+</button>
+                  </div>
+                </div>
+              );
+            })()}
           </aside>
         )}
       </>)}
