@@ -48,11 +48,13 @@ hidden = [
     "sqlalchemy.dialects.postgresql.asyncpg",
     "sqlalchemy.pool",
     "sqlalchemy.pool.impl",
-    # Database async drivers
+    # Database async drivers — aiosqlite is imported via __import__() by SQLAlchemy
+    # so PyInstaller must be forced to bundle it
     "aiosqlite",
     "aiosqlite.core",
     "aiosqlite.cursor",
     "aiosqlite.context",
+    "aiosqlite.__version__",
     "asyncpg",
     # sqlite3 sub-modules used at runtime by aiosqlite
     "sqlite3",
