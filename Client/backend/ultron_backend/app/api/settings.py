@@ -281,7 +281,7 @@ async def check_firmware():
     current_version = settings.APP_VERSION
 
     try:
-        ctx = ssl.create_default_context()
+        ctx = ssl._create_unverified_context()
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(
             url,
@@ -380,7 +380,7 @@ def _do_firmware_download():
     _fw_download_state = {"state": "downloading", "percent": 0, "message": "Fetching release info…", "restart_required": False}
 
     try:
-        ctx = ssl.create_default_context()
+        ctx = ssl._create_unverified_context()
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(url, headers={"User-Agent": "UltrON-Updater/1.0", "Accept": "application/vnd.github.v3+json"})
         with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:

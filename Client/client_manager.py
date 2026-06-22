@@ -27,6 +27,7 @@ GITHUB_API_LATEST  = f"https://api.github.com/repos/{GITHUB_REPO}/releases/lates
 
 SCRIPT_DIR         = Path(__file__).parent.resolve()
 BACKEND_DIR        = SCRIPT_DIR / "backend" / "ultron_backend"
+CONFIG_PY          = BACKEND_DIR / "app" / "config.py"
 PUBLISH_SCRIPT     = SCRIPT_DIR / "publish_release.py"
 ENV_BAK            = BACKEND_DIR / ".env.bak"
 ENV_FILE           = BACKEND_DIR / ".env"
@@ -49,23 +50,26 @@ def _version_tuple(v: str):
 
 
 def _get_current_version() -> str:
-    """Read the TAG constant from publish_release.py."""
+    """Read APP_VERSION from config.py (single source of truth)."""
     try:
-        text = PUBLISH_SCRIPT.read_text(encoding="utf-8")
-        m = re.search(r'^TAG\s*=\s*["\']([^"\']+)["\']', text, re.MULTILINE)
-        return m.group(1) if m else "unknown"
+        text = CONFIG_PY.read_text(encoding="utf-8")
+        m = re.search(r'APP_VERSION:\s*str\s*=\s*"([^"]+)"', text)
+        ver = m.group(1) if m else "unknown"
+        return f"v{ver}" if ver and not ver.startswith("v") else ver
     except Exception:
         return "unknown"
 
 
 def _get_latest_github_version() -> str:
     """Fetch the latest release tag from GitHub (returns tag string or raises)."""
+    import ssl
+    ctx = ssl._create_unverified_context()
     req = urllib.request.Request(
         GITHUB_API_LATEST,
         headers={"User-Agent": "UltrON-Manager/1.0",
                  "Accept": "application/vnd.github.v3+json"},
     )
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     return data.get("tag_name", "unknown")
 
