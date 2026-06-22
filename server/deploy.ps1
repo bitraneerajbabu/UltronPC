@@ -2,7 +2,7 @@
 # Usage: .\deploy.ps1
 
 $PI = "pi@ultron.local"
-$REMOTE = "/home/pi/rajapi_backend"
+$REMOTE = "/home/pi/rajapi_server/backend"
 $LOCAL = "C:\Users\sunsh\OneDrive\Music\UltrON\server"
 
 Write-Host "=== Deploying RajAPI server updates ===" -ForegroundColor Cyan
