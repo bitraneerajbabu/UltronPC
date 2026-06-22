@@ -47,7 +47,7 @@ async def get_mappings(db: AsyncSession = Depends(get_db)):
             joinedload(Parameter.device).joinedload(Device.station),
             joinedload(Parameter.server_mappings)
         )
-        .join(Parameter.device)
+        .outerjoin(Parameter.device)
         .filter(Parameter.is_active == True)
         .order_by(Device.station_id, Device.id, Parameter.id)
     )
@@ -67,16 +67,18 @@ async def get_mappings(db: AsyncSession = Depends(get_db)):
                 api_vname=m.api_vname,
                 api_unit=m.api_unit,
                 cpcb_station_name=m.cpcb_station_name,
-                cpcb_parameter=m.cpcb_parameter
+                cpcb_parameter=m.cpcb_parameter,
+                led_channel_name=m.led_channel_name,
+                led_unit=m.led_unit,
             )
             
-        station_name = p.device.station.name if p.device.station else "Unknown Station"
+        station_name = p.device.station.name if p.device and p.device.station else "Unknown Station"
         
         response.append(ParameterMappingResponse(
             parameter_id=p.id,
             parameter_name=p.tag_name,
             station_name=station_name,
-            channel_no=p.id, # Using ID as channel number for simplicity
+            channel_no=p.id,
             mappings=mappings_dict
         ))
     return response

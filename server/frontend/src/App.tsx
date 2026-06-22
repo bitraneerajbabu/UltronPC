@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 
 interface Site {
   id: number;
@@ -11,6 +11,17 @@ interface Site {
   lock_status?: string;
   lock_reason?: string;
   lock_updated_at?: string;
+  last_error?: string;
+  last_error_at?: string;
+  client_version?: string;
+  notes?: string;
+}
+
+interface TelemetryPoint {
+  id?: number;
+  value: number | null;
+  quality: string;
+  timestamp: string;
 }
 
 interface LatestPoint {
@@ -29,6 +40,8 @@ interface BroadcastItem {
   is_active: boolean;
   created_at: string;
   expires_at?: string;
+  target_all: boolean;
+  target_site_id?: number | null;
 }
 
 interface LockSummary {
@@ -39,15 +52,15 @@ interface LockSummary {
 }
 
 function getConnectionStatus(last_sync?: string): { label: string; pulse: boolean; color: string } {
-  if (!last_sync) return { label: 'Never Connected', pulse: false, color: 'text-slate-400' };
+  if (!last_sync) return { label: 'Never Connected', pulse: false, color: 'text-gray-500' };
   const utcStr = last_sync.endsWith('Z') ? last_sync : last_sync + 'Z';
   const diffMs = Date.now() - new Date(utcStr).getTime();
   const diffMins = diffMs / 60000;
-  if (diffMins < 5) return { label: 'Client Live', pulse: true, color: 'text-emerald-400' };
+  if (diffMins < 5) return { label: 'Client Live', pulse: true, color: 'text-emerald-600' };
   if (diffMins < 60) return { label: `${Math.floor(diffMins)}m ago`, pulse: false, color: 'text-yellow-400' };
   const diffHrs = diffMins / 60;
   if (diffHrs < 24) return { label: `${Math.floor(diffHrs)}h ago`, pulse: false, color: 'text-orange-400' };
-  return { label: `${Math.floor(diffHrs/24)}d ago`, pulse: false, color: 'text-red-400' };
+  return { label: `${Math.floor(diffHrs/24)}d ago`, pulse: false, color: 'text-red-600' };
 }
 
 function App() {
@@ -55,6 +68,16 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [sites, setSites] = useState<Site[]>([])
   const [locks, setLocks] = useState<LockSummary[]>([])
+
+  // History Browser State
+  const [historySiteId, setHistorySiteId] = useState<number | null>(null)
+  const [historyParams, setHistoryParams] = useState<{id: number; tag_name: string; name: string}[]>([])
+  const [historyParamId, setHistoryParamId] = useState<number | null>(null)
+  const [historyFrom, setHistoryFrom] = useState('')
+  const [historyTo, setHistoryTo] = useState('')
+  const [historyData, setHistoryData] = useState<TelemetryPoint[] | null>(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null)
   const [broadcasts, setBroadcasts] = useState<BroadcastItem[]>([])
   
   // Modal State
@@ -71,6 +94,12 @@ function App() {
   const [bcExpiry, setBcExpiry] = useState('')
   const [isCreatingBc, setIsCreatingBc] = useState(false)
   const [editingBc, setEditingBc] = useState<BroadcastItem | null>(null)
+  const [bcTargetAll, setBcTargetAll] = useState(true)
+  const [bcTargetSiteId, setBcTargetSiteId] = useState<number | null>(null)
+
+  // Edit Site Modal State
+  const [editSiteModal, setEditSiteModal] = useState<{id: number; name: string; location: string; notes: string} | null>(null)
+  const [savingSite, setSavingSite] = useState(false)
 
   // Lock Modal State
   const [lockModal, setLockModal] = useState<{id: number; name: string; status: string; reason: string} | null>(null)
@@ -118,16 +147,23 @@ function App() {
     });
   };
 
-  const handleLogout = () => { sessionStorage.removeItem('rajapi_auth'); setIsLoggedIn(false); }; const handleLogin = (e: React.FormEvent) => {
+  const handleLogout = () => { sessionStorage.removeItem('rajapi_auth'); setIsLoggedIn(false); }; const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    const valid = (username === 'Master' && password === 'Ultron123.0') ||
-                  (username === 'Master' && password === 'Master');
-    if (valid) {
-      sessionStorage.setItem('rajapi_auth', 'true')
-      setIsLoggedIn(true)
-      setLoginError('')
-    } else {
-      setLoginError('Invalid credentials')
+    try {
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      })
+      if (res.ok) {
+        sessionStorage.setItem('rajapi_auth', 'true')
+        setIsLoggedIn(true)
+        setLoginError('')
+      } else {
+        setLoginError('Invalid credentials')
+      }
+    } catch {
+      setLoginError('Network error — could not reach server')
     }
   }
 
@@ -204,6 +240,30 @@ function App() {
     } catch (err) { console.error(err); }
   };
 
+  const handleUpdateSite = async (id: number, name: string, location: string, notes: string) => {
+    setSavingSite(true);
+    try {
+      const res = await fetch(`/api/v1/sites/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, location, notes })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setSites(sites.map(s => s.id === id ? updated : s));
+        if (activeSite?.id === id) setActiveSite(updated);
+        setEditSiteModal(null);
+      } else {
+        const d = await res.json();
+        alert('Failed: ' + (d.detail || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Network error');
+    } finally {
+      setSavingSite(false);
+    }
+  };
+
   const handleSaveExpiry = async (siteId: number) => {
     if (!editExpiryVal) return;
     setSavingExpiry(true);
@@ -228,7 +288,7 @@ function App() {
       const res = await fetch('/api/v1/sites/telemetry/prune-all?keep_days=7', { method: 'DELETE' });
       if (res.ok) {
         const data = await res.json();
-        alert(`✅ Pruned ${data.deleted_rows.toLocaleString()} old telemetry rows. rajapi.com should be faster now.`);
+        alert(`âœ… Pruned ${data.deleted_rows.toLocaleString()} old telemetry rows. rajapi.com should be faster now.`);
       }
     } catch (err) { console.error(err); }
   };
@@ -255,6 +315,55 @@ function App() {
     return () => clearInterval(interval);
   }, [isLoggedIn])
 
+  // Load parameters for history when a site is selected
+  useEffect(() => {
+    if (!historySiteId) { setHistoryParams([]); return; }
+    fetch(`/api/v1/sites/${historySiteId}/telemetry/latest`)
+      .then(res => res.json())
+      .then((data: {id: number; tag_name: string; name: string}[]) => {
+        setHistoryParams(data.map(p => ({id: p.id, tag_name: p.tag_name, name: p.name})));
+      })
+      .catch(err => console.error(err));
+  }, [historySiteId])
+
+  const fetchHistory = async () => {
+    if (!historySiteId || !historyParamId) return;
+    setHistoryLoading(true);
+    setHistoryCursor(null);
+    try {
+      const params = new URLSearchParams();
+      params.set('parameter_id', String(historyParamId));
+      if (historyFrom) params.set('from_date', new Date(historyFrom).toISOString());
+      if (historyTo) params.set('to_date', new Date(historyTo).toISOString());
+      const res = await fetch(`/api/v1/sites/${historySiteId}/telemetry/history?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryData(data);
+        if (data.length > 0) setHistoryCursor(data[data.length - 1].timestamp);
+      }
+    } catch (err) { console.error(err); }
+    finally { setHistoryLoading(false); }
+  }
+
+  const fetchHistoryMore = async () => {
+    if (!historySiteId || !historyParamId || !historyCursor) return;
+    setHistoryLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('parameter_id', String(historyParamId));
+      if (historyFrom) params.set('from_date', new Date(historyFrom).toISOString());
+      if (historyTo) params.set('to_date', new Date(historyTo).toISOString());
+      params.set('before', historyCursor);
+      const res = await fetch(`/api/v1/sites/${historySiteId}/telemetry/history?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setHistoryData(prev => [...(prev || []), ...data]);
+        if (data.length > 0) setHistoryCursor(data[data.length - 1].timestamp);
+      }
+    } catch (err) { console.error(err); }
+    finally { setHistoryLoading(false); }
+  }
+
   const fetchLiveData = useCallback(async (siteId: number) => {
     setLiveDataLoading(true);
     try {
@@ -280,40 +389,40 @@ function App() {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen bg-teal-950 flex items-center justify-center font-sans text-white p-4">
-        <div className="w-full max-w-md bg-teal-900 p-8 rounded-2xl border border-teal-800 shadow-2xl">
+      <div className="min-h-screen bg-brand-bg flex items-center justify-center font-sans text-gray-800 p-4">
+        <div className="w-full max-w-md bg-brand-card p-8 rounded-2xl border border-brand-border shadow-2xl">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-500 to-teal-300">
+            <h1 className="text-3xl font-bold text-gray-800">
               RajAPI Secure Login
             </h1>
-            <p className="text-slate-300 mt-2">Central Telemetry Dashboard</p>
+            <p className="text-gray-600 mt-2">Central Telemetry Dashboard</p>
           </div>
           
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Username</label>
+              <label className="block text-sm font-medium text-gray-600 mb-2">Username</label>
               <input 
                 type="text" 
                 value={username}
                 onChange={e => setUsername(e.target.value)}
-                className="w-full bg-teal-950 border border-teal-800 rounded-lg p-3 text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                className="w-full bg-brand-bg border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn focus:ring-1 focus:ring-brand-btn"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
+              <label className="block text-sm font-medium text-gray-600 mb-2">Password</label>
               <input 
                 type="password" 
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                className="w-full bg-teal-950 border border-teal-800 rounded-lg p-3 text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                className="w-full bg-brand-bg border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn focus:ring-1 focus:ring-brand-btn"
                 required
               />
             </div>
-            {loginError && <p className="text-red-400 text-sm">{loginError}</p>}
+            {loginError && <p className="text-red-600 text-sm">{loginError}</p>}
             <button 
               type="submit"
-              className="w-full bg-teal-600 hover:bg-teal-500 text-white font-semibold py-3 px-4 rounded-lg transition-colors shadow-lg shadow-teal-900/50"
+              className="w-full bg-brand-btn hover:bg-brand-btn-hover text-white font-semibold py-3 px-4 rounded-lg transition-colors shadow-lg shadow-brand-btn/30"
             >
               Sign In
             </button>
@@ -326,6 +435,7 @@ function App() {
   const filteredSites = sites.filter(site => {
     if (selectedCategory === 'Online' && !site.is_active) return false;
     if (selectedCategory === 'Offline' && site.is_active) return false;
+    if (selectedCategory === 'Sync Issues' && !site.last_error) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return site.name.toLowerCase().includes(q) || 
@@ -336,19 +446,19 @@ function App() {
   });
 
   return (
-    <div className="min-h-screen bg-teal-950 font-sans text-slate-100 overflow-hidden flex flex-col relative">
+    <div className="min-h-screen bg-brand-bg font-sans text-gray-800 overflow-hidden flex flex-col relative">
       {/* Background decoration - simple gradient, no external requests */}
-      <div className="absolute inset-0 bg-gradient-to-br from-teal-950 via-teal-900 to-emerald-950/40 z-0" />
+      <div className="absolute inset-0 bg-gradient-to-br from-brand-bg via-brand-card to-brand-border/40 z-0" />
       
       {/* Top Header */}
-      <header className="relative z-10 flex items-center justify-between px-6 py-3 bg-teal-950 border-b border-teal-800">
+      <header className="relative z-10 flex items-center justify-between px-6 py-3 bg-brand-bg border-b border-brand-border">
         <div className="flex items-center gap-4">
           <img src="/assets/Ultron_logo.png" alt="UltrON Logo" className="h-8 drop-shadow-md" />
           <nav className="flex items-center gap-1 ml-4">
-            {['dashboard', 'broadcasts', 'locks'].map(tab => (
+            {['dashboard', 'broadcasts', 'commands', 'history', 'locks'].map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                  activeTab === tab ? 'bg-teal-600 text-white' : 'text-slate-300 hover:text-white hover:bg-teal-900'
+                  activeTab === tab ? 'bg-brand-btn text-white' : 'text-gray-600 hover:text-gray-800 hover:bg-brand-card'
                 }`}
               >{tab.charAt(0).toUpperCase() + tab.slice(1)}</button>
             ))}
@@ -357,8 +467,8 @@ function App() {
         
         {/* Search Bar */}
         <div className="flex-1 max-w-2xl px-4">
-          <div className="relative flex items-center w-full h-12 rounded-full bg-teal-900/80 hover:bg-teal-800/80 focus-within:bg-white focus-within:text-teal-950 transition-colors px-4 border border-teal-700/50 shadow-inner">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-300 focus-within:text-slate-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="relative flex items-center w-full h-12 rounded-full bg-brand-card/80 hover:bg-brand-border/80 focus-within:bg-white focus-within:text-gray-900 transition-colors px-4 border border-brand-border/50 shadow-inner">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-600 focus-within:text-slate-600 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input 
@@ -366,18 +476,18 @@ function App() {
               placeholder="Search sites..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent border-none focus:outline-none text-base placeholder-slate-400"
+              className="w-full bg-transparent border-none focus:outline-none text-base placeholder-gray-400"
             />
           </div>
         </div>
 
         {/* Right Actions */}
         <div className="flex items-center gap-4 w-64 justify-end">
-          <span className="text-xs font-bold text-teal-400 bg-teal-900/40 px-2 py-0.5 rounded-full border border-teal-700/50">v1.0.8</span>
+          <span className="text-xs font-bold text-brand-accent bg-brand-card/40 px-2 py-0.5 rounded-full border border-brand-border/50">v1.0.10</span>
           <a 
             href="/api/v1/downloads/latest-client" 
-            title="Download Latest Client v1.0.8"
-            className="p-2 rounded-full text-slate-300 hover:bg-teal-800/50 transition-colors"
+            title="Download Latest Client v1.0.10"
+            className="p-2 rounded-full text-gray-600 hover:bg-brand-border/50 transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -385,8 +495,8 @@ function App() {
           </a>
           <button 
             onClick={handlePruneAll}
-            title="Prune old telemetry (keep 7 days) — speeds up rajapi.com"
-            className="p-2 rounded-full text-slate-300 hover:bg-red-900/30 hover:text-red-400 transition-colors"
+            title="Prune old telemetry (keep 7 days) â€” speeds up rajapi.com"
+            className="p-2 rounded-full text-gray-600 hover:bg-red-800/30 hover:text-red-600 transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -395,14 +505,14 @@ function App() {
           <button 
             onClick={handleLogout}
             title="Logout"
-            className="p-2 rounded-full text-slate-300 hover:bg-teal-800/50 transition-colors"
+            className="p-2 rounded-full text-gray-600 hover:bg-brand-border/50 transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
           </button>
-          <div className="h-8 w-8 rounded-full bg-teal-600 flex items-center justify-center text-white font-bold ml-2 shadow-md">
-            M
+          <div className="h-8 w-8 rounded-full bg-brand-btn flex items-center justify-center text-white font-bold text-xs ml-2 shadow-md">
+            Neeraj
           </div>
         </div>
       </header>
@@ -415,7 +525,7 @@ function App() {
         <aside className="w-64 flex flex-col py-4 px-3 gap-2">
           <button 
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-3 bg-teal-600 hover:bg-teal-500 text-white px-5 py-4 rounded-2xl font-medium transition-colors shadow-lg shadow-teal-900/50 mb-4 w-48 border border-teal-500/50"
+            className="flex items-center gap-3 bg-brand-btn hover:bg-brand-btn-hover text-white px-5 py-4 rounded-2xl font-medium transition-colors shadow-lg shadow-brand-btn/30 mb-4 w-48 border border-brand-btn/50"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -424,37 +534,38 @@ function App() {
           </button>
 
           <nav className="flex flex-col gap-1">
-            {['All Sites', 'Online', 'Offline'].map(category => (
+            {['All Sites', 'Online', 'Offline', 'Sync Issues'].map(category => (
               <button 
                 key={category}
                 onClick={() => setSelectedCategory(category)}
                 className={`flex items-center justify-between px-4 py-2 rounded-r-full transition-colors ${
                   selectedCategory === category 
-                  ? 'bg-teal-900/40 text-teal-300 font-semibold border-l-4 border-teal-500' 
-                  : 'text-slate-300 hover:bg-teal-900/50 border-l-4 border-transparent'
+                  ? 'bg-brand-card/40 text-brand-accent font-semibold border-l-4 border-brand-btn' 
+                  : 'text-gray-600 hover:bg-brand-card/50 border-l-4 border-transparent'
                 }`}
               >
                 <span>{category}</span>
-                {category === 'All Sites' && <span className="text-xs bg-teal-800/50 px-2 py-0.5 rounded-full">{sites.length}</span>}
-                {category === 'Online' && <span className="text-xs bg-emerald-900/40 text-emerald-400 px-2 py-0.5 rounded-full">{sites.filter(s=>s.is_active).length}</span>}
-                {category === 'Offline' && <span className="text-xs bg-red-900/40 text-red-400 px-2 py-0.5 rounded-full">{sites.filter(s=>!s.is_active).length}</span>}
+                {category === 'All Sites' && <span className="text-xs bg-brand-border/50 px-2 py-0.5 rounded-full">{sites.length}</span>}
+                {category === 'Online' && <span className="text-xs bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full">{sites.filter(s=>s.is_active).length}</span>}
+                {category === 'Offline' && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{sites.filter(s=>!s.is_active).length}</span>}
+                {category === 'Sync Issues' && <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{sites.filter(s=>s.last_error).length}</span>}
               </button>
             ))}
           </nav>
         </aside>
 
         {/* Main Content Area (Glassmorphism List) */}
-        <main className="flex-1 bg-teal-900/60 border border-teal-800 rounded-tl-xl shadow-lg overflow-hidden flex flex-col mr-2 mt-2 mb-2">
+        <main className="flex-1 bg-brand-card/60 border border-brand-border rounded-tl-xl shadow-lg overflow-hidden flex flex-col mr-2 mt-2 mb-2">
           
           {/* List Header */}
-          <div className="flex items-center px-6 py-3 border-b border-white/10 bg-black/20">
-            <div className="flex items-center gap-2 text-teal-300 border-b-2 border-teal-500 pb-2 px-1">
+          <div className="flex items-center px-6 py-3 border-b border-brand-border/40 bg-brand-border/30">
+            <div className="flex items-center gap-2 text-brand-accent border-b-2 border-brand-btn pb-2 px-1">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
               </svg>
               <span className="font-medium text-sm">{selectedCategory} Dashboard</span>
             </div>
-            <div className="ml-auto text-xs text-slate-300">
+            <div className="ml-auto text-xs text-gray-600">
               {filteredSites.length > 0 ? `1-${filteredSites.length} of ${filteredSites.length}` : '0'}
             </div>
           </div>
@@ -462,16 +573,16 @@ function App() {
           {/* List Items */}
           <div className="flex-1 overflow-y-auto">
             {filteredSites.length === 0 ? (
-              <div className="p-12 text-center text-slate-300">
+              <div className="p-12 text-center text-gray-600">
                 <p>No sites found matching your criteria.</p>
               </div>
             ) : (
               <div className="flex flex-col">
                 {filteredSites.map(site => (
-                  <div key={site.id} onClick={() => setActiveSite(site)} className={`group flex items-center px-4 py-2 border-b border-teal-800/50 hover:bg-teal-800/40 transition-colors cursor-pointer text-sm ${activeSite?.id === site.id ? 'bg-teal-900/20 border-l-2 border-l-teal-500' : ''}`}>
+                  <div key={site.id} onClick={() => setActiveSite(site)} className={`group flex items-center px-4 py-2 border-b border-brand-border/50 hover:bg-brand-border/40 transition-colors cursor-pointer text-sm ${activeSite?.id === site.id ? 'bg-brand-card/20 border-l-2 border-l-teal-500' : ''}`}>
                     {/* Left Actions */}
-                    <div className="flex items-center gap-3 w-16 text-slate-400">
-                      <input type="checkbox" className="rounded border-teal-700 bg-teal-900 text-teal-500 focus:ring-teal-500/50 cursor-pointer" />
+                    <div className="flex items-center gap-3 w-16 text-gray-500">
+                      <input type="checkbox" className="rounded border-brand-border bg-brand-card text-brand-btn-hover focus:ring-brand-btn/50 cursor-pointer" />
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 hover:text-yellow-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                       </svg>
@@ -479,11 +590,11 @@ function App() {
 
                     {/* Site Details */}
                     <div className="flex-1 grid grid-cols-12 items-center gap-4">
-                      <div className="col-span-3 font-bold text-slate-100 truncate">{site.name}</div>
+                      <div className="col-span-3 font-bold text-gray-800 truncate">{site.name}</div>
                       
                       <div className="col-span-3 flex flex-col gap-0.5">
-                        <span className="text-slate-300 truncate flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${site.is_active ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-red-500'}`}></span>
+                        <span className="text-gray-600 truncate flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${site.is_active ? 'bg-emerald-600' : 'bg-red-500'}`}></span>
                           {site.location || 'Unknown Location'}
                         </span>
                         {(() => {
@@ -491,7 +602,7 @@ function App() {
                           return (
                             <span className={`flex items-center gap-1 text-xs font-medium ${conn.color} pl-4`}>
                               {conn.pulse && <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                               </span>}
                               {!conn.pulse && <span className="w-2 h-2 rounded-full bg-current opacity-60"></span>}
@@ -499,11 +610,33 @@ function App() {
                             </span>
                           );
                         })()}
+                        {site.last_error && (
+                          <span className="flex items-center gap-1 text-xs text-red-600 pl-4" title={site.last_error_at ? `Since ${new Date(site.last_error_at).toLocaleString()}` : ''}>
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                            {site.last_error}
+                          </span>
+                        )}
+                        <div className="flex items-center gap-2 pl-4 mt-0.5">
+                          {site.client_version && (
+                            <span className="text-[10px] font-mono bg-gray-200/70 text-gray-600 px-1.5 py-0.5 rounded">
+                              v{site.client_version}
+                            </span>
+                          )}
+                          {site.notes && (
+                            <span className="text-[10px] text-gray-400 flex items-center gap-1" title={site.notes}>
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                              </svg>
+                            </span>
+                          )}
+                        </div>
                       </div>
                       
                       {/* Token Section */}
-                      <div className="col-span-4 flex items-center gap-2 text-slate-300 truncate">
-                        <span className="bg-black/30 border border-white/10 px-2 py-0.5 rounded text-xs text-slate-300 font-mono truncate max-w-[150px]">
+                      <div className="col-span-4 flex items-center gap-2 text-gray-600 truncate">
+                        <span className="bg-gray-200/80 border border-brand-border px-2 py-0.5 rounded text-xs text-gray-600 font-mono truncate max-w-[150px]">
                           {site.api_key}
                         </span>
                         <button 
@@ -512,7 +645,7 @@ function App() {
                             copyToClipboard(site.api_key);
                             alert("AMC Token copied to clipboard!");
                           }}
-                          className="opacity-0 group-hover:opacity-100 p-1 hover:text-teal-300 transition-all"
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:text-brand-accent transition-all"
                           title="Copy AMC Token"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -522,7 +655,7 @@ function App() {
                       </div>
                       
                       {/* Expiry Date */}
-                      <div className="col-span-2 text-right font-medium text-slate-300 pr-4">
+                      <div className="col-span-2 text-right font-medium text-gray-600 pr-4">
                         {site.amc_expiry ? new Date(site.amc_expiry).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-'}
                       </div>
                     </div>
@@ -533,18 +666,18 @@ function App() {
                       {editingExpiry === site.id ? (
                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                           <input type="date" value={editExpiryVal} onChange={e => setEditExpiryVal(e.target.value)}
-                            className="bg-teal-950 border border-teal-700 rounded text-xs text-white px-1 py-0.5 w-28"
+                            className="bg-brand-bg border border-brand-border rounded text-xs text-gray-800 px-1 py-0.5 w-28"
                           />
                           <button onClick={() => handleSaveExpiry(site.id)} disabled={savingExpiry}
-                            className="px-1.5 py-0.5 bg-teal-600 hover:bg-teal-500 text-white rounded text-xs font-bold"
-                          >{savingExpiry ? '...' : '✓'}</button>
-                          <button onClick={() => setEditingExpiry(null)} className="text-slate-300 hover:text-white text-xs px-1">✕</button>
+                            className="px-1.5 py-0.5 bg-brand-btn hover:bg-brand-btn-hover text-white rounded text-xs font-bold"
+                          >{savingExpiry ? '...' : 'âœ“'}</button>
+                          <button onClick={() => setEditingExpiry(null)} className="text-gray-600 hover:text-gray-800 text-xs px-1">âœ•</button>
                         </div>
                       ) : (
                         <>
                           <button
                             onClick={(e) => { e.stopPropagation(); setEditingExpiry(site.id); setEditExpiryVal(site.amc_expiry ? site.amc_expiry.split('T')[0] : ''); }}
-                            className="p-2 rounded-full hover:bg-teal-800/50 text-slate-300 hover:text-yellow-400 transition-colors"
+                            className="p-2 rounded-full hover:bg-brand-border/50 text-gray-600 hover:text-yellow-400 transition-colors"
                             title="Edit AMC Expiry"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -553,7 +686,7 @@ function App() {
                           </button>
                           <button 
                             onClick={(e) => { e.stopPropagation(); handleToggleStatus(site.id, site.is_active); }}
-                            className="p-2 rounded-full hover:bg-teal-800/50 text-slate-300 hover:text-white transition-colors"
+                            className="p-2 rounded-full hover:bg-brand-border/50 text-gray-600 hover:text-gray-800 transition-colors"
                             title={site.is_active ? "Suspend" : "Activate"}
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -562,7 +695,7 @@ function App() {
                           </button>
                           <button 
                             onClick={(e) => { e.stopPropagation(); handleRenewAmc(site.id); }}
-                            className="p-2 rounded-full hover:bg-teal-800/50 text-slate-300 hover:text-blue-400 transition-colors"
+                            className="p-2 rounded-full hover:bg-brand-border/50 text-gray-600 hover:text-blue-400 transition-colors"
                             title="Renew AMC (generates new key)"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -570,8 +703,17 @@ function App() {
                             </svg>
                           </button>
                           <button
+                            onClick={(e) => { e.stopPropagation(); setEditSiteModal({ id: site.id, name: site.name, location: site.location || '', notes: site.notes || '' }); }}
+                            className="p-2 rounded-full hover:bg-brand-border/50 text-gray-600 hover:text-brand-btn transition-colors"
+                            title="Edit Name/Location"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
                             onClick={(e) => { e.stopPropagation(); handleDeleteSite(site.id, site.name); }}
-                            className="p-2 rounded-full hover:bg-red-900/40 text-slate-300 hover:text-red-400 transition-colors"
+                            className="p-2 rounded-full hover:bg-red-100 text-gray-600 hover:text-red-600 transition-colors"
                             title="Delete Site"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -590,37 +732,77 @@ function App() {
 
         {/* Live Data Side Panel */}
         {activeSite && (
-          <aside className="w-96 flex flex-col bg-teal-900 border-l border-teal-800 shadow-xl overflow-hidden mt-2 mb-2 mr-2 rounded-xl">
+          <aside className="w-96 flex flex-col bg-brand-card border-l border-brand-border shadow-xl overflow-hidden mt-2 mb-2 mr-2 rounded-xl">
             {/* Panel Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 bg-black/30">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-brand-border/40 bg-brand-border/40">
               <div>
-                <h2 className="font-bold text-white text-base truncate">{activeSite.name}</h2>
-                <p className="text-xs text-slate-300">{activeSite.location || 'Unknown Location'}</p>
+                <h2 className="font-bold text-gray-800 text-base truncate">{activeSite.name}</h2>
+                <p className="text-xs text-gray-600">{activeSite.location || 'Unknown Location'}</p>
+                {(() => {
+                  const c = getConnectionStatus(activeSite.last_sync);
+                  return <span className={`text-xs font-medium ${c.color}`}>{c.label}</span>;
+                })()}
               </div>
-              <button
-                onClick={() => { setActiveSite(null); setLiveData([]); }}
-                className="p-1.5 rounded-full hover:bg-teal-800/60 text-slate-300 hover:text-white transition-colors ml-2 flex-shrink-0"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                <button disabled={getConnectionStatus(activeSite.last_sync).label !== 'Client Live'}
+                  onClick={async () => {
+                    if (!confirm(`Send "Restart Polling" to ${activeSite.name}?`)) return;
+                    const res = await fetch(`/api/v1/commands/sites/${activeSite.id}/command`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'restart_polling' })
+                    });
+                    const d = await res.json();
+                    alert(res.ok ? `âœ… Restart Polling sent` : `âŒ ${d.detail || 'Failed'}`);
+                  }}
+                  className="p-1.5 rounded-full hover:bg-brand-border/60 text-gray-600 hover:text-brand-accent transition-colors disabled:opacity-30"
+                  title="Restart Polling"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+                <button disabled={getConnectionStatus(activeSite.last_sync).label !== 'Client Live'}
+                  onClick={async () => {
+                    if (!confirm(`âš ï¸ Reboot PC "${activeSite.name}"? It will restart immediately.`)) return;
+                    const res = await fetch(`/api/v1/commands/sites/${activeSite.id}/command`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'reboot_system' })
+                    });
+                    const d = await res.json();
+                    alert(res.ok ? `âœ… Reboot sent` : `âŒ ${d.detail || 'Failed'}`);
+                  }}
+                  className="p-1.5 rounded-full hover:bg-brand-border/60 text-gray-600 hover:text-orange-400 transition-colors disabled:opacity-30"
+                  title="Reboot PC"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => { setActiveSite(null); setLiveData([]); }}
+                  className="p-1.5 rounded-full hover:bg-brand-border/60 text-gray-600 hover:text-gray-800 transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {/* Auto-refresh indicator */}
-            <div className="flex items-center gap-2 px-5 py-2 bg-teal-900/20 border-b border-teal-800/30">
+            <div className="flex items-center gap-2 px-5 py-2 bg-brand-card/20 border-b border-brand-border/30">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-btn opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-btn"></span>
               </span>
-              <span className="text-xs text-teal-400 font-medium">Live — refreshing every 10s</span>
-              {liveDataLoading && <span className="ml-auto text-xs text-slate-400 animate-pulse">Fetching...</span>}
+              <span className="text-xs text-brand-accent font-medium">Live â€” refreshing every 10s</span>
+              {liveDataLoading && <span className="ml-auto text-xs text-gray-500 animate-pulse">Fetching...</span>}
             </div>
 
             {/* Data Table */}
             <div className="flex-1 overflow-y-auto">
               {liveData.length === 0 && !liveDataLoading ? (
-                <div className="p-8 text-center text-slate-400">
+                <div className="p-8 text-center text-gray-500">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mx-auto mb-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
@@ -629,8 +811,8 @@ function App() {
                 </div>
               ) : (
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-teal-900">
-                    <tr className="text-slate-400 border-b border-white/10">
+                  <thead className="sticky top-0 bg-brand-card">
+                    <tr className="text-gray-500 border-b border-brand-border/40">
                       <th className="px-4 py-2 text-left font-medium">Tag</th>
                       <th className="px-3 py-2 text-right font-medium">Value</th>
                       <th className="px-3 py-2 text-center font-medium">Quality</th>
@@ -648,23 +830,23 @@ function App() {
                         return `${Math.floor(diff/3600)}h`;
                       })() : '-';
                       return (
-                        <tr key={pt.tag_name} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <tr key={pt.tag_name} className="border-b border-white/5 hover:bg-brand-card/30 transition-colors">
                           <td className="px-4 py-2">
-                            <div className="font-mono text-teal-300 font-medium">{pt.tag_name}</div>
-                            {pt.name !== pt.tag_name && <div className="text-slate-400 truncate max-w-[130px]">{pt.name}</div>}
+                            <div className="font-mono text-brand-accent font-medium">{pt.tag_name}</div>
+                            {pt.name !== pt.tag_name && <div className="text-gray-500 truncate max-w-[130px]">{pt.name}</div>}
                           </td>
-                          <td className="px-3 py-2 text-right font-bold text-white">
-                            {pt.value !== null && pt.value !== undefined ? pt.value.toFixed(2) : '—'}
-                            {pt.unit && <span className="ml-1 text-slate-300 font-normal">{pt.unit}</span>}
+                          <td className="px-3 py-2 text-right font-bold text-gray-800">
+                            {pt.value !== null && pt.value !== undefined ? pt.value.toFixed(2) : 'â€”'}
+                            {pt.unit && <span className="ml-1 text-gray-600 font-normal">{pt.unit}</span>}
                           </td>
                           <td className="px-3 py-2 text-center">
                             <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                              isGood ? 'bg-emerald-900/50 text-emerald-400' : 'bg-red-900/50 text-red-400'
+                              isGood ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'
                             }`}>
                               {pt.quality}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-right text-slate-400">{ago} ago</td>
+                          <td className="px-3 py-2 text-right text-gray-500">{ago} ago</td>
                         </tr>
                       );
                     })}
@@ -679,39 +861,44 @@ function App() {
         {activeTab === 'broadcasts' && (
           <div className="flex-1 flex flex-col p-6 overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-white">Broadcast Messages</h2>
-              <button onClick={() => { setEditingBc(null); setBcMessage(''); setBcType('info'); setBcExpiry(''); setShowBcModal(true); }}
-                className="bg-teal-600 hover:bg-teal-500 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+              <h2 className="text-xl font-bold text-gray-800">Broadcast Messages</h2>
+              <button onClick={() => { setEditingBc(null); setBcMessage(''); setBcType('info'); setBcExpiry(''); setBcTargetAll(true); setBcTargetSiteId(null); setShowBcModal(true); }}
+                className="bg-brand-btn hover:bg-brand-btn-hover text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors"
               >+ New Broadcast</button>
             </div>
             {broadcasts.length === 0 ? (
-              <div className="text-center text-slate-400 py-20">
-                <p className="text-lg">No broadcasts yet.</p>
+              <div className="text-center text-gray-500 py-20">
+                <p className="text-lg text-gray-700">No broadcasts yet.</p>
                 <p className="text-sm mt-1">Create one to send messages to all UltrON clients.</p>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
                 {broadcasts.map(bc => (
-                  <div key={bc.id} className={`bg-teal-900 border rounded-xl p-4 transition-colors ${
+                  <div key={bc.id} className={`bg-brand-card border rounded-xl p-4 transition-colors ${
                     bc.message_type === 'critical' ? 'border-red-700/50' :
                     bc.message_type === 'warning' ? 'border-yellow-700/50' :
-                    'border-teal-800'
+                    'border-brand-border'
                   }`}>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                            bc.message_type === 'critical' ? 'bg-red-900/50 text-red-400' :
-                            bc.message_type === 'warning' ? 'bg-yellow-900/50 text-yellow-400' :
-                            'bg-teal-900/50 text-teal-400'
+                            bc.message_type === 'critical' ? 'bg-red-100 text-red-600' :
+                            bc.message_type === 'warning' ? 'bg-yellow-100 text-yellow-600' :
+                            'bg-brand-card/50 text-brand-accent'
                           }`}>{bc.message_type.toUpperCase()}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${bc.is_active ? 'bg-emerald-900/50 text-emerald-400' : 'bg-teal-800 text-slate-300'}`}>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${bc.is_active ? 'bg-emerald-100 text-emerald-600' : 'bg-brand-border text-gray-600'}`}>
                             {bc.is_active ? 'Active' : 'Inactive'}
                           </span>
-                          {bc.expires_at && <span className="text-xs text-slate-400">Expires: {new Date(bc.expires_at).toLocaleDateString()}</span>}
+                          {bc.expires_at && <span className="text-xs text-gray-500">Expires: {new Date(bc.expires_at).toLocaleDateString()}</span>}
                         </div>
-                        <p className="text-white text-sm">{bc.message}</p>
-                        <p className="text-xs text-slate-400 mt-1">Created: {new Date(bc.created_at).toLocaleString()}</p>
+                        <p className="text-gray-800 text-sm">{bc.message}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-brand-border/40 text-brand-accent font-mono text-[10px]">
+                            {bc.target_all ? 'All Sites' : `Site #${bc.target_site_id}`}
+                          </span>
+                          <p className="text-xs text-gray-500">Created: {new Date(bc.created_at).toLocaleString()}</p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <button onClick={async () => {
@@ -719,13 +906,22 @@ function App() {
                           const res = await fetch('/api/v1/broadcasts/');
                           setBroadcasts(await res.json());
                         }} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                          bc.is_active ? 'bg-yellow-600/30 text-yellow-400 hover:bg-yellow-600/50' : 'bg-emerald-600/30 text-emerald-400 hover:bg-emerald-600/50'
+                          bc.is_active ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                         }`}>{bc.is_active ? 'Deactivate' : 'Activate'}</button>
+                        <button onClick={async () => {
+                          setEditingBc(bc);
+                          setBcMessage(bc.message);
+                          setBcType(bc.message_type);
+                          setBcExpiry(bc.expires_at ? bc.expires_at.slice(0, 16) : '');
+                          setBcTargetAll(bc.target_all);
+                          setBcTargetSiteId(bc.target_site_id ?? null);
+                          setShowBcModal(true);
+                        }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-btn-hover hover:bg-brand-btn text-white transition-colors mr-1">Edit</button>
                         <button onClick={async () => {
                           if (!confirm('Delete this broadcast?')) return;
                           await fetch(`/api/v1/broadcasts/${bc.id}`, {method: 'DELETE'});
                           setBroadcasts(broadcasts.filter(b => b.id !== bc.id));
-                        }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-900/30 text-red-400 hover:bg-red-900/50 transition-colors">Delete</button>
+                        }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-100 text-red-600 hover:bg-red-800/50 transition-colors">Delete</button>
                       </div>
                     </div>
                   </div>
@@ -735,12 +931,180 @@ function App() {
           </div>
         )}
 
+        {activeTab === 'commands' && (
+          <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-800">Remote Commands</h2>
+              <span className="text-xs text-gray-500 bg-brand-card/40 px-2 py-1 rounded-full border border-brand-border">MQTT commands sent via rajapi.com broker</span>
+            </div>
+            {sites.length === 0 ? (
+              <div className="text-center text-gray-500 py-20">
+                <p className="text-lg">No sites registered.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {sites.map(site => {
+                  const conn = getConnectionStatus(site.last_sync);
+                  const isOnline = conn.label === 'Client Live';
+                  return (
+                    <div key={site.id} className="bg-brand-card border border-brand-border rounded-xl p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isOnline ? 'bg-emerald-600' : 'bg-slate-500'}`}></span>
+                            <span className="text-gray-800 font-bold">{site.name}</span>
+                            <span className={`text-xs font-medium ${conn.color}`}>{conn.label}</span>
+                          </div>
+                          {site.location && <span className="text-xs text-gray-500 ml-4">{site.location}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button disabled={!isOnline}
+                          onClick={async () => {
+                            if (!confirm(`Send "Restart Polling" to ${site.name}?`)) return;
+                            try {
+                              const res = await fetch(`/api/v1/commands/sites/${site.id}/command`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'restart_polling' })
+                              });
+                              if (res.ok) alert(`âœ… Restart Polling command sent to ${site.name}`);
+                              else { const d = await res.json(); alert(`âŒ ${d.detail || 'Failed'}`); }
+                            } catch (e) { alert('âŒ Network error'); }
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-btn-hover hover:bg-brand-btn text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >Restart Polling</button>
+                        <button disabled={!isOnline}
+                          onClick={async () => {
+                            if (!confirm(`âš ï¸ Send "Reboot System" to ${site.name}? The PC will restart immediately.`)) return;
+                            try {
+                              const res = await fetch(`/api/v1/commands/sites/${site.id}/command`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'reboot_system' })
+                              });
+                              if (res.ok) alert(`âœ… Reboot command sent to ${site.name}`);
+                              else { const d = await res.json(); alert(`âŒ ${d.detail || 'Failed'}`); }
+                            } catch (e) { alert('âŒ Network error'); }
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-orange-700 hover:bg-orange-600 text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >Reboot PC</button>
+                        <button disabled={!isOnline}
+                          onClick={async () => {
+                            if (!confirm(`â˜ ï¸ Send "Factory Reset" to ${site.name}? ALL data on that PC will be erased!`)) return;
+                            if (!confirm(`ARE YOU SURE? This will DESTROY all local data on ${site.name}.`)) return;
+                            try {
+                              const res = await fetch(`/api/v1/commands/sites/${site.id}/command`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'factory_reset' })
+                              });
+                              if (res.ok) alert(`âœ… Factory Reset command sent to ${site.name}`);
+                              else { const d = await res.json(); alert(`âŒ ${d.detail || 'Failed'}`); }
+                            } catch (e) { alert('âŒ Network error'); }
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-800 hover:bg-red-700 text-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >Factory Reset</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'history' && (
+          <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+            <h2 className="text-xl font-bold text-gray-800 mb-1">Telemetry History</h2>
+            <p className="text-sm text-gray-600 mb-4">Browse historical telemetry data for any site and parameter.</p>
+
+            <div className="bg-brand-card border border-brand-border rounded-xl p-4 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Site</label>
+                  <select value={historySiteId || ''} onChange={e => { setHistorySiteId(e.target.value ? Number(e.target.value) : null); setHistoryParamId(null); setHistoryData(null); }}
+                    className="w-full border border-brand-light/30 rounded-lg p-2 text-sm bg-white">
+                    <option value="">Select a site...</option>
+                    {sites.filter(s => s.is_active).map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Parameter</label>
+                  <select value={historyParamId || ''} onChange={e => setHistoryParamId(e.target.value ? Number(e.target.value) : null)}
+                    className="w-full border border-brand-light/30 rounded-lg p-2 text-sm bg-white" disabled={!historySiteId}>
+                    <option value="">Select parameter...</option>
+                    {historyParams.map(p => (
+                      <option key={p.id} value={p.id}>{p.tag_name} — {p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
+                  <input type="datetime-local" value={historyFrom} onChange={e => setHistoryFrom(e.target.value)}
+                    className="w-full border border-brand-light/30 rounded-lg p-2 text-sm bg-white" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
+                  <input type="datetime-local" value={historyTo} onChange={e => setHistoryTo(e.target.value)}
+                    className="w-full border border-brand-light/30 rounded-lg p-2 text-sm bg-white" />
+                </div>
+              </div>
+              <button onClick={fetchHistory} disabled={!historySiteId || !historyParamId}
+                className="mt-4 bg-brand-btn text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-brand-btn-hover disabled:opacity-40 transition-colors">
+                {historyLoading ? 'Loading...' : 'Load History'}
+              </button>
+            </div>
+
+            {historyData && (
+              <div className="bg-brand-card border border-brand-border rounded-xl overflow-hidden">
+                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-brand-border/50 sticky top-0">
+                      <tr>
+                        <th className="text-left p-3 text-gray-600 font-semibold">Timestamp</th>
+                        <th className="text-right p-3 text-gray-600 font-semibold">Value</th>
+                        <th className="text-center p-3 text-gray-600 font-semibold">Quality</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyData.length === 0 ? (
+                        <tr><td colSpan={3} className="text-center text-gray-400 p-8">No data in this range.</td></tr>
+                      ) : historyData.map((p, i) => (
+                        <tr key={p.id ?? i} className="border-t border-brand-border/30 hover:bg-brand-border/20">
+                          <td className="p-3 text-gray-700 font-mono text-xs">{new Date(p.timestamp).toLocaleString()}</td>
+                          <td className="p-3 text-right text-gray-800 font-mono">{p.value != null ? Number(p.value).toFixed(2) : '—'}</td>
+                          <td className="p-3 text-center">
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${p.quality === 'good' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                              {p.quality}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {historyData.length > 0 && (
+                  <div className="p-3 border-t border-brand-border/30 text-center">
+                    <button onClick={fetchHistoryMore} disabled={historyLoading}
+                      className="text-sm text-brand-btn hover:underline disabled:opacity-40">
+                      {historyLoading ? 'Loading...' : 'Load older data...'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'locks' && (
           <div className="flex-1 flex flex-col p-6 overflow-y-auto">
-            <h2 className="text-xl font-bold text-white mb-2">Lock Control</h2>
-            <p className="text-sm text-slate-300 mb-6">Locked sites stop sending SPCB/CPCB data. Use for AMC non-renewal or violations.</p>
+            <h2 className="text-xl font-bold text-gray-800 mb-2">Lock Control</h2>
+            <p className="text-sm text-gray-600 mb-6">Locked sites stop sending SPCB/CPCB data. Use for AMC non-renewal or violations.</p>
             {locks.length === 0 ? (
-              <div className="text-center text-slate-400 py-20">
+              <div className="text-center text-gray-500 py-20">
                 <p className="text-lg">No lock data available.</p>
               </div>
             ) : (
@@ -749,16 +1113,16 @@ function App() {
                   const site = sites.find(s => s.id === lock.id);
                   const isLocked = lock.lock_status && lock.lock_status !== 'unlocked';
                   return (
-                    <div key={lock.id} className="bg-teal-900 border border-teal-800 rounded-xl p-4 flex items-center justify-between">
+                    <div key={lock.id} className="bg-brand-card border border-brand-border rounded-xl p-4 flex items-center justify-between">
                       <div>
                         <div className="flex items-center gap-3">
-                          <span className="text-white font-bold">{site?.name || `Site #${lock.id}`}</span>
+                          <span className="text-gray-800 font-bold">{site?.name || `Site #${lock.id}`}</span>
                           <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                            isLocked ? 'bg-red-900/50 text-red-400' : 'bg-emerald-900/50 text-emerald-400'
+                            isLocked ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'
                           }`}>{isLocked ? lock.lock_status : 'Unlocked'}</span>
                         </div>
-                        {isLocked && lock.lock_reason && <p className="text-xs text-slate-300 mt-1">Reason: {lock.lock_reason}</p>}
-                        {lock.lock_updated_at && <p className="text-xs text-slate-400 mt-0.5">Updated: {new Date(lock.lock_updated_at).toLocaleString()}</p>}
+                        {isLocked && lock.lock_reason && <p className="text-xs text-gray-600 mt-1">Reason: {lock.lock_reason}</p>}
+                        {lock.lock_updated_at && <p className="text-xs text-gray-500 mt-0.5">Updated: {new Date(lock.lock_updated_at).toLocaleString()}</p>}
                       </div>
                       <button onClick={() => setLockModal({
                         id: lock.id,
@@ -780,61 +1144,61 @@ function App() {
       {/* Create Industry Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-md bg-teal-900 p-8 rounded-2xl border border-teal-800 shadow-2xl relative">
+          <div className="w-full max-w-md bg-brand-card p-8 rounded-2xl border border-brand-border shadow-2xl relative">
             <button 
               onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-slate-300 hover:text-white"
+              className="absolute top-4 right-4 text-gray-600 hover:text-gray-800"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            <h2 className="text-2xl font-bold text-white mb-6">Register New Industry</h2>
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">Register New Industry</h2>
             <form onSubmit={handleCreateSite} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Industry Name</label>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Industry Name</label>
                 <input 
                   type="text" 
                   value={newSiteName}
                   onChange={e => setNewSiteName(e.target.value)}
-                  className="w-full bg-teal-950 border border-teal-800 rounded-lg p-3 text-white focus:outline-none focus:border-teal-500"
+                  className="w-full bg-brand-bg border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn"
                   required
                   placeholder="e.g. Acme Corp Factory 1"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Location</label>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Location</label>
                 <input 
                   type="text" 
                   value={newSiteLocation}
                   onChange={e => setNewSiteLocation(e.target.value)}
-                  className="w-full bg-teal-950 border border-teal-800 rounded-lg p-3 text-white focus:outline-none focus:border-teal-500"
+                  className="w-full bg-brand-bg border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn"
                   required
                   placeholder="e.g. Hyderabad, India"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">AMC Expiry Date (Optional)</label>
+                <label className="block text-sm font-medium text-gray-600 mb-1">AMC Expiry Date (Optional)</label>
                 <input 
                   type="date" 
                   value={newSiteAmcExpiry}
                   onChange={e => setNewSiteAmcExpiry(e.target.value)}
-                  className="w-full bg-teal-950 border border-teal-800 rounded-lg p-3 text-white focus:outline-none focus:border-teal-500"
+                  className="w-full bg-brand-bg border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn"
                 />
-                <p className="text-xs text-slate-400 mt-1">If left blank, it will default to 1 year from today.</p>
+                <p className="text-xs text-gray-500 mt-1">If left blank, it will default to 1 year from today.</p>
               </div>
               <div className="pt-4 flex justify-end gap-3">
                 <button 
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit"
                   disabled={isCreating}
-                  className="bg-teal-600 hover:bg-teal-500 text-white font-semibold py-2 px-6 rounded-lg transition-colors disabled:opacity-50"
+                  className="bg-brand-btn hover:bg-brand-btn-hover text-white font-semibold py-2 px-6 rounded-lg transition-colors disabled:opacity-50"
                 >
                   {isCreating ? 'Creating...' : 'Register'}
                 </button>
@@ -847,18 +1211,19 @@ function App() {
     {/* Broadcast Create/Edit Modal */}
     {showBcModal && (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="w-full max-w-lg bg-teal-900 p-8 rounded-2xl border border-teal-800 shadow-2xl relative">
-          <button onClick={() => setShowBcModal(false)} className="absolute top-4 right-4 text-slate-300 hover:text-white">
+        <div className="w-full max-w-lg bg-brand-card p-8 rounded-2xl border border-brand-border shadow-2xl relative">
+          <button onClick={() => setShowBcModal(false)} className="absolute top-4 right-4 text-gray-600 hover:text-gray-800">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-          <h2 className="text-2xl font-bold text-white mb-6">{editingBc ? 'Edit Broadcast' : 'New Broadcast'}</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-6">{editingBc ? 'Edit Broadcast' : 'New Broadcast'}</h2>
           <form onSubmit={async (e) => {
             e.preventDefault();
             setIsCreatingBc(true);
             try {
-              const payload: any = { message: bcMessage, message_type: bcType };
+              const payload: any = { message: bcMessage, message_type: bcType, target_all: bcTargetAll };
+              if (!bcTargetAll) payload.target_site_id = bcTargetSiteId;
               if (bcExpiry) payload.expires_at = new Date(bcExpiry).toISOString();
               const url = editingBc ? `/api/v1/broadcasts/${editingBc.id}` : '/api/v1/broadcasts/';
               const method = editingBc ? 'PUT' : 'POST';
@@ -867,6 +1232,8 @@ function App() {
               setBcMessage('');
               setBcType('info');
               setBcExpiry('');
+              setBcTargetAll(true);
+              setBcTargetSiteId(null);
               setEditingBc(null);
               const res = await fetch('/api/v1/broadcasts/');
               setBroadcasts(await res.json());
@@ -874,29 +1241,45 @@ function App() {
             finally { setIsCreatingBc(false); }
           }} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Message</label>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Message</label>
               <textarea value={bcMessage} onChange={e => setBcMessage(e.target.value)}
-                className="w-full bg-teal-950 border border-teal-800 rounded-lg p-3 text-white focus:outline-none focus:border-teal-500 h-24" required />
+                className="w-full bg-brand-bg border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn h-24" required />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Type</label>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Type</label>
               <select value={bcType} onChange={e => setBcType(e.target.value)}
-                className="w-full bg-teal-950 border border-teal-800 rounded-lg p-3 text-white focus:outline-none focus:border-teal-500">
+                className="w-full bg-brand-bg border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn">
                 <option value="info">Info</option>
                 <option value="warning">Warning</option>
                 <option value="critical">Critical</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Expires At (optional)</label>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Target</label>
+              <select value={bcTargetAll ? 'all' : 'site'} onChange={e => {
+                if (e.target.value === 'all') { setBcTargetAll(true); setBcTargetSiteId(null); }
+                else { setBcTargetAll(false); if (sites.length > 0) setBcTargetSiteId(sites[0].id); }
+              }} className="w-full bg-brand-bg border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn mb-2">
+                <option value="all">All Sites</option>
+                <option value="site">Specific Site</option>
+              </select>
+              {!bcTargetAll && (
+                <select value={bcTargetSiteId ?? ''} onChange={e => setBcTargetSiteId(Number(e.target.value))}
+                  className="w-full bg-brand-bg border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn">
+                  {sites.map(s => <option key={s.id} value={s.id}>{s.name}{s.location ? ` (${s.location})` : ''}</option>)}
+                </select>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Expires At (optional)</label>
               <input type="datetime-local" value={bcExpiry} onChange={e => setBcExpiry(e.target.value)}
-                className="w-full bg-teal-950 border border-teal-800 rounded-lg p-3 text-white focus:outline-none focus:border-teal-500" />
+                className="w-full bg-brand-bg border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn" />
             </div>
             <div className="pt-4 flex justify-end gap-3">
               <button type="button" onClick={() => setShowBcModal(false)}
-                className="px-4 py-2 text-slate-300 hover:text-white transition-colors">Cancel</button>
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors">Cancel</button>
               <button type="submit" disabled={isCreatingBc}
-                className="bg-teal-600 hover:bg-teal-500 text-white font-semibold py-2 px-6 rounded-lg transition-colors disabled:opacity-50">
+                className="bg-brand-btn hover:bg-brand-btn-hover text-white font-semibold py-2 px-6 rounded-lg transition-colors disabled:opacity-50">
                 {isCreatingBc ? 'Saving...' : editingBc ? 'Update' : 'Create'}
               </button>
             </div>
@@ -908,29 +1291,29 @@ function App() {
     {/* Lock Modal */}
     {lockModal && (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="w-full max-w-md bg-teal-900 p-8 rounded-2xl border border-teal-800 shadow-2xl relative">
-          <button onClick={() => setLockModal(null)} className="absolute top-4 right-4 text-slate-300 hover:text-white">
+        <div className="w-full max-w-md bg-brand-card p-8 rounded-2xl border border-brand-border shadow-2xl relative">
+          <button onClick={() => setLockModal(null)} className="absolute top-4 right-4 text-gray-600 hover:text-gray-800">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-          <h2 className="text-xl font-bold text-white mb-2">{lockModal.status === 'unlocked' ? 'Unlock' : 'Lock'} Site</h2>
-          <p className="text-sm text-slate-300 mb-4">{lockModal.name}</p>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">{lockModal.status === 'unlocked' ? 'Unlock' : 'Lock'} Site</h2>
+          <p className="text-sm text-gray-600 mb-4">{lockModal.name}</p>
           {lockModal.status !== 'unlocked' ? (
             <>
-              <p className="text-sm text-white mb-4">Lock this site? It will stop sending SPCB/CPCB data until unlocked.</p>
+              <p className="text-sm text-gray-800 mb-4">Lock this site? It will stop sending SPCB/CPCB data until unlocked.</p>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-300 mb-1">Lock Reason</label>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Lock Reason</label>
                 <input type="text" value={lockModal.reason} onChange={e => setLockModal({...lockModal, reason: e.target.value})}
                   placeholder="e.g. AMC not renewed"
-                  className="w-full bg-teal-950 border border-teal-800 rounded-lg p-3 text-white focus:outline-none focus:border-teal-500" />
+                  className="w-full bg-brand-bg border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn" />
               </div>
             </>
           ) : (
-            <p className="text-sm text-emerald-400 mb-4 p-3 bg-emerald-900/20 rounded-lg">Unlock this site? It will resume normal operation.</p>
+            <p className="text-sm text-emerald-600 mb-4 p-3 bg-emerald-50 rounded-lg">Unlock this site? It will resume normal operation.</p>
           )}
           <div className="flex justify-end gap-3">
-            <button onClick={() => setLockModal(null)} className="px-4 py-2 text-slate-300 hover:text-white transition-colors">Cancel</button>
+            <button onClick={() => setLockModal(null)} className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors">Cancel</button>
             <button onClick={async () => {
               if (!lockModal) return;
               const status = lockModal.status === 'unlocked' ? 'unlocked' : 'manual_lock';
@@ -946,15 +1329,64 @@ function App() {
               ]);
               setSites(await sitesRes.json());
               setLocks(await locksRes.json());
-            }} className={`px-6 py-2 rounded-lg text-white font-bold transition-colors ${
+            }} className={`px-6 py-2 rounded-lg text-gray-800 font-bold transition-colors ${
               lockModal.status === 'unlocked' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-600 hover:bg-red-500'
             }`}>{lockModal.status === 'unlocked' ? 'Unlock' : 'Lock'}</button>
           </div>
         </div>
       </div>
     )}
+
+    {/* Edit Site Modal */}
+    {editSiteModal && (
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="w-full max-w-md bg-white p-8 rounded-2xl border border-brand-border shadow-2xl relative">
+          <button onClick={() => setEditSiteModal(null)} className="absolute top-4 right-4 text-gray-600 hover:text-gray-800">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <h2 className="text-2xl font-bold text-gray-800 mb-6">Edit Site</h2>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            if (!editSiteModal) return;
+            await handleUpdateSite(editSiteModal.id, editSiteModal.name, editSiteModal.location, editSiteModal.notes);
+          }} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Industry Name</label>
+              <input type="text" value={editSiteModal.name} onChange={e => setEditSiteModal({...editSiteModal, name: e.target.value})}
+                className="w-full bg-white border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn"
+                required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Location / Address</label>
+              <input type="text" value={editSiteModal.location} onChange={e => setEditSiteModal({...editSiteModal, location: e.target.value})}
+                className="w-full bg-white border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn"
+                required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Notes / Contact</label>
+              <textarea rows={2} value={editSiteModal.notes} onChange={e => setEditSiteModal({...editSiteModal, notes: e.target.value})}
+                className="w-full bg-white border border-brand-border rounded-lg p-3 text-gray-800 focus:outline-none focus:border-brand-btn resize-none" />
+            </div>
+            <div className="pt-4 flex justify-end gap-3">
+              <button type="button" onClick={() => setEditSiteModal(null)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors">Cancel</button>
+              <button type="submit" disabled={savingSite}
+                className="bg-brand-btn hover:bg-brand-btn-hover text-white font-semibold py-2 px-6 rounded-lg transition-colors disabled:opacity-50">
+                {savingSite ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+
     </div>
   )
 }
 
 export default App
+
+
+

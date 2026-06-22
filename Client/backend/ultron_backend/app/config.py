@@ -118,7 +118,7 @@ class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.9"
+    APP_VERSION: str = "1.0.10"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -152,8 +152,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(default_factory=lambda: _load_or_create_secret_key())
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
-    ADMIN_USERNAME: str = "Master"
-    ADMIN_PASSWORD: str = "Ultron123.0"
+    ADMIN_USERNAME: str = Field(default="Master")
+    ADMIN_PASSWORD: str = Field(default="")
 
     # ─── WebSocket ────────────────────────────────────────────
     WS_LIVE_PUSH_INTERVAL: int = 5
@@ -214,6 +214,14 @@ class Settings(BaseSettings):
         env_file = None if os.path.exists(str(APP_DIR / ".env.enc")) else str(APP_DIR / ".env")
         env_file_encoding = "utf-8"
         case_sensitive = False
+
+    def model_post_init(self, __context):
+        if not self.ADMIN_PASSWORD:
+            print(
+                "[UltrON] WARNING: ADMIN_PASSWORD is not set in .env! "
+                "Set a strong password for security.",
+                file=sys.stderr,
+            )
 
     def ensure_dirs(self):
         """Create all required storage directories on startup."""

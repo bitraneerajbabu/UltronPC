@@ -43,6 +43,11 @@ def _run_auto_migrations():
                 "ON telemetry_data (parameter_id, timestamp DESC)",
                 "ix_telemetry_param_ts"
             ),
+            (
+                "CREATE INDEX IF NOT EXISTS ix_telemetry_site_param_ts "
+                "ON telemetry_data (site_id, parameter_id, timestamp DESC)",
+                "ix_telemetry_site_param_ts"
+            ),
         ]:
             try:
                 conn.execute(text(idx_sql))
@@ -51,12 +56,16 @@ def _run_auto_migrations():
             except Exception as e:
                 logger.warning(f"Index '{idx_name}' skipped: {e}")
 
-        # Add lock fields to industry_sites if missing
+        # Add lock fields & error tracking & version/notes to industry_sites if missing
         existing_cols = {c["name"] for c in inspector.get_columns("industry_sites")}
         for col_name, col_def in [
             ("lock_status", "VARCHAR(50) DEFAULT 'unlocked'"),
             ("lock_reason", "TEXT"),
             ("lock_updated_at", "TIMESTAMP"),
+            ("last_error", "TEXT"),
+            ("last_error_at", "TIMESTAMP"),
+            ("client_version", "VARCHAR(20)"),
+            ("notes", "TEXT"),
         ]:
             if col_name not in existing_cols:
                 try:
@@ -83,6 +92,20 @@ def _run_auto_migrations():
         except Exception as e:
             logger.warning(f"Auto-migration for broadcasts table skipped: {e}")
 
+        # Add broadcast targeting columns if missing
+        try:
+            bc_cols = {c["name"] for c in inspector.get_columns("broadcasts")}
+            if "target_all" not in bc_cols:
+                conn.execute(text("ALTER TABLE broadcasts ADD COLUMN target_all BOOLEAN DEFAULT TRUE"))
+                conn.commit()
+                logger.info("Auto-migration: added 'target_all' to broadcasts")
+            if "target_site_id" not in bc_cols:
+                conn.execute(text("ALTER TABLE broadcasts ADD COLUMN target_site_id INTEGER REFERENCES industry_sites(id) ON DELETE SET NULL"))
+                conn.commit()
+                logger.info("Auto-migration: added 'target_site_id' to broadcasts")
+        except Exception as e:
+            logger.warning(f"Auto-migration for broadcast columns skipped: {e}")
+
 _run_auto_migrations()
 
 app = FastAPI(
@@ -93,20 +116,38 @@ app = FastAPI(
 # Set all CORS enabled origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict this to specific domains
+    allow_origins=[
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-from app.api.endpoints import sync, sites, downloads, tgpcb_sync, broadcasts
+@app.post(f"{settings.API_V1_STR}/auth/login")
+async def login(payload: dict):
+    if payload.get("password") == settings.ADMIN_KEY:
+        return {"success": True}
+    return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
+
+
+from app.api.endpoints import sync, sites, downloads, tgpcb_sync, broadcasts, commands
 
 app.include_router(sync.router, prefix=f"{settings.API_V1_STR}/sync", tags=["sync"])
 app.include_router(tgpcb_sync.router, prefix=f"{settings.API_V1_STR}/tgpcb", tags=["tgpcb-sync"])
 app.include_router(sites.router, prefix=f"{settings.API_V1_STR}/sites", tags=["sites"])
 app.include_router(downloads.router, prefix=f"{settings.API_V1_STR}/downloads", tags=["downloads"])
 app.include_router(broadcasts.router, prefix=f"{settings.API_V1_STR}/broadcasts", tags=["broadcasts"])
+app.include_router(commands.router, prefix=f"{settings.API_V1_STR}/commands", tags=["commands"])
+
+@app.on_event("startup")
+async def startup_mqtt():
+    from app.services.mqtt_publisher import start_mqtt_client
+    await start_mqtt_client()
 
 # Serve frontend build if it exists
 frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))
