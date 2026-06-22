@@ -16,12 +16,12 @@ VSVersionInfo(
           '040904B0',
           [StringStruct('CompanyName', 'Sunshine Technologies'),
            StringStruct('FileDescription', 'UltrON Industrial Monitoring Platform'),
-StringStruct('FileVersion', '1.0.14.0'),
-            StringStruct('InternalName', 'UltrON'),
-            StringStruct('LegalCopyright', 'Copyright (C) 2026 Sunshine Technologies. All rights reserved.'),
-            StringStruct('OriginalFilename', 'UltrON.exe'),
-            StringStruct('ProductName', 'UltrON'),
-            StringStruct('ProductVersion', '1.0.14.0'),
+StringStruct('FileVersion', '1.0.13.0'),
+             StringStruct('InternalName', 'UltrON'),
+             StringStruct('LegalCopyright', 'Copyright (C) 2026 Sunshine Technologies. All rights reserved.'),
+             StringStruct('OriginalFilename', 'UltrON.exe'),
+             StringStruct('ProductName', 'UltrON'),
+             StringStruct('ProductVersion', '1.0.13.0'),
            StringStruct('Comments', 'Developed by Neeraj. For support contact: tst@sunshinetechno.com')])
       ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
