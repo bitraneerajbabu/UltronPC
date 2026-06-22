@@ -325,6 +325,7 @@ def main():
     parser.add_argument("--major", action="store_true", help="Bump major")
     parser.add_argument("--set-version", help="Explicit version (e.g. 1.2.3) — skip bump")
     parser.add_argument("--skip-build", action="store_true", help="Skip frontend + EXE build")
+    parser.add_argument("--ci", action="store_true", help="CI mode: bump version + push tag only. GitHub Actions builds and releases.")
     parser.add_argument("--dry-run", action="store_true", help="Print what would be done without doing it")
     args = parser.parse_args()
 
@@ -354,34 +355,54 @@ def main():
         print(f"  - Update version_info.txt")
         print(f"  - Update server downloads.py")
         print(f"  - Update publish_release.py TAG")
-        if not args.skip_build:
+        if not args.skip_build and not args.ci:
             print(f"  - Build frontend + EXE + Installer")
         print(f"  - Git commit + push + tag {new_tag}")
-        print(f"  - Create/update GitHub release + upload assets")
+        if args.ci:
+            print(f"  - (CI mode: GitHub Actions will build + release)")
+        else:
+            print(f"  - Create/update GitHub release + upload assets")
         return
 
     # 1. Update all version files
-    print(f"\n[1/6] Updating version files...")
+    step = 1
+    print(f"\n[{step}/4] Updating version files...")
     write_config_version(new_version)
     write_version_info(new_version)
     write_server_downloads(new_version)
     write_publish_script_tag(new_version)
     print(f"  config.py, version_info.txt, downloads.py, publish_release.py updated")
 
+    if args.ci:
+        # CI mode: bump + push tag only. GitHub Actions handles build + release.
+        step = 2
+        print(f"\n[{step}/4] CI mode: skipping local build (GitHub Actions will build)")
+        step = 3
+        print(f"\n[{step}/4] Committing and pushing to git...")
+        git_commit_push(new_version)
+        print(f"\n{'='*50}")
+        print(f"  Tag {new_tag} pushed. GitHub Actions will build and release.")
+        print(f"  https://github.com/{REPO}/actions")
+        print(f"{'='*50}")
+        return
+
     # 2. Build
     if not args.skip_build:
-        print(f"\n[2/6] Building...")
+        step = 2
+        print(f"\n[{step}/4] Building...")
         build_frontend()
         build_exe()
     else:
-        print(f"\n[2/6] Skipping build (--skip-build)")
+        print(f"\n[2/4] Skipping build (--skip-build)")
 
     # 3. Git commit + push + tag
-    print(f"\n[3/6] Committing and pushing to git...")
+    step = 3
+    print(f"\n[{step}/4] Committing and pushing to git...")
     git_commit_push(new_version)
 
     # 4. Create/update GitHub release
-    print(f"\n[4/6] Creating/updating GitHub release...")
+    step = 4
+    print(f"\n[{step}/4] Creating/updating GitHub release...")
     create_or_update_release(new_version)
 
     print(f"\n{'='*50}")

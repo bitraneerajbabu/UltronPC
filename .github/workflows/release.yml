@@ -1,0 +1,63 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: client/frontend/package-lock.json
+
+      - name: Build Frontend
+        run: |
+          npm ci
+          npm run build
+        working-directory: client/frontend
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: 'pip'
+          cache-dependency-path: client/backend/ultron_backend/requirements.txt
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pywebview
+        working-directory: client/backend/ultron_backend
+
+      - name: Build UltrON.exe
+        run: python -m PyInstaller UltrON.spec --noconfirm
+        working-directory: client/backend/ultron_backend
+
+      - name: Build UltrON_Installer.exe
+        run: python -m PyInstaller ../../installer.py --onefile --console --icon=ultron.ico --name=UltrON_Installer --noconfirm
+        working-directory: client/backend/ultron_backend
+
+      - name: Upload Assets to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            client/backend/ultron_backend/dist/UltrON.exe
+            client/backend/ultron_backend/dist/UltrON_Installer.exe
+          fail_on_unmatched_files: true
+          generate_release_notes: true
