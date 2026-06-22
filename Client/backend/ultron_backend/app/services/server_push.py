@@ -576,6 +576,68 @@ async def retry_pending_uploads(db):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Remote Command Polling (replaces MQTT)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _poll_remote_commands():
+    """
+    Poll rajapi.com for pending commands for this station.
+    Executes any received commands and acknowledges them.
+
+    Replaces the old MQTT-based remote_control.py.
+    Called every 1 minute from run_server_push("live").
+    """
+    from app.config import settings
+    station_id = settings.RAJAPI_STATION_ID
+    api_key = settings.RAJAPI_API_KEY
+    if not station_id or not api_key:
+        return
+
+    base_url = settings.RAJAPI_SYNC_URL.replace("/api/v1/tgpcb/", "/api/v1/commands/pending")
+    if base_url == settings.RAJAPI_SYNC_URL:
+        base_url = "https://rajapi.com/api/v1/commands/pending"
+
+    url = f"{base_url}?station_id={station_id}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers={"X-Admin-Key": api_key})
+            if resp.status_code != 200:
+                return
+            commands = resp.json().get("commands", [])
+
+        for cmd in commands:
+            cmd_id = cmd.get("id")
+            action = cmd.get("action", "")
+            log.info(f"[CMD] Executing remote command: {action} (id={cmd_id})")
+
+            if action == "restart_polling":
+                from app.services.polling_engine import restart_polling
+                await restart_polling()
+
+            elif action == "reboot_system":
+                import os as _os
+                if _os.name == 'nt':
+                    _os.system("shutdown /r /t 5")
+                else:
+                    _os.system("sudo reboot")
+
+            elif action == "factory_reset":
+                from app.database import init_db, engine
+                from app.models.server_config import Base as ServerBase
+                async with engine.begin() as conn:
+                    await conn.run_sync(ServerBase.metadata.drop_all)
+                await init_db()
+
+            # Acknowledge command as executed
+            ack_url = f"https://rajapi.com/api/v1/commands/{cmd_id}/ack?station_id={station_id}"
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(ack_url, headers={"X-Admin-Key": api_key})
+
+    except Exception as e:
+        log.debug(f"[CMD] Poll failed: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main scheduler entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -646,36 +708,13 @@ async def run_server_push(mode: str = "live"):
             else:
                 await _push_tgpcb(config, db, mode)
 
-        # Always push latest live telemetry to RajAPI MQTT broker (if enabled)
+        # Poll for pending remote commands from rajapi.com
         if mode == "live":
+            await _poll_remote_commands()
+
             ld_stmt = select(LiveData).options(selectinload(LiveData.parameter))
             ld_res = await db.execute(ld_stmt)
             live_data_list = ld_res.scalars().all()
-
-            from app.services.remote_control import publish_telemetry
-            from app.config import settings
-            if settings.RAJAPI_MQTT_ENABLED:
-                payload = {
-                    "station_id": settings.RAJAPI_STATION_ID,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": []
-                }
-                for ld in live_data_list:
-                    if ld.parameter:
-                        val = ld.value
-                        if val is not None:
-                            try:
-                                val = round(float(val), 2)
-                            except (ValueError, TypeError):
-                                pass
-                        payload["data"].append({
-                            "tag": ld.parameter.tag_name,
-                            "value": val,
-                            "unit": ld.parameter.unit
-                        })
-                if payload["data"]:
-                    await publish_telemetry(payload)
-
             param_vals = []
             for ld in live_data_list:
                 if ld.parameter and ld.value is not None:

@@ -19,13 +19,6 @@ class Settings(BaseSettings):
     # Set ADMIN_KEY in server .env — must match what's in client_manager.py
     ADMIN_KEY: str = os.environ.get("ADMIN_KEY", "Raj123.0")
 
-    # MQTT Broker settings (for remote commands to clients)
-    MQTT_ENABLED: bool = os.environ.get("MQTT_ENABLED", "true").lower() == "true"
-    MQTT_HOST: str = os.environ.get("MQTT_HOST", "localhost")
-    MQTT_PORT: int = int(os.environ.get("MQTT_PORT", "1883"))
-    MQTT_USER: str = os.environ.get("MQTT_USER", "")
-    MQTT_PASSWORD: str = os.environ.get("MQTT_PASSWORD", "")
-
     model_config = SettingsConfigDict(env_file=".env")
 
 settings = Settings()

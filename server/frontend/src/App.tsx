@@ -1063,7 +1063,7 @@ function App() {
           <div className="flex-1 flex flex-col p-6 overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-800">Remote Commands</h2>
-              <span className="text-xs text-gray-500 bg-brand-card/40 px-2 py-1 rounded-full border border-brand-border">MQTT commands sent via rajapi.com broker</span>
+              <span className="text-xs text-gray-500 bg-brand-card/40 px-2 py-1 rounded-full border border-brand-border">Commands queued via HTTP — client polls every 60s</span>
             </div>
             {sites.length === 0 ? (
               <div className="text-center text-gray-500 py-20">

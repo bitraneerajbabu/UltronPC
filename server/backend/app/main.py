@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import models so they are registered with Base.metadata before create_all
-from app.models.core import IndustrySite, Device, Parameter, TelemetryData, Broadcast
+from app.models.core import IndustrySite, Device, Parameter, TelemetryData, Broadcast, PendingCommand
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -106,6 +106,26 @@ def _run_auto_migrations():
         except Exception as e:
             logger.warning(f"Auto-migration for broadcast columns skipped: {e}")
 
+        # Create pending_commands table if not exists
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS pending_commands (
+                    id SERIAL PRIMARY KEY,
+                    site_id INTEGER REFERENCES industry_sites(id) ON DELETE SET NULL,
+                    station_id VARCHAR(255) NOT NULL,
+                    action VARCHAR(50) NOT NULL,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    delivered_at TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    error TEXT
+                )
+            """))
+            conn.commit()
+            logger.info("Auto-migration: ensured 'pending_commands' table")
+        except Exception as e:
+            logger.warning(f"Auto-migration for pending_commands skipped: {e}")
+
 _run_auto_migrations()
 
 app = FastAPI(
@@ -143,11 +163,6 @@ app.include_router(sites.router, prefix=f"{settings.API_V1_STR}/sites", tags=["s
 app.include_router(downloads.router, prefix=f"{settings.API_V1_STR}/downloads", tags=["downloads"])
 app.include_router(broadcasts.router, prefix=f"{settings.API_V1_STR}/broadcasts", tags=["broadcasts"])
 app.include_router(commands.router, prefix=f"{settings.API_V1_STR}/commands", tags=["commands"])
-
-@app.on_event("startup")
-async def startup_mqtt():
-    from app.services.mqtt_publisher import start_mqtt_client
-    await start_mqtt_client()
 
 # Serve frontend build if it exists
 frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))

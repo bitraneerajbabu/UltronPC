@@ -118,7 +118,7 @@ class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.11"
+    APP_VERSION: str = "1.0.12"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -163,12 +163,6 @@ class Settings(BaseSettings):
     RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/tgpcb/"
     RAJAPI_SYNC_ENABLED: bool = True
 
-    # ─── RajAPI MQTT Remote Control ───────────────────────────
-    RAJAPI_MQTT_ENABLED: bool = True
-    RAJAPI_MQTT_HOST: str = "rajapi.com"
-    RAJAPI_MQTT_PORT: int = 1883
-    RAJAPI_MQTT_USER: str = ""
-    RAJAPI_MQTT_PASSWORD: str = ""
     RAJAPI_STATION_ID: str = "default_station"
 
     # ─── Polling Engine ───────────────────────────────────────

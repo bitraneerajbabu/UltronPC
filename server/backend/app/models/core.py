@@ -3,6 +3,19 @@ from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from app.db.database import Base
 
+class PendingCommand(Base):
+    __tablename__ = "pending_commands"
+
+    id = Column(Integer, primary_key=True, index=True)
+    site_id = Column(Integer, ForeignKey("industry_sites.id"), nullable=True)
+    station_id = Column(String, index=True)
+    action = Column(String, nullable=False)
+    status = Column(String, default="pending")  # pending, delivered, completed, failed
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    delivered_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    error = Column(Text, nullable=True)
+
 class Broadcast(Base):
     __tablename__ = "broadcasts"
 
