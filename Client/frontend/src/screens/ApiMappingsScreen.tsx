@@ -139,18 +139,29 @@ export const ApiMappingsScreen = () => {
     setServers(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSave = async () => {
+  const SECTION_FILTERS = {
+    spcb: s => s.protocol === 'tspcb' || s.protocol === 'both',
+    cpcb: s => s.protocol === 'cpcb' || s.protocol === 'both',
+    led: s => s.protocol === 'led',
+  };
+  const SECTION_LABELS = { spcb: 'SPCB', cpcb: 'CPCB', led: 'LED' };
+
+  const handleSave = async (section) => {
     setSaving(true);
     const controller = new AbortController();
     const tid = setTimeout(() => controller.abort(), 8000);
+    const filter = section ? SECTION_FILTERS[section] : null;
+    const label = section ? SECTION_LABELS[section] : 'All';
     try {
+      const targetServers = filter ? servers.filter(filter) : servers;
+      if (targetServers.length === 0) { showToast('No servers to save.', 'warn'); setSaving(false); clearTimeout(tid); return; }
       const savedServers = [];
-      for (const conf of servers) {
-        if (!conf.name?.trim()) { showToast('Server name required.', 'warn'); setSaving(false); clearTimeout(tid); return; }
+      for (const conf of targetServers) {
+        if (!conf.name?.trim()) { showToast(`${label}: Server name required.`, 'warn'); setSaving(false); clearTimeout(tid); return; }
         const method = conf.id ? 'PUT' : 'POST';
         const url = conf.id ? `${API_BASE}/server-config/${conf.id}` : `${API_BASE}/server-config/`;
         const res = await authFetch(url, { method, body: JSON.stringify(conf), signal: controller.signal });
-        if (!res.ok) throw new Error(formatError((await res.json().catch(() => ({}))).detail, `Save failed (${res.status})`));
+        if (!res.ok) throw new Error(formatError((await res.json().catch(() => ({}))).detail, `${label} save failed (${res.status})`));
         savedServers.push(await res.json());
       }
       const payload = mappings.map(param => {
@@ -163,7 +174,7 @@ export const ApiMappingsScreen = () => {
       const res = await authFetch(`${API_BASE}/server-config/mappings`, { method: 'PUT', body: JSON.stringify(payload), signal: controller.signal });
       if (!res.ok) throw new Error(formatError((await res.json().catch(() => ({}))).detail, 'Mapping save failed'));
       clearTimeout(tid);
-      showToast('All configurations saved.', 'success');
+      showToast(`${label} configurations saved.`, 'success');
       loadData();
     } catch (e) {
       clearTimeout(tid);
@@ -234,13 +245,20 @@ export const ApiMappingsScreen = () => {
     finally { setRajapiSaving(false); }
   };
 
-  const sectionHeader = (num, title, desc, color) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-      <div style={{ width: 28, height: 28, borderRadius: '8px', background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800' }}>{num}</div>
-      <div>
+  const sectionHeader = (num, title, desc, color, onSave) => (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '14px' }}>
+      <div style={{ width: 28, height: 28, borderRadius: '8px', background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800', flexShrink: 0, marginTop: '2px' }}>{num}</div>
+      <div style={{ flex: 1 }}>
         <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0f172a' }}>{title}</h3>
         {desc && <p style={{ margin: '1px 0 0', fontSize: '11px', color: '#94a3b8' }}>{desc}</p>}
       </div>
+      {onSave && (
+        <button onClick={onSave} disabled={saving} style={{
+          background: 'linear-gradient(135deg, #0f766e, #14b8a6)', color: '#fff', border: 'none',
+          borderRadius: '6px', padding: '6px 14px', fontSize: '11px', fontWeight: '700', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: '6px', opacity: saving ? 0.6 : 1, flexShrink: 0,
+        }}><Plus /> {saving ? '...' : 'Save'}</button>
+      )}
     </div>
   );
 
@@ -387,7 +405,7 @@ export const ApiMappingsScreen = () => {
 
         {/* ─── 1. SPCB (TGPCB) Push ─── */}
         <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '20px' }}>
-          {sectionHeader(1, 'SPCB (TGPCB) Push', 'JSON HTTP push to State Pollution Control Board — live (1 min) and delay (15 min) URLs', '#0f766e')}
+          {sectionHeader(1, 'SPCB (TGPCB) Push', 'JSON HTTP push to State Pollution Control Board — live (1 min) and delay (15 min) URLs', '#0f766e', () => handleSave('spcb'))}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {servers.map((conf, idx) => (conf.protocol === 'tspcb' || conf.protocol === 'both') ? renderServerCard(conf, idx, 'tspcb',
               <><div style={{ flex: '1 1 200px' }}><label style={s()}>Live URL</label><input type="text" name="live_url" value={conf.live_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://.../live" style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Delay URL</label><input type="text" name="delay_url" value={conf.delay_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://.../delay" style={ipt} /></div></>,
@@ -405,7 +423,7 @@ export const ApiMappingsScreen = () => {
 
         {/* ─── 2. CPCB TXT File Generation ─── */}
         <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '20px' }}>
-          {sectionHeader(2, 'CPCB TXT File Generation', 'Annexure-I format CSV/TXT file with 15-min averaged data', '#ca8a04')}
+          {sectionHeader(2, 'CPCB TXT File Generation', 'Annexure-I format CSV/TXT file with 15-min averaged data', '#ca8a04', () => handleSave('cpcb'))}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {servers.map((conf, idx) => (conf.protocol === 'cpcb' || conf.protocol === 'both') ? renderServerCard(conf, idx, 'cpcb',
               <><div style={{ flex: '1 1 300px' }}><label style={s()}>Output File Path</label><input type="text" name="cpcb_file_path" value={conf.cpcb_file_path || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="C:\Data\readings.txt" style={ipt} /></div></>,
@@ -455,7 +473,7 @@ export const ApiMappingsScreen = () => {
 
         {/* ─── 4. LED Board (LAN) ─── */}
         <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '20px' }}>
-          {sectionHeader(4, 'LED Board (LAN)', 'Generates JSON endpoint for networked LED display cards — polled via GET', '#ea580c')}
+          {sectionHeader(4, 'LED Board (LAN)', 'Generates JSON endpoint for networked LED display cards — polled via GET', '#ea580c', () => handleSave('led'))}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {servers.map((conf, idx) => conf.protocol === 'led' ? renderServerCard(conf, idx, 'led',
               <><div style={{ flex: '0 1 120px' }}><label style={s()}>Channel ID</label><input type="number" name="led_channel_id" value={conf.led_channel_id || ''} onChange={e => handleServerFieldChange(idx, { target: { name: 'led_channel_id', value: e.target.value ? parseInt(e.target.value) : null, type: 'text' } })} placeholder="7003" style={ipt} /></div><div style={{ flex: '1 1 160px' }}><label style={s()}>Station Name</label><input type="text" name="led_station_name" value={conf.led_station_name || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="e.g. AAQMS" style={ipt} /></div></>,
