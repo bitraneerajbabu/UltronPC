@@ -50,7 +50,12 @@ hidden = [
     "sqlalchemy.pool.impl",
     # Database async drivers
     "aiosqlite",
+    "aiosqlite.core",
+    "aiosqlite.cursor",
+    "aiosqlite.context",
     "asyncpg",
+    # sqlite3 sub-modules used at runtime by aiosqlite
+    "sqlite3",
 
     # APScheduler
     "apscheduler.schedulers.asyncio",
@@ -151,6 +156,10 @@ datas += collect_data_files("tzdata")
 
 # 6. pydantic_core has Rust extension wheels with embedded resources
 datas += collect_data_files("pydantic_core")
+
+# 7. aiosqlite — ensure all sub-modules are bundled for PyInstaller
+datas += collect_data_files("aiosqlite")
+datas += collect_data_files("sqlite3")
 
 # 7. Mako templates used by alembic (not needed at runtime but safe to include)
 # datas += collect_data_files("mako")
