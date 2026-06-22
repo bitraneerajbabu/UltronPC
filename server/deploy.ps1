@@ -1,7 +1,7 @@
 # Run this from your machine on the Pi's network (192.168.1.x)
 # Usage: .\deploy.ps1
 
-$PI = "pi@192.168.1.14"
+$PI = "pi@ultron.local"
 $REMOTE = "/home/pi/rajapi_backend"
 $LOCAL = "C:\Users\sunsh\OneDrive\Music\UltrON\server"
 
@@ -25,10 +25,10 @@ scp -r "$LOCAL\frontend\dist\*" "${PI}:${REMOTE}/frontend/dist/"
 
 # 3. Install gmqtt on Pi
 Write-Host "`n[3/4] Installing gmqtt on Pi..." -ForegroundColor Yellow
-ssh "${PI}" "pip install gmqtt"
+ssh "${PI}" "pip install --break-system-packages gmqtt"
 
 # 4. Restart service
 Write-Host "`n[4/4] Restarting rajapi service..." -ForegroundColor Yellow
-ssh "${PI}" "sudo systemctl restart rajapi"
+$pw = Read-Host -Prompt "Enter sudo password for pi" -AsSecureString; $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($pw); $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr); echo $plain | ssh "${PI}" "sudo -S systemctl restart rajapi"
 
 Write-Host "`n=== Deployment complete! ===" -ForegroundColor Green
