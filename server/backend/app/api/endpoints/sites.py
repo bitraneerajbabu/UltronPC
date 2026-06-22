@@ -95,6 +95,7 @@ class SiteUpdate(BaseModel):
     name: Optional[str] = None
     location: Optional[str] = None
     amc_expiry: Optional[datetime] = None
+    notes: Optional[str] = None
 
 @router.patch("/{site_id}", response_model=SiteResponse)
 def update_site(site_id: int, payload: SiteUpdate, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
@@ -109,6 +110,8 @@ def update_site(site_id: int, payload: SiteUpdate, db: Session = Depends(get_db)
         db_site.location = payload.location
     if payload.amc_expiry is not None:
         db_site.amc_expiry = payload.amc_expiry
+    if payload.notes is not None:
+        db_site.notes = payload.notes
 
     db.commit()
     db.refresh(db_site)
@@ -131,6 +134,7 @@ def get_latest_telemetry(site_id: int, db: Session = Depends(get_db)):
     # Single-pass DISTINCT ON — PostgreSQL picks the latest row per parameter in one scan
     sql = text("""
         SELECT DISTINCT ON (t.parameter_id)
+               t.parameter_id AS id,
                p.tag_name,
                p.name       AS param_name,
                p.unit,
@@ -146,6 +150,7 @@ def get_latest_telemetry(site_id: int, db: Session = Depends(get_db)):
 
     return [
         LatestTelemetryPoint(
+            id=r.id,
             tag_name=r.tag_name,
             name=r.param_name,
             unit=r.unit,
@@ -155,6 +160,98 @@ def get_latest_telemetry(site_id: int, db: Session = Depends(get_db)):
         )
         for r in rows
     ]
+
+
+@router.get("/{site_id}/telemetry/history")
+def get_telemetry_history(
+    site_id: int,
+    parameter_id: int,
+    from_date: Optional[datetime] = None,
+    to_date: Optional[datetime] = None,
+    before: Optional[datetime] = None,
+    limit: int = 500,
+    db: Session = Depends(get_db)
+):
+    """
+    Return telemetry history for a specific parameter.
+    Automatically downsamples for long ranges to keep the Pi responsive.
+      - ≤6h: raw data
+      - ≤3d: 5‑minute buckets
+      - ≤14d: hourly buckets
+      - >14d: daily buckets
+    Use `before` (ISO timestamp) for cursor‑based pagination.
+    """
+    from sqlalchemy import text
+
+    site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    param = db.query(Parameter).filter(Parameter.id == parameter_id).first()
+    if not param:
+        raise HTTPException(status_code=404, detail="Parameter not found")
+
+    now = datetime.now(timezone.utc)
+    frm = from_date or (now - timedelta(days=30))
+    to = to_date or now
+    span = to - frm
+
+    # Choose bucket width based on range
+    if span.total_seconds() <= 21600:  # 6h
+        bucket = None
+    elif span.days <= 3:
+        bucket = "5 min"
+    elif span.days <= 14:
+        bucket = "1 hour"
+    else:
+        bucket = "1 day"
+
+    if bucket:
+        # Build correct date_trunc expression for each bucket width
+        if bucket == "5 min":
+            ts_expr = "to_timestamp(floor(extract(epoch FROM t.timestamp) / 300) * 300)"
+        elif bucket == "1 hour":
+            ts_expr = "date_trunc('hour', t.timestamp)"
+        else:
+            ts_expr = "date_trunc('day', t.timestamp)"
+
+        before_clause = "AND t.timestamp < :before " if before else ""
+        sql = text(f"""
+            SELECT
+                {ts_expr} AS ts,
+                round(avg(t.value)::numeric, 2) AS value,
+                bool_and(t.quality = 'good') AS quality_good
+            FROM telemetry_data t
+            WHERE t.site_id = :site_id
+              AND t.parameter_id = :param_id
+              AND t.timestamp >= :frm
+              AND t.timestamp <= :to
+              {before_clause}
+            GROUP BY ts
+            ORDER BY ts DESC
+            LIMIT :lim
+        """)
+        params = {"site_id": site_id, "param_id": parameter_id, "frm": frm, "to": to, "lim": limit}
+        if before:
+            params["before"] = before
+        rows = db.execute(sql, params).fetchall()
+        return [
+            {"timestamp": r.ts, "value": r.value, "quality": "good" if r.quality_good else "avg"}
+            for r in rows
+        ]
+    else:
+        q = db.query(TelemetryData).filter(
+            TelemetryData.site_id == site_id,
+            TelemetryData.parameter_id == parameter_id,
+            TelemetryData.timestamp >= frm,
+            TelemetryData.timestamp <= to,
+        )
+        if before:
+            q = q.filter(TelemetryData.timestamp < before)
+        rows = q.order_by(TelemetryData.timestamp.desc()).limit(limit).all()
+        return [
+            {"id": r.id, "value": r.value, "quality": r.quality, "timestamp": r.timestamp}
+            for r in rows
+        ]
 
 
 @router.delete("/{site_id}/telemetry/prune")

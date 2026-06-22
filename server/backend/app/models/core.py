@@ -12,6 +12,8 @@ class Broadcast(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     expires_at = Column(DateTime, nullable=True)
+    target_all = Column(Boolean, default=True)     # True = all sites, False = specific site only
+    target_site_id = Column(Integer, ForeignKey("industry_sites.id"), nullable=True)
 
 class IndustrySite(Base):
     __tablename__ = "industry_sites"
@@ -27,6 +29,10 @@ class IndustrySite(Base):
     lock_status = Column(String, default="unlocked")  # unlocked, manual_lock, amc_expired
     lock_reason = Column(Text, nullable=True)
     lock_updated_at = Column(DateTime, nullable=True)
+    last_error = Column(Text, nullable=True)          # Last sync error message (diagnostic)
+    last_error_at = Column(DateTime, nullable=True)   # When the last error occurred
+    client_version = Column(String, nullable=True)    # UltrON version reported by client
+    notes = Column(Text, nullable=True)               # Admin notes / description
 
     devices = relationship("Device", back_populates="site", cascade="all, delete-orphan")
     telemetry = relationship("TelemetryData", back_populates="site", cascade="all, delete-orphan")
