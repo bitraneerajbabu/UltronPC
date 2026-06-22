@@ -17,7 +17,7 @@ class Settings(BaseSettings):
 
     # Admin key for protected endpoints (site creation, deletion)
     # Set ADMIN_KEY in server .env — must match what's in client_manager.py
-    ADMIN_KEY: str = os.environ.get("ADMIN_KEY", "")
+    ADMIN_KEY: str = os.environ.get("ADMIN_KEY", "Raj123.0")
 
     # MQTT Broker settings (for remote commands to clients)
     MQTT_ENABLED: bool = os.environ.get("MQTT_ENABLED", "true").lower() == "true"
@@ -32,5 +32,5 @@ settings = Settings()
 
 if not settings.SECRET_KEY:
     print("WARNING: SECRET_KEY is not set in .env! Generate one with: openssl rand -hex 32", file=sys.stderr)
-if not settings.ADMIN_KEY:
-    print("WARNING: ADMIN_KEY is not set in .env! Set a strong admin key.", file=sys.stderr)
+if settings.ADMIN_KEY == "Raj123.0":
+    print("WARNING: ADMIN_KEY is using default (Raj123.0). For production set via .env", file=sys.stderr)
