@@ -667,28 +667,37 @@ export const DashboardScreen = () => {
         <AlarmsInspectorModal isOpen={showAlarmsModal} onClose={() => setShowAlarmsModal(false)} />
 
         {broadcasts && broadcasts.length > 0 && (() => {
-          const critical = broadcasts.find((b: any) => b.severity === 'critical' && b.id !== dismissedBroadcast);
-          if (!critical) return null;
+          const visible = broadcasts.find((b: any) => b.id !== dismissedBroadcast);
+          if (!visible) return null;
+          const sev = visible.severity || 'info';
+          const colors: Record<string,any> = {
+            critical: { bg: '#fef2f2', border: '#fecaca', icon: '🚨', title: '#991b1b', text: '#7f1d1d', label: 'Critical Broadcast' },
+            warn:     { bg: '#fffbeb', border: '#fde68a', icon: '⚠️',  title: '#92400e', text: '#78350f', label: 'Warning Broadcast' },
+            info:     { bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ️',  title: '#1e40af', text: '#1e3a5f', label: 'Broadcast Message' },
+          };
+          const c = colors[sev] || colors.info;
           return (
             <div style={{
               position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999,
               maxWidth: '400px', padding: '16px 20px',
-              background: '#fef2f2', border: '1px solid #fecaca',
+              background: c.bg, border: `1px solid ${c.border}`,
               borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
               display: 'flex', alignItems: 'flex-start', gap: '12px',
             }}>
-              <span style={{ fontSize: '24px', flexShrink: 0 }}>🚨</span>
+              <span style={{ fontSize: '24px', flexShrink: 0 }}>{c.icon}</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#991b1b', marginBottom: '4px' }}>Broadcast Message</div>
-                <div style={{ fontSize: '12px', color: '#7f1d1d' }}>{critical.message}</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: c.title, marginBottom: '4px' }}>{c.label}</div>
+                <div style={{ fontSize: '12px', color: c.text }}>{visible.message}</div>
               </div>
-              <button onClick={() => setDismissedBroadcast(critical.id)} style={{
+              <button onClick={() => setDismissedBroadcast(visible.id)} style={{
                 background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '18px', color: '#991b1b', padding: '0 0 0 8px', lineHeight: 1
+                fontSize: '18px', color: c.title, padding: '0 0 0 8px', lineHeight: 1
               }}>×</button>
             </div>
           );
         })()}
+
+
 
       </div>
     );
@@ -1006,26 +1015,33 @@ export const DashboardScreen = () => {
 
       <AlarmsInspectorModal isOpen={showAlarmsModal} onClose={() => setShowAlarmsModal(false)} />
 
-      {/* Broadcast Popup — latest critical broadcast shown as dismissible overlay */}
+      {/* Broadcast Popup — shown as dismissible overlay */}
       {broadcasts && broadcasts.length > 0 && (() => {
-        const critical = broadcasts.find((b: any) => b.severity === 'critical' && b.id !== dismissedBroadcast);
-        if (!critical) return null;
+        const visible = broadcasts.find((b: any) => b.id !== dismissedBroadcast);
+        if (!visible) return null;
+        const sev = visible.severity || 'info';
+        const colors: Record<string,any> = {
+          critical: { bg: '#fef2f2', border: '#fecaca', icon: '🚨', title: '#991b1b', text: '#7f1d1d', label: 'Critical Broadcast' },
+          warn:     { bg: '#fffbeb', border: '#fde68a', icon: '⚠️',  title: '#92400e', text: '#78350f', label: 'Warning Broadcast' },
+          info:     { bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ️',  title: '#1e40af', text: '#1e3a5f', label: 'Broadcast Message' },
+        };
+        const c = colors[sev] || colors.info;
         return (
           <div style={{
             position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999,
             maxWidth: '400px', padding: '16px 20px',
-            background: '#fef2f2', border: '1px solid #fecaca',
+            background: c.bg, border: `1px solid ${c.border}`,
             borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
             display: 'flex', alignItems: 'flex-start', gap: '12px',
           }}>
-            <span style={{ fontSize: '24px', flexShrink: 0 }}>🚨</span>
+            <span style={{ fontSize: '24px', flexShrink: 0 }}>{c.icon}</span>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '13px', fontWeight: '700', color: '#991b1b', marginBottom: '4px' }}>Broadcast Message</div>
-              <div style={{ fontSize: '12px', color: '#7f1d1d' }}>{critical.message}</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: c.title, marginBottom: '4px' }}>{c.label}</div>
+              <div style={{ fontSize: '12px', color: c.text }}>{visible.message}</div>
             </div>
-            <button onClick={() => setDismissedBroadcast(critical.id)} style={{
+            <button onClick={() => setDismissedBroadcast(visible.id)} style={{
               background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: '18px', color: '#991b1b', padding: '0 0 0 8px', lineHeight: 1
+              fontSize: '18px', color: c.title, padding: '0 0 0 8px', lineHeight: 1
             }}>×</button>
           </div>
         );

@@ -241,13 +241,15 @@ def get_telemetry_history(
         bucket = "1 day"
 
     if bucket:
-        # Build correct date_trunc expression for each bucket width
         if bucket == "5 min":
             ts_expr = "to_timestamp(floor(extract(epoch FROM t.timestamp) / 300) * 300)"
+            bucket_sec = 300
         elif bucket == "1 hour":
             ts_expr = "date_trunc('hour', t.timestamp)"
+            bucket_sec = 3600
         else:
             ts_expr = "date_trunc('day', t.timestamp)"
+            bucket_sec = 86400
 
         before_clause = "AND t.timestamp < :before " if before else ""
         sql = text(f"""
@@ -269,10 +271,26 @@ def get_telemetry_history(
         if before:
             params["before"] = before
         rows = db.execute(sql, params).fetchall()
-        return [
-            {"timestamp": r.ts, "value": r.value, "quality": "good" if r.quality_good else "avg"}
-            for r in rows
-        ]
+
+        # Fill in null-valued buckets for missing time slots to show gaps
+        data_map = {r.ts: r for r in rows}
+        filled = []
+        bucket_delta = timedelta(seconds=bucket_sec)
+        if before:
+            ts_end = to
+            ts_start = frm
+        else:
+            ts_start = frm
+            ts_end = to
+        t = ts_end
+        while t >= ts_start and len(filled) < limit:
+            r = data_map.get(t)
+            if r:
+                filled.append({"timestamp": r.ts, "value": r.value, "quality": "good" if r.quality_good else "avg"})
+            else:
+                filled.append({"timestamp": t, "value": None, "quality": "gap"})
+            t -= bucket_delta
+        return filled
     else:
         q = db.query(TelemetryData).filter(
             TelemetryData.site_id == site_id,

@@ -1,4 +1,6 @@
-﻿import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
+import { Chart, registerables } from 'chart.js'
+Chart.register(...registerables)
 
 interface Site {
   id: number;
@@ -79,6 +81,8 @@ function App() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyCursor, setHistoryCursor] = useState<string | null>(null)
   const [broadcasts, setBroadcasts] = useState<BroadcastItem[]>([])
+  const historyChartRef = useRef<HTMLCanvasElement>(null)
+  const historyChartInstance = useRef<Chart | null>(null)
   
   // Modal State
   const [showModal, setShowModal] = useState(false)
@@ -388,6 +392,46 @@ function App() {
     } catch (err) { console.error(err); }
     finally { setHistoryLoading(false); }
   }
+
+  useEffect(() => {
+    if (!historyChartRef.current || !historyData) return;
+    if (historyChartInstance.current) {
+      historyChartInstance.current.destroy();
+      historyChartInstance.current = null;
+    }
+    const pts = historyData.slice().reverse();
+    const labels = pts.map(p => new Date(p.timestamp).toLocaleString());
+    const values = pts.map(p => p.value);
+    const ctx = historyChartRef.current.getContext('2d');
+    if (!ctx) return;
+    historyChartInstance.current = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Value',
+          data: values,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37,99,235,0.1)',
+          fill: true,
+          tension: 0.1,
+          spanGaps: false,
+          pointRadius: 2,
+          pointBackgroundColor: values.map(v => v == null ? 'transparent' : '#2563eb'),
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { maxTicksLimit: 10, font: { size: 10 } } },
+          y: { beginAtZero: false }
+        }
+      }
+    });
+    return () => { if (historyChartInstance.current) { historyChartInstance.current.destroy(); historyChartInstance.current = null; } };
+  }, [historyData])
 
   const fetchLiveData = useCallback(async (siteId: number) => {
     setLiveDataLoading(true);
@@ -1187,6 +1231,10 @@ function App() {
             </div>
 
             {historyData && (
+              <>
+              <div className="bg-brand-card border border-brand-border rounded-xl p-4 mb-6" style={{height:'280px'}}>
+                <canvas ref={historyChartRef} />
+              </div>
               <div className="bg-brand-card border border-brand-border rounded-xl overflow-hidden">
                 <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
                   <table className="w-full text-sm">
@@ -1223,6 +1271,7 @@ function App() {
                   </div>
                 )}
               </div>
+              </>
             )}
           </div>
         )}
