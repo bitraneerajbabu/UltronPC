@@ -86,6 +86,7 @@ function App() {
   const [newSiteLocation, setNewSiteLocation] = useState('')
   const [newSiteAmcExpiry, setNewSiteAmcExpiry] = useState('')
   const [isCreating, setIsCreating] = useState(false)
+  const [createError, setCreateError] = useState('')
   
   // Broadcast Modal State
   const [showBcModal, setShowBcModal] = useState(false)
@@ -170,13 +171,18 @@ function App() {
 
   const handleCreateSite = async (e: React.FormEvent) => {
     e.preventDefault()
+    setCreateError('')
     setIsCreating(true)
     try {
       const payload: any = { name: newSiteName, location: newSiteLocation };
       if (newSiteAmcExpiry) {
         payload.amc_expiry = new Date(newSiteAmcExpiry).toISOString();
       }
-      const adminKey = sessionStorage.getItem('rajapi_admin_key') || '';
+      const adminKey = sessionStorage.getItem('rajapi_admin_key');
+      if (!adminKey) {
+        setCreateError('Session expired — please log out and log back in.');
+        return;
+      }
       const res = await fetch('/api/v1/sites/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
@@ -190,10 +196,11 @@ function App() {
         setNewSiteLocation('')
         setNewSiteAmcExpiry('')
       } else {
-        console.error("Failed to create site")
+        const body = await res.text();
+        setCreateError(`Server error: ${body}`);
       }
     } catch (err) {
-      console.error(err)
+      setCreateError('Network error — could not reach server');
     } finally {
       setIsCreating(false)
     }
@@ -532,7 +539,7 @@ function App() {
         {/* Left Sidebar */}
         <aside className="w-64 flex flex-col py-4 px-3 gap-2">
           <button 
-            onClick={() => setShowModal(true)}
+            onClick={() => { setShowModal(true); setCreateError(''); }}
             className="flex items-center gap-3 bg-brand-btn hover:bg-brand-btn-hover text-white px-5 py-4 rounded-2xl font-medium transition-colors shadow-lg shadow-brand-btn/30 mb-4 w-48 border border-brand-btn/50"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1192,10 +1199,15 @@ function App() {
                 />
                 <p className="text-xs text-gray-500 mt-1">If left blank, it will default to 1 year from today.</p>
               </div>
+              {createError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3">
+                  {createError}
+                </div>
+              )}
               <div className="pt-4 flex justify-end gap-3">
                 <button 
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => { setShowModal(false); setCreateError(''); }}
                   className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
                 >
                   Cancel
