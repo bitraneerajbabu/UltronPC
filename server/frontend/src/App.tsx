@@ -148,6 +148,14 @@ function App() {
     });
   };
 
+  const adminFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
+    const adminKey = sessionStorage.getItem('rajapi_admin_key') || '';
+    return fetch(url, {
+      ...options,
+      headers: { ...options.headers, 'X-Admin-Key': adminKey } as Record<string, string>,
+    });
+  };
+
   const handleLogout = () => { sessionStorage.removeItem('rajapi_auth'); sessionStorage.removeItem('rajapi_admin_key'); setIsLoggedIn(false); }; const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
@@ -178,14 +186,13 @@ function App() {
       if (newSiteAmcExpiry) {
         payload.amc_expiry = new Date(newSiteAmcExpiry).toISOString();
       }
-      const adminKey = sessionStorage.getItem('rajapi_admin_key');
-      if (!adminKey) {
+      if (!sessionStorage.getItem('rajapi_admin_key')) {
         setCreateError('Session expired — please log out and log back in.');
         return;
       }
-      const res = await fetch('/api/v1/sites/', {
+      const res = await adminFetch('/api/v1/sites/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       })
       if (res.ok) {
@@ -208,7 +215,7 @@ function App() {
 
   const handleToggleStatus = async (siteId: number, currentStatus: boolean) => {
     try {
-      const res = await fetch(`/api/v1/sites/${siteId}/status?is_active=${!currentStatus}`, {
+      const res = await adminFetch(`/api/v1/sites/${siteId}/status?is_active=${!currentStatus}`, {
         method: 'PUT'
       });
       if (res.ok) {
@@ -225,7 +232,7 @@ function App() {
       return;
     }
     try {
-      const res = await fetch(`/api/v1/sites/${siteId}/renew`, {
+      const res = await adminFetch(`/api/v1/sites/${siteId}/renew`, {
         method: 'POST'
       });
       if (res.ok) {
@@ -240,11 +247,7 @@ function App() {
   const handleDeleteSite = async (siteId: number, siteName: string) => {
     if (!window.confirm(`Permanently delete "${siteName}" and ALL its telemetry data? This cannot be undone.`)) return;
     try {
-      const adminKey = sessionStorage.getItem('rajapi_admin_key') || '';
-      const res = await fetch(`/api/v1/sites/${siteId}`, {
-        method: 'DELETE',
-        headers: { 'X-Admin-Key': adminKey }
-      });
+      const res = await adminFetch(`/api/v1/sites/${siteId}`, { method: 'DELETE' });
       if (res.ok) {
         setSites(sites.filter(s => s.id !== siteId));
         if (activeSite?.id === siteId) { setActiveSite(null); setLiveData([]); }
@@ -258,7 +261,7 @@ function App() {
   const handleUpdateSite = async (id: number, name: string, location: string, notes: string) => {
     setSavingSite(true);
     try {
-      const res = await fetch(`/api/v1/sites/${id}`, {
+      const res = await adminFetch(`/api/v1/sites/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, location, notes })
@@ -283,7 +286,7 @@ function App() {
     if (!editExpiryVal) return;
     setSavingExpiry(true);
     try {
-      const res = await fetch(`/api/v1/sites/${siteId}/amc-expiry`, {
+      const res = await adminFetch(`/api/v1/sites/${siteId}/amc-expiry`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amc_expiry: new Date(editExpiryVal).toISOString() })
@@ -300,7 +303,7 @@ function App() {
   const handlePruneAll = async () => {
     if (!window.confirm('Delete all telemetry data older than 7 days from ALL sites? This will speed up rajapi.com.')) return;
     try {
-      const res = await fetch('/api/v1/sites/telemetry/prune-all?keep_days=7', { method: 'DELETE' });
+      const res = await adminFetch('/api/v1/sites/telemetry/prune-all?keep_days=7', { method: 'DELETE' });
       if (res.ok) {
         const data = await res.json();
         alert(`âœ… Pruned ${data.deleted_rows.toLocaleString()} old telemetry rows. rajapi.com should be faster now.`);
@@ -759,7 +762,7 @@ function App() {
                 <button disabled={getConnectionStatus(activeSite.last_sync).label !== 'Client Live'}
                   onClick={async () => {
                     if (!confirm(`Send "Restart Polling" to ${activeSite.name}?`)) return;
-                    const res = await fetch(`/api/v1/commands/sites/${activeSite.id}/command`, {
+                    const res = await adminFetch(`/api/v1/commands/sites/${activeSite.id}/command`, {
                       method: 'POST', headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ action: 'restart_polling' })
                     });
@@ -776,7 +779,7 @@ function App() {
                 <button disabled={getConnectionStatus(activeSite.last_sync).label !== 'Client Live'}
                   onClick={async () => {
                     if (!confirm(`âš ï¸ Reboot PC "${activeSite.name}"? It will restart immediately.`)) return;
-                    const res = await fetch(`/api/v1/commands/sites/${activeSite.id}/command`, {
+                    const res = await adminFetch(`/api/v1/commands/sites/${activeSite.id}/command`, {
                       method: 'POST', headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ action: 'reboot_system' })
                     });
@@ -914,7 +917,7 @@ function App() {
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <button onClick={async () => {
-                          await fetch(`/api/v1/broadcasts/${bc.id}/toggle`, {method: 'PUT'});
+                          await adminFetch(`/api/v1/broadcasts/${bc.id}/toggle`, {method: 'PUT'});
                           const res = await fetch('/api/v1/broadcasts/');
                           setBroadcasts(await res.json());
                         }} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
@@ -931,7 +934,7 @@ function App() {
                         }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-brand-btn-hover hover:bg-brand-btn text-white transition-colors mr-1">Edit</button>
                         <button onClick={async () => {
                           if (!confirm('Delete this broadcast?')) return;
-                          await fetch(`/api/v1/broadcasts/${bc.id}`, {method: 'DELETE'});
+                          await adminFetch(`/api/v1/broadcasts/${bc.id}`, {method: 'DELETE'});
                           setBroadcasts(broadcasts.filter(b => b.id !== bc.id));
                         }} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-100 text-red-600 hover:bg-red-800/50 transition-colors">Delete</button>
                       </div>
@@ -975,7 +978,7 @@ function App() {
                           onClick={async () => {
                             if (!confirm(`Send "Restart Polling" to ${site.name}?`)) return;
                             try {
-                              const res = await fetch(`/api/v1/commands/sites/${site.id}/command`, {
+                              const res = await adminFetch(`/api/v1/commands/sites/${site.id}/command`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ action: 'restart_polling' })
@@ -990,7 +993,7 @@ function App() {
                           onClick={async () => {
                             if (!confirm(`âš ï¸ Send "Reboot System" to ${site.name}? The PC will restart immediately.`)) return;
                             try {
-                              const res = await fetch(`/api/v1/commands/sites/${site.id}/command`, {
+                              const res = await adminFetch(`/api/v1/commands/sites/${site.id}/command`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ action: 'reboot_system' })
@@ -1006,7 +1009,7 @@ function App() {
                             if (!confirm(`â˜ ï¸ Send "Factory Reset" to ${site.name}? ALL data on that PC will be erased!`)) return;
                             if (!confirm(`ARE YOU SURE? This will DESTROY all local data on ${site.name}.`)) return;
                             try {
-                              const res = await fetch(`/api/v1/commands/sites/${site.id}/command`, {
+                              const res = await adminFetch(`/api/v1/commands/sites/${site.id}/command`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ action: 'factory_reset' })
@@ -1244,7 +1247,7 @@ function App() {
               if (bcExpiry) payload.expires_at = new Date(bcExpiry).toISOString();
               const url = editingBc ? `/api/v1/broadcasts/${editingBc.id}` : '/api/v1/broadcasts/';
               const method = editingBc ? 'PUT' : 'POST';
-              await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+              await adminFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
               setShowBcModal(false);
               setBcMessage('');
               setBcType('info');
@@ -1334,7 +1337,7 @@ function App() {
             <button onClick={async () => {
               if (!lockModal) return;
               const status = lockModal.status === 'unlocked' ? 'unlocked' : 'manual_lock';
-              await fetch(`/api/v1/sites/${lockModal.id}/lock`, {
+              await adminFetch(`/api/v1/sites/${lockModal.id}/lock`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ lock_status: status, lock_reason: lockModal.reason })
