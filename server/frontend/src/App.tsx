@@ -147,7 +147,7 @@ function App() {
     });
   };
 
-  const handleLogout = () => { sessionStorage.removeItem('rajapi_auth'); setIsLoggedIn(false); }; const handleLogin = async (e: React.FormEvent) => {
+  const handleLogout = () => { sessionStorage.removeItem('rajapi_auth'); sessionStorage.removeItem('rajapi_admin_key'); setIsLoggedIn(false); }; const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       const res = await fetch('/api/v1/auth/login', {
@@ -157,6 +157,7 @@ function App() {
       })
       if (res.ok) {
         sessionStorage.setItem('rajapi_auth', 'true')
+        sessionStorage.setItem('rajapi_admin_key', password)
         setIsLoggedIn(true)
         setLoginError('')
       } else {
@@ -175,10 +176,10 @@ function App() {
       if (newSiteAmcExpiry) {
         payload.amc_expiry = new Date(newSiteAmcExpiry).toISOString();
       }
-      
+      const adminKey = sessionStorage.getItem('rajapi_admin_key') || '';
       const res = await fetch('/api/v1/sites/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
         body: JSON.stringify(payload)
       })
       if (res.ok) {
@@ -232,12 +233,19 @@ function App() {
   const handleDeleteSite = async (siteId: number, siteName: string) => {
     if (!window.confirm(`Permanently delete "${siteName}" and ALL its telemetry data? This cannot be undone.`)) return;
     try {
-      const res = await fetch(`/api/v1/sites/${siteId}`, { method: 'DELETE' });
+      const adminKey = sessionStorage.getItem('rajapi_admin_key') || '';
+      const res = await fetch(`/api/v1/sites/${siteId}`, {
+        method: 'DELETE',
+        headers: { 'X-Admin-Key': adminKey }
+      });
       if (res.ok) {
         setSites(sites.filter(s => s.id !== siteId));
         if (activeSite?.id === siteId) { setActiveSite(null); setLiveData([]); }
+      } else {
+        const body = await res.text();
+        alert(`Delete failed: ${body}`);
       }
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); alert('Network error — could not delete site'); }
   };
 
   const handleUpdateSite = async (id: number, name: string, location: string, notes: string) => {
@@ -661,68 +669,65 @@ function App() {
                     </div>
 
                     {/* Quick Actions (Hover) */}
-                    <div className="w-32 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {/* Edit Expiry */}
-                      {editingExpiry === site.id ? (
-                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                          <input type="date" value={editExpiryVal} onChange={e => setEditExpiryVal(e.target.value)}
-                            className="bg-brand-bg border border-brand-border rounded text-xs text-gray-800 px-1 py-0.5 w-28"
-                          />
-                          <button onClick={() => handleSaveExpiry(site.id)} disabled={savingExpiry}
-                            className="px-1.5 py-0.5 bg-brand-btn hover:bg-brand-btn-hover text-white rounded text-xs font-bold"
-                          >{savingExpiry ? '...' : 'âœ“'}</button>
-                          <button onClick={() => setEditingExpiry(null)} className="text-gray-600 hover:text-gray-800 text-xs px-1">âœ•</button>
-                        </div>
-                      ) : (
-                        <>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setEditingExpiry(site.id); setEditExpiryVal(site.amc_expiry ? site.amc_expiry.split('T')[0] : ''); }}
-                            className="p-2 rounded-full hover:bg-brand-border/50 text-gray-600 hover:text-yellow-400 transition-colors"
-                            title="Edit AMC Expiry"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleToggleStatus(site.id, site.is_active); }}
-                            className="p-2 rounded-full hover:bg-brand-border/50 text-gray-600 hover:text-gray-800 transition-colors"
-                            title={site.is_active ? "Suspend" : "Activate"}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          </button>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleRenewAmc(site.id); }}
-                            className="p-2 rounded-full hover:bg-brand-border/50 text-gray-600 hover:text-blue-400 transition-colors"
-                            title="Renew AMC (generates new key)"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setEditSiteModal({ id: site.id, name: site.name, location: site.location || '', notes: site.notes || '' }); }}
-                            className="p-2 rounded-full hover:bg-brand-border/50 text-gray-600 hover:text-brand-btn transition-colors"
-                            title="Edit Name/Location"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteSite(site.id, site.name); }}
-                            className="p-2 rounded-full hover:bg-red-100 text-gray-600 hover:text-red-600 transition-colors"
-                            title="Delete Site"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </>
-                      )}
-                    </div>
+                    {editingExpiry === site.id ? (
+                      <div className="w-32 flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                        <input type="date" value={editExpiryVal} onChange={e => setEditExpiryVal(e.target.value)}
+                          className="bg-brand-bg border border-brand-border rounded text-xs text-gray-800 px-1 py-0.5 w-28"
+                        />
+                        <button onClick={() => handleSaveExpiry(site.id)} disabled={savingExpiry}
+                          className="px-1.5 py-0.5 bg-brand-btn hover:bg-brand-btn-hover text-white rounded text-xs font-bold"
+                        >{savingExpiry ? '...' : '✓'}</button>
+                        <button onClick={() => setEditingExpiry(null)} className="text-gray-600 hover:text-gray-800 text-xs px-1">✕</button>
+                      </div>
+                    ) : (
+                      <div className="w-32 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditingExpiry(site.id); setEditExpiryVal(site.amc_expiry ? site.amc_expiry.split('T')[0] : ''); }}
+                          className="p-2 rounded-full hover:bg-brand-border/50 text-gray-600 hover:text-yellow-400 transition-colors"
+                          title="Edit AMC Expiry"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleToggleStatus(site.id, site.is_active); }}
+                          className="p-2 rounded-full hover:bg-brand-border/50 text-gray-600 hover:text-gray-800 transition-colors"
+                          title={site.is_active ? "Suspend" : "Activate"}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleRenewAmc(site.id); }}
+                          className="p-2 rounded-full hover:bg-brand-border/50 text-gray-600 hover:text-blue-400 transition-colors"
+                          title="Renew AMC (generates new key)"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setEditSiteModal({ id: site.id, name: site.name, location: site.location || '', notes: site.notes || '' }); }}
+                          className="p-2 rounded-full hover:bg-brand-border/50 text-gray-600 hover:text-brand-btn transition-colors"
+                          title="Edit Name/Location"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteSite(site.id, site.name); }}
+                      className="ml-2 p-2 rounded-full hover:bg-red-100 text-red-400 hover:text-red-600 transition-colors"
+                      title="Delete Site"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
                 ))}
               </div>
