@@ -14,6 +14,7 @@ export const SettingsScreen = () => {
   const [fwLoading, setFwLoading] = useState(false);
   const [fwProgress, setFwProgress] = useState(null);
   const [fwChecking, setFwChecking] = useState(false);
+  const [customUrl, setCustomUrl] = useState('');
 
   const [formData, setFormData] = useState({
     plantName: '', plantAddress: '', plantLogo: '',
@@ -68,6 +69,16 @@ export const SettingsScreen = () => {
       showToast('Download started…');
       setFwProgress({ state: 'downloading', percent: 0, message: 'Starting download…' });
     } catch { showToast('Failed to start download.', 'error'); }
+  };
+
+  const startUrlDownload = async () => {
+    if (!customUrl.trim()) { showToast('Paste a download URL first.', 'warn'); return; }
+    try {
+      const res = await authFetch(`${API_BASE}/settings/firmware/download-url`, { method: 'POST', body: JSON.stringify({ url: customUrl.trim() }) });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Failed'); }
+      showToast('Download started…');
+      setFwProgress({ state: 'downloading', percent: 0, message: 'Starting download…' });
+    } catch (e) { showToast(`Download failed: ${e.message}`, 'error'); }
   };
 
   useEffect(() => {
@@ -224,17 +235,13 @@ export const SettingsScreen = () => {
       {/* Software Update */}
       <div style={{ ...GLASS_CARD, padding: '20px' }}>
         <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>Software Update</div>
-        {!fwInfo && !fwChecking && (
-          <button style={BTN.primary} onClick={checkFirmware}>Check for Updates</button>
-        )}
-        {fwChecking && <div style={{ fontSize: '12px', color: T.textMuted }}>Checking for updates…</div>}
-        {fwInfo && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '12px' }}>
           <div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '12px' }}>
-              <div>
-                <div style={labelS}>Current Version</div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: T.text }}>{fwInfo.current_version}</div>
-              </div>
+            <div style={labelS}>Current Version</div>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: T.text }}>{appInfo?.version || '...'}</div>
+          </div>
+          {fwInfo && (
+            <>
               <div>
                 <div style={labelS}>Latest Version</div>
                 <div style={{ fontSize: '13px', fontWeight: '700', color: fwInfo.update_available ? '#f59e0b' : '#10b981' }}>{fwInfo.latest_version}</div>
@@ -245,41 +252,48 @@ export const SettingsScreen = () => {
                   {fwInfo.update_available ? 'Update Available' : 'Up to Date'}
                 </div>
               </div>
-            </div>
-            {fwInfo.update_available && (
-              <>
-                {fwInfo.release_notes && (
-                  <div style={{ marginBottom: '10px' }}>
-                    <div style={labelS}>Release Notes</div>
-                    <div style={{ fontSize: '11px', color: T.textMuted, maxHeight: '100px', overflowY: 'auto', background: T.primaryBg, padding: '8px', borderRadius: '6px', whiteSpace: 'pre-wrap' }}>{fwInfo.release_notes}</div>
-                  </div>
-                )}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  {!fwProgress || fwProgress.state === 'idle' ? (
-                    <button style={BTN.accent} onClick={startFirmwareDownload}>Download Update</button>
-                  ) : fwProgress.state === 'downloading' ? (
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: T.textMuted, marginBottom: '4px' }}>
-                        <span>{fwProgress.message}</span>
-                        <span>{fwProgress.percent}%</span>
-                      </div>
-                      <div style={{ width: '100%', height: '6px', background: T.primaryBg, borderRadius: '3px', overflow: 'hidden' }}>
-                        <div style={{ width: `${fwProgress.percent}%`, height: '100%', background: T.primary, borderRadius: '3px', transition: 'width 0.3s' }} />
-                      </div>
-                    </div>
-                  ) : null}
-                  {fwProgress?.state === 'done' && (
-                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#10b981' }}>{fwProgress.message}</div>
-                  )}
-                  {fwProgress?.state === 'error' && (
-                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#ef4444' }}>{fwProgress.message}</div>
-                  )}
-                </div>
-              </>
-            )}
-            <button style={{ ...BTN.ghost, marginTop: '10px' }} onClick={() => { setFwInfo(null); setFwProgress(null); }}>Close</button>
+            </>
+          )}
+        </div>
+        {!fwInfo && !fwChecking && (
+          <button style={BTN.ghost} onClick={checkFirmware} style={{ ...BTN.ghost, marginBottom: '12px' }}>Check for Updates</button>
+        )}
+        {fwChecking && <div style={{ fontSize: '12px', color: T.textMuted, marginBottom: '12px' }}>Checking for updates…</div>}
+        {fwInfo?.update_available && fwInfo.release_notes && (
+          <div style={{ marginBottom: '10px' }}>
+            <div style={labelS}>Release Notes</div>
+            <div style={{ fontSize: '11px', color: T.textMuted, maxHeight: '80px', overflowY: 'auto', background: T.primaryBg, padding: '8px', borderRadius: '6px', whiteSpace: 'pre-wrap' }}>{fwInfo.release_notes}</div>
           </div>
         )}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
+          {(!fwProgress || fwProgress.state === 'idle') && (
+            <button style={BTN.primary} onClick={startFirmwareDownload}>Download Latest</button>
+          )}
+          {fwProgress?.state === 'downloading' && (
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: T.textMuted, marginBottom: '4px' }}>
+                <span>{fwProgress.message}</span>
+                <span>{fwProgress.percent}%</span>
+              </div>
+              <div style={{ width: '100%', height: '6px', background: T.primaryBg, borderRadius: '3px', overflow: 'hidden' }}>
+                <div style={{ width: `${fwProgress.percent}%`, height: '100%', background: T.primary, borderRadius: '3px', transition: 'width 0.3s' }} />
+              </div>
+            </div>
+          )}
+          {fwProgress?.state === 'done' && (
+            <div style={{ fontSize: '12px', fontWeight: '600', color: '#10b981' }}>{fwProgress.message}</div>
+          )}
+          {fwProgress?.state === 'error' && (
+            <div style={{ fontSize: '12px', fontWeight: '600', color: '#ef4444' }}>{fwProgress.message}</div>
+          )}
+        </div>
+        <div style={{ borderTop: `1px solid ${T.primaryBorder}`, paddingTop: '12px' }}>
+          <div style={{ fontSize: '12px', fontWeight: '600', color: T.textMuted, marginBottom: '6px' }}>Or paste a GitHub release URL:</div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input type="text" value={customUrl} onChange={e => setCustomUrl(e.target.value)} placeholder="https://github.com/.../releases/download/v1.0.10/UltrON.exe" style={{ ...INP, flex: 1 }} />
+            <button style={BTN.primary} onClick={startUrlDownload} disabled={fwProgress?.state === 'downloading'}>Download & Install</button>
+          </div>
+        </div>
       </div>
 
       {/* Settings Form */}

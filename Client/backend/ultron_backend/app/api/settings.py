@@ -367,39 +367,44 @@ _fw_download_state: dict = {
 }
 
 
-def _do_firmware_download():
-    """Run in a background thread: download latest UltrON.exe from GitHub."""
+def _do_firmware_download(custom_url=None):
+    """Run in a background thread: download UltrON.exe from GitHub or a custom URL."""
     global _fw_download_state
     import urllib.request
-    import json as _json
     import ssl
     import sys
     import os
-    import shutil
 
     _fw_download_state = {"state": "downloading", "percent": 0, "message": "Fetching release info…", "restart_required": False}
 
     try:
         ctx = ssl._create_unverified_context()
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-        req = urllib.request.Request(url, headers={"User-Agent": "UltrON-Updater/1.0", "Accept": "application/vnd.github.v3+json"})
-        with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
-            data = _json.loads(resp.read().decode("utf-8"))
 
-        download_url = ""
-        for asset in data.get("assets", []):
-            if asset.get("name") == "UltrON.exe":
-                download_url = asset["browser_download_url"]
-                break
+        if custom_url:
+            download_url = custom_url
+            tag_name = "custom"
+            _fw_download_state["message"] = "Downloading from custom URL…"
+        else:
+            import json as _json
+            url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+            req = urllib.request.Request(url, headers={"User-Agent": "UltrON-Updater/1.0", "Accept": "application/vnd.github.v3+json"})
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+                data = _json.loads(resp.read().decode("utf-8"))
 
-        if not download_url:
-            _fw_download_state = {"state": "error", "percent": 0, "message": "UltrON.exe not found in latest release assets.", "restart_required": False}
-            return
+            download_url = ""
+            for asset in data.get("assets", []):
+                if asset.get("name") == "UltrON.exe":
+                    download_url = asset["browser_download_url"]
+                    break
 
-        _fw_download_state["message"] = f"Downloading UltrON.exe…"
+            if not download_url:
+                _fw_download_state = {"state": "error", "percent": 0, "message": "UltrON.exe not found in latest release assets.", "restart_required": False}
+                return
+            tag_name = data.get("tag_name", "unknown")
+            _fw_download_state["message"] = "Downloading UltrON.exe…"
+
         _fw_download_state["percent"] = 10
 
-        # Resolve install directory (next to running exe or cwd)
         if getattr(sys, "frozen", False):
             install_dir = os.path.dirname(sys.executable)
         else:
@@ -425,14 +430,13 @@ def _do_firmware_download():
                         _fw_download_state["percent"] = pct
                         _fw_download_state["message"] = f"Downloading… {downloaded // 1024}KB / {total // 1024}KB"
 
-        # Write pending flag
         with open(flag_path, "w") as f:
-            f.write(data.get("tag_name", "unknown"))
+            f.write(tag_name)
 
         _fw_download_state = {
             "state": "done",
             "percent": 100,
-            "message": f"Download complete. Restart UltrON to apply the update.",
+            "message": "Download complete. Restart UltrON to apply the update.",
             "restart_required": True,
         }
 
@@ -452,6 +456,24 @@ async def start_firmware_download():
     t = _threading.Thread(target=_do_firmware_download, daemon=True)
     t.start()
     audit.info("Firmware background download started")
+    return {"state": "downloading", "percent": 0, "message": "Download started…", "restart_required": False}
+
+
+@router.post("/firmware/download-url", dependencies=[Depends(require_admin)])
+async def start_firmware_download_url(payload: dict):
+    """
+    Start a background download of UltrON.exe from a custom URL.
+    Body: { "url": "https://..." }
+    """
+    global _fw_download_state
+    custom_url = (payload.get("url") or "").strip()
+    if not custom_url:
+        raise HTTPException(status_code=400, detail="URL is required")
+    if _fw_download_state.get("state") == "downloading":
+        raise HTTPException(status_code=400, detail="A download is already in progress")
+    t = _threading.Thread(target=_do_firmware_download, args=(custom_url,), daemon=True)
+    t.start()
+    audit.info(f"Firmware custom URL download started: {custom_url[:80]}")
     return {"state": "downloading", "percent": 0, "message": "Download started…", "restart_required": False}
 
 
