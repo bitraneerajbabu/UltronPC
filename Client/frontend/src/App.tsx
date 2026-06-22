@@ -14,6 +14,10 @@ import { CPCBSettingsScreen } from './screens/CPCBSettingsScreen';
 import { CPCBMappingScreen } from './screens/CPCBMappingScreen';
 import { CPCBLogsScreen } from './screens/CPCBLogsScreen';
 import { CPCBExportScreen } from './screens/CPCBExportScreen';
+import { CPCB } from './screens/CPCB';
+import { CalibrationScreen } from './screens/CalibrationScreen';
+import { WindroseScreen } from './screens/WindroseScreen';
+import { AnalyticalReportsScreen } from './screens/AnalyticalReportsScreen';
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 const DashboardIcon = () => (
@@ -111,6 +115,36 @@ const CPCBIcon = () => (
 );
 
 
+const CalibrationIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    <polyline points="9 12 11 14 15 10" />
+  </svg>
+);
+
+const WindroseIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2v7" />
+    <path d="M12 15v7" />
+    <path d="M2 12h7" />
+    <path d="M15 12h7" />
+    <path d="M5.64 5.64l4.95 4.95" />
+    <path d="M13.41 13.41l4.95 4.95" />
+    <path d="M18.36 5.64l-4.95 4.95" />
+    <path d="M10.59 13.41l-4.95 4.95" />
+  </svg>
+);
+
+const AnalyticalReportsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <rect x="4" y="14" width="3" height="6" />
+    <rect x="10.5" y="8" width="3" height="12" />
+    <rect x="17" y="4" width="3" height="16" />
+    <line x1="2" y1="20" x2="22" y2="20" />
+  </svg>
+);
+
 // ─── Nav definitions ──────────────────────────────────────────────────────────
 const ALL_NAV = [
   { key: 'dashboardScreen', label: 'Dashboard Overview', Icon: DashboardIcon, roles: ['admin', 'client'] },
@@ -125,6 +159,10 @@ const ALL_NAV = [
   { key: 'cpcbMappingScreen', label: 'CPCB Mappings', Icon: CPCBIcon, roles: ['admin'] },
   { key: 'cpcbExportScreen', label: 'CPCB Export', Icon: CPCBIcon, roles: ['admin'] },
   { key: 'cpcbLogsScreen', label: 'CPCB Logs', Icon: CPCBIcon, roles: ['admin'] },
+  { key: 'cpcbScreen', label: 'CPCB', Icon: CPCBIcon, roles: ['admin'] },
+  { key: 'calibrationScreen', label: 'Calibration', Icon: CalibrationIcon, roles: ['admin'] },
+  { key: 'windroseScreen', label: 'Windrose', Icon: WindroseIcon, roles: ['admin'] },
+  { key: 'analyticalReportsScreen', label: 'Analytical Reports', Icon: AnalyticalReportsIcon, roles: ['admin'] },
 ];
 
 
@@ -260,7 +298,7 @@ function App() {
   // Ensure active screen is accessible by this role
   useEffect(() => {
     if (currentUserRole === 'client') {
-      const allowedScreens = ['dashboardScreen', 'trendsScreen', 'reportsScreen'];
+      const allowedScreens = ['dashboardScreen', 'trendsScreen', 'reportsScreen', 'calibrationScreen', 'windroseScreen', 'analyticalReportsScreen'];
       if (!allowedScreens.includes(activeScreen)) {
         setActiveScreen('dashboardScreen');
       }
@@ -499,6 +537,10 @@ function App() {
       case 'cpcbMappingScreen': return currentUserRole === 'admin' ? <CPCBMappingScreen /> : <DashboardScreen />;
       case 'cpcbExportScreen': return currentUserRole === 'admin' ? <CPCBExportScreen /> : <DashboardScreen />;
       case 'cpcbLogsScreen': return currentUserRole === 'admin' ? <CPCBLogsScreen /> : <DashboardScreen />;
+      case 'cpcbScreen': return currentUserRole === 'admin' ? <CPCB /> : <DashboardScreen />;
+      case 'calibrationScreen': return currentUserRole === 'admin' ? <CalibrationScreen /> : <DashboardScreen />;
+      case 'windroseScreen': return currentUserRole === 'admin' ? <WindroseScreen /> : <DashboardScreen />;
+      case 'analyticalReportsScreen': return <AnalyticalReportsScreen />;
       default: return <DashboardScreen />;
     }
   };

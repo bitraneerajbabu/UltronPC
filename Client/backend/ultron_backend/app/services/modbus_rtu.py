@@ -115,7 +115,7 @@ class ModbusRTUReader:
                 connected = await client.connect()
                 if not connected:
                     log.warning(f"Parameter-level Modbus RTU connect failed to {target_port}")
-                    return None, "comms_fail"
+                    return None, "E"
                 
                 if register_type == "holding":
                     result = await client.read_holding_registers(
@@ -135,36 +135,36 @@ class ModbusRTUReader:
                     )
                 else:
                     client.close()
-                    return None, "bad"
+                    return None, "U"
 
                 client.close()
 
                 if result.isError():
-                    return None, "sensor_fail"
+                    return None, "E"
 
                 if hasattr(result, "registers") and result.registers is not None:
                     regs = list(result.registers)
                 elif hasattr(result, "bits") and result.bits is not None:
                     regs = [int(b) for b in result.bits]
                 else:
-                    return None, "sensor_fail"
+                    return None, "E"
 
                 raw_val = _decode_registers(regs, data_type, byte_order)
                 if raw_val is None:
-                    return None, "sensor_fail"
+                    return None, "E"
 
                 value = (raw_val * scale_factor) + offset
-                return value, "good"
+                return value, "U"
 
             except Exception as e:
                 log.error(f"Parameter-level RTU error on port {target_port}: {e}")
                 if client:
                     client.close()
-                return None, "comms_fail"
+                return None, "E"
         else:
             async with self._lock:
                 if not await self._ensure_connected():
-                    return None, "comms_fail"
+                    return None, "E"
 
                 try:
                     if register_type == "holding":
@@ -185,33 +185,33 @@ class ModbusRTUReader:
                         )
                     else:
                         log.warning(f"Unknown register_type '{register_type}'")
-                        return None, "bad"
+                        return None, "U"
 
                     if result.isError():
-                        return None, "sensor_fail"
+                        return None, "E"
 
                     if hasattr(result, "registers") and result.registers is not None:
                         regs = list(result.registers)
                     elif hasattr(result, "bits") and result.bits is not None:
                         regs = [int(b) for b in result.bits]
                     else:
-                        return None, "sensor_fail"
+                        return None, "E"
 
                     raw_val = _decode_registers(regs, data_type, byte_order)
                     if raw_val is None:
-                        return None, "sensor_fail"
+                        return None, "E"
 
                     value = (raw_val * scale_factor) + offset
-                    return value, "good"
+                    return value, "U"
 
                 except ModbusException as e:
                     log.error(f"Modbus RTU read error (slave={slave_id}, addr={register_address}): {e}")
                     await self.close()
-                    return None, "comms_fail"
+                    return None, "E"
                 except Exception as e:
                     log.error(f"Unexpected RTU error (slave={slave_id}, addr={register_address}): {e}")
                     await self.close()
-                    return None, "comms_fail"
+                    return None, "E"
                 finally:
                     # Give the RS485 bus a small inter-frame gap (3.5 character times minimum)
                     await asyncio.sleep(0.1)

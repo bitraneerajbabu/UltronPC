@@ -148,8 +148,8 @@ export const ReportsScreen = () => {
       const url = `${API_BASE}/trends/chart-data?parameter_ids=${paramIds}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${avgType}`;
       const res = await authFetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const resData = await res.json();
-      const seriesList = resData.series || [];
+      const resData: any = await res.json();
+      const seriesList: any[] = resData.series || [];
       if (!seriesList.length || !seriesList[0].labels.length) {
         showToast('No telemetry data for selected range.', 'warn');
         return null;

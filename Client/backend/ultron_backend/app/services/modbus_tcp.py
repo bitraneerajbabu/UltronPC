@@ -137,7 +137,7 @@ class ModbusTCPReader:
     ) -> tuple[Optional[float], str]:
         """
         Read one parameter.
-        Returns (value, quality) where quality is: 'good' | 'comms_fail' | 'sensor_fail'
+        Returns (value, quality) where quality is: 'U' | 'E'
         """
         target_host = host if host else self.host
         target_port = port if port else self.port
@@ -157,14 +157,14 @@ class ModbusTCPReader:
                 connected = await client.connect()
                 if not connected:
                     log.warning(f"Parameter-level Modbus TCP connect failed to {target_host}:{target_port}")
-                    return None, "comms_fail"
+                    return None, "E"
                 cleanup_client = True
             except Exception as e:
                 log.error(f"Parameter-level Modbus TCP connect exception {target_host}:{target_port}: {e}")
-                return None, "comms_fail"
+                return None, "E"
         else:
             if not await self._ensure_connected():
-                return None, "comms_fail"
+                return None, "E"
             client = self._client
 
         try:
@@ -188,13 +188,13 @@ class ModbusTCPReader:
                 log.warning(f"Unknown register_type '{register_type}'")
                 if cleanup_client:
                     client.close()
-                return None, "bad"
+                return None, "U"
 
             if result.isError():
                 log.warning(f"Modbus error response at addr {register_address}: {result}")
                 if cleanup_client:
                     client.close()
-                return None, "sensor_fail"
+                return None, "E"
 
             # Coils/discrete inputs use result.bits; registers use result.registers
             if hasattr(result, "registers") and result.registers is not None:
@@ -204,7 +204,7 @@ class ModbusTCPReader:
             else:
                 if cleanup_client:
                     client.close()
-                return None, "sensor_fail"
+                return None, "E"
 
             raw_val = _decode_registers(regs, data_type, byte_order)
 
@@ -212,10 +212,10 @@ class ModbusTCPReader:
                 client.close()
 
             if raw_val is None:
-                return None, "sensor_fail"
+                return None, "E"
 
             value = (raw_val * scale_factor) + offset
-            return value, "good"
+            return value, "U"
 
         except ModbusException as e:
             log.error(f"Modbus TCP read error (addr={register_address}): {e}")
@@ -223,14 +223,14 @@ class ModbusTCPReader:
                 client.close()
             else:
                 await self.close()   # force reconnect on next call
-            return None, "comms_fail"
+            return None, "E"
         except Exception as e:
             log.error(f"Unexpected error reading Modbus TCP (addr={register_address}): {e}")
             if cleanup_client:
                 client.close()
             else:
                 await self.close()
-            return None, "comms_fail"
+            return None, "E"
 
     async def read_all_parameters(self, parameters: list[dict]) -> list[dict]:
         """

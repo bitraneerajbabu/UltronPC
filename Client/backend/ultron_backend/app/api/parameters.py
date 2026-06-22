@@ -263,7 +263,7 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
                 value = res[0]["value"]
                 quality = res[0]["quality"]
             else:
-                value, quality = None, "sensor_fail"
+                value, quality = None, "E"
                 
         elif protocol == "csv":
             from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher
@@ -293,7 +293,7 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
                 value = res[0]["value"]
                 quality = res[0]["quality"]
             else:
-                value, quality = None, "sensor_fail"
+                value, quality = None, "E"
                 
         else:
             return {
@@ -307,7 +307,7 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
             raw_value = round(raw_value, 4)
             value = round(value, 2)
             
-        if quality in ("good", "out_of_range", "uncertain"):
+        if quality in ("U", "O"):
             return {
                 "success": True,
                 "value": value,

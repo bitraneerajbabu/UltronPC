@@ -22,6 +22,11 @@ from app.core.logger import get_logger
 
 log = get_logger("ultron.security")
 
+if not settings.SECRET_KEY:
+    raise ValueError(
+        "SECRET_KEY is not configured. Set a valid SECRET_KEY in your environment or .env file."
+    )
+
 # ─── OAuth2 Scheme ────────────────────────────────────────────────────────────
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 

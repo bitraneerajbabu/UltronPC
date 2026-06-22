@@ -30,6 +30,7 @@ from app.api import users as users_api
 from app.api import led as led_api
 from app.api import broadcasts as broadcasts_api
 from app.api import cpcb as cpcb_api
+from app.api import calibration as calibration_api
 
 log = get_logger("ultron.main")
 
@@ -257,6 +258,7 @@ app.include_router(license.router,      prefix=PREFIX)
 app.include_router(led_api.router,      prefix=PREFIX)  # LED Board LAN endpoint
 app.include_router(broadcasts_api.router, prefix=PREFIX)
 app.include_router(cpcb_api.router, prefix=PREFIX)
+app.include_router(calibration_api.router, prefix=PREFIX)
 
 # ─── WebSocket Live Push ──────────────────────────────────────────────────────
 @app.websocket("/ws/live")

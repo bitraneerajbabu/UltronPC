@@ -24,6 +24,16 @@ export const TrendsScreen = () => {
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
 
+  // Cleanup chart instance on unmount
+  useEffect(() => {
+    return () => {
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.destroy();
+        chartInstanceRef.current = null;
+      }
+    };
+  }, []);
+
   // Set default filter dropdown selections
   useEffect(() => {
     if (stations.length && !stationId) {

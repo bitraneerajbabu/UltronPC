@@ -256,7 +256,7 @@ export const SettingsScreen = () => {
           )}
         </div>
         {!fwInfo && !fwChecking && (
-          <button style={BTN.ghost} onClick={checkFirmware} style={{ ...BTN.ghost, marginBottom: '12px' }}>Check for Updates</button>
+          <button onClick={checkFirmware} style={{ ...BTN.ghost, marginBottom: '12px' }}>Check for Updates</button>
         )}
         {fwChecking && <div style={{ fontSize: '12px', color: T.textMuted, marginBottom: '12px' }}>Checking for updates…</div>}
         {fwInfo?.update_available && fwInfo.release_notes && (

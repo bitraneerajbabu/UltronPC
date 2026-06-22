@@ -441,7 +441,7 @@ export const ApiMappingsScreen = () => {
 
         {/* ─── 3. Central Sync (rajapi.com) ─── */}
         <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '20px' }}>
-          {sectionHeader(3, 'Central Sync (rajapi.com)', 'Default telemetry posting to rajapi.com central server — every 60 seconds', '#7c3aed')}
+          {sectionHeader(3, 'Central Sync (rajapi.com)', 'Default telemetry posting to rajapi.com central server — every 60 seconds', '#7c3aed', null)}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderRadius: '8px', background: rajapiStatus === 'active' ? '#f0fdf4' : '#fef2f2', border: `1px solid ${rajapiStatus === 'active' ? '#bbf7d0' : '#fecaca'}` }}>
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: rajapiStatus === 'active' ? '#22c55e' : '#ef4444' }} />

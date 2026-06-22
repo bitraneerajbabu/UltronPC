@@ -79,6 +79,13 @@ async def build_led_response(db, channel_ids: list[int]) -> list[dict]:
         log.debug(f"[LED] No active mappings for LED servers {server_ids}")
         return []
 
+    # Batch load all LiveData at once to avoid N+1 queries
+    live_param_ids = [m.parameter_id for m in mappings]
+    live_result = await db.execute(
+        select(LiveData).where(LiveData.parameter_id.in_(live_param_ids))
+    )
+    live_by_param_id = {ld.parameter_id: ld for ld in live_result.scalars().all()}
+
     payload = []
 
     for mapping in mappings:
@@ -124,10 +131,7 @@ async def build_led_response(db, channel_ids: list[int]) -> list[dict]:
         )
 
         # ── Live Value ────────────────────────────────────────────
-        ld_res = await db.execute(
-            select(LiveData).where(LiveData.parameter_id == mapping.parameter_id)
-        )
-        live = ld_res.scalars().first()
+        live = live_by_param_id.get(mapping.parameter_id)
 
         if live and live.value is not None:
             try:

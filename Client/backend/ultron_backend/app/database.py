@@ -57,7 +57,7 @@ async def init_db():
     Create all tables, and ensure schema migrations are applied.
     """
     # Import all models so SQLAlchemy sees them
-    from app.models import station, device, parameter, telemetry, user, server_config, cpcb  # noqa: F401
+    from app.models import station, device, parameter, telemetry, user, server_config, cpcb, calibration  # noqa: F401
     from sqlalchemy import text
 
     log.info("Initialising database tables …")
@@ -136,6 +136,19 @@ async def init_db():
                     log.info("Migrated: added 'csv_filename_pattern' column to devices")
         except Exception as mig_err:
             log.warning(f"devices migration skipped: {mig_err}")
+
+        # 2.7 Migrate: add calibration_mode / maintenance_mode to cpcb_station_config
+        try:
+            existing_cpcb_cols = await conn.run_sync(get_columns, "cpcb_station_config")
+            if existing_cpcb_cols:
+                if "calibration_mode" not in existing_cpcb_cols:
+                    await conn.execute(text("ALTER TABLE cpcb_station_config ADD COLUMN calibration_mode BOOLEAN DEFAULT FALSE"))
+                    log.info("Migrated: added 'calibration_mode' column to cpcb_station_config")
+                if "maintenance_mode" not in existing_cpcb_cols:
+                    await conn.execute(text("ALTER TABLE cpcb_station_config ADD COLUMN maintenance_mode BOOLEAN DEFAULT FALSE"))
+                    log.info("Migrated: added 'maintenance_mode' column to cpcb_station_config")
+        except Exception as mig_err:
+            log.warning(f"cpcb_station_config migration skipped: {mig_err}")
 
         pass
 

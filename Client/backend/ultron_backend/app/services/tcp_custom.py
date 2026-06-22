@@ -141,7 +141,7 @@ class TCPCustomReader:
             except (ValueError, TypeError):
                 raw_val = None
 
-            quality = "good" if raw_val is not None else "comms_fail"
+            quality = "U" if raw_val is not None else "E"
             value = None
             if raw_val is not None:
                 sf = p.get("scale_factor", 1.0) or 1.0

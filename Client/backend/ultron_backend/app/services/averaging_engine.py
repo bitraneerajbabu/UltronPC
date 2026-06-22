@@ -106,10 +106,13 @@ async def run_averaging_for_all_parameters():
         )
         param_ids = [row[0] for row in result.all()]
 
+        if not param_ids:
+            log.info("No parameters found — skipping averaging")
+            return
+
         for avg_type, delta in WINDOWS:
             # Round 'now' down to the nearest window boundary
             if delta.total_seconds() >= 86400:
-                # Daily: align to midnight
                 start = now.replace(hour=0, minute=0, second=0, microsecond=0) - delta
             elif delta.total_seconds() >= 3600:
                 hrs = int(delta.total_seconds() / 3600)
@@ -120,11 +123,53 @@ async def run_averaging_for_all_parameters():
                 start = now.replace(minute=rounded_min, second=0, microsecond=0) - delta
             end = start + delta
 
-            for pid in param_ids:
-                try:
-                    await _compute_average(db, pid, avg_type, start, end)
-                except Exception as e:
-                    log.error(f"Average error param={pid} type={avg_type}: {e}")
+            # Batch query: compute average for ALL parameters in a single query
+            batch_result = await db.execute(
+                select(
+                    HistoricalData.parameter_id,
+                    func.avg(HistoricalData.value),
+                    func.count(HistoricalData.parameter_id),
+                )
+                .where(
+                    and_(
+                        HistoricalData.parameter_id.in_(param_ids),
+                        HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range, DataQuality.uncertain)),
+                        HistoricalData.timestamp >= start,
+                        HistoricalData.timestamp < end,
+                    )
+                )
+                .group_by(HistoricalData.parameter_id)
+            )
+            batch_rows = batch_result.all()
+
+            for pid, avg_val, count in batch_rows:
+                if avg_val is None or count == 0:
+                    continue
+                avg_val = round(float(avg_val), 2)
+                existing = await db.execute(
+                    select(Averages).where(
+                        and_(
+                            Averages.parameter_id == pid,
+                            Averages.avg_type == avg_type,
+                            Averages.timestamp == start,
+                        )
+                    )
+                )
+                record = existing.scalar_one_or_none()
+                if record:
+                    record.value = avg_val
+                else:
+                    db.add(Averages(
+                        parameter_id=pid,
+                        timestamp=start,
+                        avg_type=avg_type,
+                        value=avg_val,
+                        quality=DataQuality.good,
+                        source="calc",
+                    ))
+                log.debug(f"Average computed: param={pid} type={avg_type} val={avg_val:.3f} n={count}")
+
+            # Parameters with no data in this window are silently skipped
 
         await db.commit()
         log.info(f"Averaging complete: {len(param_ids)} params × {len(WINDOWS)} windows")

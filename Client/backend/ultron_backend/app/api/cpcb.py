@@ -2,7 +2,7 @@
 
 import os
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import List
@@ -40,6 +40,8 @@ class StationConfigOut(BaseModel):
     cpcb_enabled: bool
     timezone: str
     retention_count: int
+    calibration_mode: bool = False
+    maintenance_mode: bool = False
 
     class Config:
         from_attributes = True
@@ -54,6 +56,8 @@ class StationConfigCreate(BaseModel):
     cpcb_enabled: bool = True
     timezone: str = "Asia/Kolkata"
     retention_count: int = 97
+    calibration_mode: bool = False
+    maintenance_mode: bool = False
 
 
 class StationConfigUpdate(BaseModel):
@@ -64,6 +68,8 @@ class StationConfigUpdate(BaseModel):
     cpcb_enabled: bool | None = None
     timezone: str | None = None
     retention_count: int | None = None
+    calibration_mode: bool | None = None
+    maintenance_mode: bool | None = None
 
 
 class MappingOut(BaseModel):
@@ -293,24 +299,40 @@ async def trigger_export(db: AsyncSession = Depends(get_db)):
 
 # ─── Backfill ──────────────────────────────────────────────────────────────────
 
+async def _run_backfill_background(station_name: str, start_date: datetime, end_date: datetime):
+    """Run backfill in the background with its own DB session."""
+    from app.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        try:
+            result = await run_backfill(db, station_name, start_date, end_date)
+            await db.commit()
+            log.info(f"Background backfill complete: {result}")
+        except Exception as e:
+            await db.rollback()
+            log.error(f"Background backfill failed: {e}")
+
+
 @router.post("/backfill", dependencies=[Depends(require_admin)])
-async def trigger_backfill(payload: BackfillRequest, db: AsyncSession = Depends(get_db)):
+async def trigger_backfill(
+    payload: BackfillRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
     try:
         start_date = datetime.strptime(payload.start_date, "%d-%m-%Y")
         end_date = datetime.strptime(payload.end_date, "%d-%m-%Y") + timedelta(days=1)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use DD-MM-YYYY")
 
-    try:
-        result = await run_backfill(db, payload.station_name, start_date, end_date)
-        await db.commit()
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        await db.rollback()
-        log.error(f"Backfill failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Backfill failed: {str(e)}")
+    # Validate date range is at most 31 days
+    if (end_date - start_date).days > 31:
+        raise HTTPException(
+            status_code=400,
+            detail="Date range must not exceed 31 days"
+        )
+
+    background_tasks.add_task(_run_backfill_background, payload.station_name, start_date, end_date)
+    return {"message": "Backfill started", "station": payload.station_name, "start": payload.start_date, "end": payload.end_date}
 
 
 # ─── Download Generated File ───────────────────────────────────────────────────

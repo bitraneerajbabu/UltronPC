@@ -162,7 +162,7 @@ export const DevicesScreen = () => {
       if (!deviceSaved) return;
 
       const payload = { ...form, tag_name: genTag(form.name), device_id: globalDevice.id, overrideConnection: true };
-      const success = editingIdx !== null ? await editParameter(form.id, payload) : await addParameter(payload);
+      const success = editingIdx !== null ? await editParameter((form as any).id, payload) : await addParameter(payload);
       if (success) closeModal();
     } catch (err) {
       console.error('Failed to save parameter config:', err);
@@ -229,7 +229,7 @@ export const DevicesScreen = () => {
                   const port = p.port || dev?.port || '�';
 
                   return (
-                    <tr key={p.id || i} style={{ borderBottom: '1px solid #f1f5f9', background: p.is_active ? '#fff' : '#fafafa' }}>
+                    <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', background: p.is_active ? '#fff' : '#fafafa' }}>
                       <td style={{ padding: '12px 14px', fontWeight: '700', color: '#0f172a' }}>{p.display_order}</td>
                       <td style={{ padding: '12px 14px', fontWeight: '700', color: '#0f766e' }}>{p.name}</td>
                       <td style={{ padding: '12px 14px', color: '#64748b' }}>{p.unit}</td>

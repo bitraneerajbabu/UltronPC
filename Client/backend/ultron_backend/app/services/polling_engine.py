@@ -166,15 +166,15 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             else:
                 log.warning(f"Device {device.id}: CSV protocol but no CSV source configured")
                 readings = [
-                    {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "comms_fail"}
+                    {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "E"}
                     for p in param_dicts
                 ]
 
         elif protocol == "opc_ua":
-            # OPC-UA not yet implemented — mark all as comms_fail
+            # OPC-UA not yet implemented — mark all as E
             log.warning(f"Device {device.id} ({device.name}): OPC-UA protocol not yet implemented")
             readings = [
-                {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "comms_fail"}
+                {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "E"}
                 for p in param_dicts
             ]
 
@@ -187,7 +187,7 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
         # Force reconnect next cycle by clearing the reader from pool
         _cleanup_reader(device.id, protocol, device)
         readings = [
-            {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "comms_fail"}
+            {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "E"}
             for p in param_dicts
         ]
 
@@ -217,59 +217,60 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             )
             station_name = st_res.scalar() or ""
 
-        # Delete old live records for all these parameters in a single batch query
+        # Atomically delete-then-insert live records using a savepoint
         param_ids = [r["parameter_id"] for r in readings]
-        if param_ids:
-            await db.execute(
-                delete(LiveData).where(LiveData.parameter_id.in_(param_ids))
-            )
+        async with db.begin_nested():
+            if param_ids:
+                await db.execute(
+                    delete(LiveData).where(LiveData.parameter_id.in_(param_ids))
+                )
 
-        for r in readings:
-            # Safely map quality string → enum, fall back to 'bad'
-            q_str = r.get("quality", "bad")
-            quality_enum = DataQuality(q_str) if q_str in _VALID_QUALITIES else DataQuality.bad
+            for r in readings:
+                # Safely map quality string → enum, fall back to 'U'
+                q_str = r.get("quality", "U")
+                quality_enum = DataQuality(q_str) if q_str in _VALID_QUALITIES else DataQuality.good
 
-            # Use parsed CSV timestamp if available, otherwise fall back to now
-            ts = r.get("timestamp") if r.get("timestamp") is not None else now
+                # Use parsed CSV timestamp if available, otherwise fall back to now
+                ts = r.get("timestamp") if r.get("timestamp") is not None else now
 
-            # Persist raw historical record
-            hist_row = HistoricalData(
-                parameter_id=r["parameter_id"],
-                timestamp=ts,
-                value=r["value"],
-                raw_value=r.get("raw_value"),
-                quality=quality_enum,
-                source="poll",
-            )
-            db.add(hist_row)
+                # Persist raw historical record
+                hist_row = HistoricalData(
+                    parameter_id=r["parameter_id"],
+                    timestamp=ts,
+                    value=r["value"],
+                    raw_value=r.get("raw_value"),
+                    quality=quality_enum,
+                    source="poll",
+                )
+                db.add(hist_row)
 
-            # Insert fresh live record (old one deleted in batch above)
-            live_row = LiveData(
-                parameter_id=r["parameter_id"],
-                timestamp=ts,
-                value=r["value"],
-                raw_value=r.get("raw_value"),
-                quality=quality_enum,
-                source="poll",
-            )
-            db.add(live_row)
+                # Insert fresh live record (old one deleted in batch above)
+                live_row = LiveData(
+                    parameter_id=r["parameter_id"],
+                    timestamp=ts,
+                    value=r["value"],
+                    raw_value=r.get("raw_value"),
+                    quality=quality_enum,
+                    source="poll",
+                )
+                db.add(live_row)
 
-            param = param_by_id.get(r["parameter_id"])
-            if param:
-                await alarm_engine.evaluate(db, param, r["value"], r.get("quality", "bad"))
-                live_points.append({
-                    "parameter_id": param.id,
-                    "tag_name":     param.tag_name,
-                    "station_name": station_name,
-                    "device_name":  device.name,
-                    "value":        r["value"],
-                    "unit":         param.unit or "",
-                    "quality":      r.get("quality", "bad"),
-                    "timestamp":    ts.isoformat(),
-                })
+                param = param_by_id.get(r["parameter_id"])
+                if param:
+                    await alarm_engine.evaluate(db, param, r["value"], r.get("quality", "U"))
+                    live_points.append({
+                        "parameter_id": param.id,
+                        "tag_name":     param.tag_name,
+                        "station_name": station_name,
+                        "device_name":  device.name,
+                        "value":        r["value"],
+                        "unit":         param.unit or "",
+                        "quality":      r.get("quality", "U"),
+                        "timestamp":    ts.isoformat(),
+                    })
 
         # Update device status based on whether any reading came back good
-        any_good = any(r.get("quality") in ("good", "out_of_range", "uncertain") for r in readings)
+        any_good = any(r.get("quality") in ("U", "O") for r in readings)
         new_status = "online" if any_good else "offline"
         await db.execute(
             Device.__table__.update()
@@ -316,10 +317,10 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             bad_params = []
             for r in readings:
                 q = r.get("quality")
-                if q in ("comms_fail", "bad", "sensor_fail"):
+                if q == "E":
                     p = param_by_id.get(r["parameter_id"])
                     bad_params.append(p.tag_name if p else f"#{r['parameter_id']}")
-                elif q == "out_of_range":
+                elif q == "O":
                     p = param_by_id.get(r["parameter_id"])
                     bad_params.append(f"{p.tag_name if p else '#'+str(r['parameter_id'])}={r.get('value')} OOR")
             if bad_params:

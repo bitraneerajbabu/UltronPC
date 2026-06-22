@@ -12,13 +12,14 @@ import enum
 
 # ─── Data Quality ─────────────────────────────────────────────────────────────
 class DataQuality(str, enum.Enum):
-    good = "good"
-    bad = "bad"
-    uncertain = "uncertain"
-    out_of_range = "out_of_range"
-    comms_fail = "comms_fail"
-    sensor_fail = "sensor_fail"
-    maintenance = "maintenance"
+    good = "U"
+    bad = "U"
+    uncertain = "U"
+    out_of_range = "O"
+    comms_fail = "E"
+    sensor_fail = "E"
+    maintenance = "U"
+    negative = "N"
 
 
 # ─── Average Types ────────────────────────────────────────────────────────────

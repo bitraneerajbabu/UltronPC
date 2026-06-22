@@ -362,9 +362,9 @@ async def _push_cpcb(config: ServerConfig, db):
         calib_flag = 0
         maint_flag = 0
 
-        # Remark: blank when quality is good, otherwise quality string
+        # Remark: blank when quality is U, otherwise quality string
         remark = ""
-        if avg.quality and str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality) != "good":
+        if avg.quality and str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality) != "U":
             remark = str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality)
 
         val_repr = value_str if value_str != "" else "NOT_POSTED (No average)"
@@ -467,7 +467,7 @@ async def generate_historical_cpcb_file(db, config: ServerConfig, date_str: str)
             calib_flag = 0
             maint_flag = 0
             remark = ""
-            if avg.quality and str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality) != "good":
+            if avg.quality and str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality) != "U":
                 remark = str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality)
 
             row = f"{station_name},{param_code},{date_from_str},{date_to_str},{value_str},{calib_flag},{maint_flag},{remark},"
@@ -615,18 +615,10 @@ async def _poll_remote_commands():
                 await restart_polling()
 
             elif action == "reboot_system":
-                import os as _os
-                if _os.name == 'nt':
-                    _os.system("shutdown /r /t 5")
-                else:
-                    _os.system("sudo reboot")
+                log.warning("[CMD] reboot_system command received but is DISABLED (removed for safety)")
 
             elif action == "factory_reset":
-                from app.database import init_db, engine
-                from app.models.server_config import Base as ServerBase
-                async with engine.begin() as conn:
-                    await conn.run_sync(ServerBase.metadata.drop_all)
-                await init_db()
+                log.warning("[CMD] factory_reset command received but is DISABLED (removed for safety)")
 
             # Acknowledge command as executed
             ack_url = f"https://rajapi.com/api/v1/commands/{cmd_id}/ack?station_id={station_id}"

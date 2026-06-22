@@ -67,7 +67,7 @@ async def latest_values(
 
     # For any offline/failed parameter, retrieve the last successful poll timestamp from HistoricalData
     for pt in points:
-        if pt.quality in (DataQuality.bad, DataQuality.comms_fail, DataQuality.sensor_fail):
+        if pt.quality in (DataQuality.comms_fail, DataQuality.sensor_fail):
             good_res = await db.execute(
                 select(HistoricalData.timestamp)
                 .where(

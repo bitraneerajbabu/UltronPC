@@ -134,7 +134,7 @@ class CSVWatcher:
                 except (ValueError, TypeError):
                     log.debug(f"CSV non-numeric value at col {col_idx}: '{raw_str}'")
 
-            quality = "good" if raw_val is not None else "bad"
+            quality = "U" if raw_val is not None else "U"
             value: Optional[float] = None
 
             if raw_val is not None:

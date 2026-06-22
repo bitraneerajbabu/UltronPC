@@ -2,6 +2,7 @@
 
 import os
 import io
+import random
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -257,3 +258,203 @@ async def generate_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
+
+
+@router.get("/windrose")
+async def get_windrose_data(
+    station_id: int = Query(..., description="Station ID"),
+    date_from: str = Query(..., description="Start date YYYY-MM-DD"),
+    date_to: str = Query(..., description="End date YYYY-MM-DD"),
+    parameter_id: Optional[int] = Query(None, description="Optional parameter ID for pollutionrose"),
+):
+    """Stub endpoint returning sample windrose / pollutionrose data.
+
+    The full implementation will compute wind direction and speed distributions
+    from telemetry data stored in HistoricalData / Averages tables.
+
+    Returns radar-chart-friendly data with 16 compass directions and speed bands
+    (or pollutant concentrations for pollutionrose mode).
+    """
+    # 16 wind directions (compass)
+    directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+
+    if parameter_id:
+        # Pollutionrose: return sample pollutant concentrations per direction
+        bands = [
+            {"label": "PM2.5", "data": [round(random.uniform(10, 80), 1) for _ in range(16)]},
+            {"label": "PM10",  "data": [round(random.uniform(20, 150), 1) for _ in range(16)]},
+            {"label": "NO2",   "data": [round(random.uniform(5, 60), 1) for _ in range(16)]},
+            {"label": "SO2",   "data": [round(random.uniform(2, 30), 1) for _ in range(16)]},
+            {"label": "O3",    "data": [round(random.uniform(10, 100), 1) for _ in range(16)]},
+            {"label": "CO",    "data": [round(random.uniform(0.5, 5), 2) for _ in range(16)]},
+        ]
+    else:
+        # Windrose: return wind speed bands per direction
+        bands = [
+            {"label": "0.5–2 m/s", "data": [round(random.uniform(0, 20), 1) for _ in range(16)]},
+            {"label": "2–4 m/s",   "data": [round(random.uniform(0, 30), 1) for _ in range(16)]},
+            {"label": "4–6 m/s",   "data": [round(random.uniform(0, 25), 1) for _ in range(16)]},
+            {"label": "6–8 m/s",   "data": [round(random.uniform(0, 15), 1) for _ in range(16)]},
+            {"label": ">8 m/s",    "data": [round(random.uniform(0, 8), 1) for _ in range(16)]},
+        ]
+
+    return {
+        "station_id": station_id,
+        "date_from": date_from,
+        "date_to": date_to,
+        "labels": directions,
+        "datasets": bands,
+    }
+
+
+# ── Analytical Report Stubs ───────────────────────────────────────────────────
+
+
+@router.get("/histogram")
+async def get_histogram(
+    station: str = Query(...),
+    parameter: str = Query(...),
+    start: str = Query(...),
+    end: str = Query(...),
+):
+    """Return frequency distribution (histogram bins) for a parameter."""
+    bins = []
+    total = 0
+    for i in range(0, 100, 10):
+        count = random.randint(1, 40)
+        bins.append({"range": f"{i}-{i+10}", "count": count})
+        total += count
+    return {"bins": bins, "total": total}
+
+
+@router.get("/percentile")
+async def get_percentile(
+    station: str = Query(...),
+    parameter: str = Query(...),
+    start: str = Query(...),
+    end: str = Query(...),
+):
+    """Return percentile values (P10–P99) for a parameter."""
+    return {
+        "p10": round(random.uniform(5, 20), 1),
+        "p25": round(random.uniform(20, 35), 1),
+        "p50": round(random.uniform(35, 50), 1),
+        "p75": round(random.uniform(55, 70), 1),
+        "p90": round(random.uniform(75, 88), 1),
+        "p95": round(random.uniform(88, 95), 1),
+        "p99": round(random.uniform(95, 99), 1),
+    }
+
+
+@router.get("/scatter")
+async def get_scatter(
+    x_param: str = Query(...),
+    y_param: str = Query(...),
+    station: str = Query(...),
+    start: str = Query(...),
+    end: str = Query(...),
+):
+    """Return scatter plot points for two parameters."""
+    points = []
+    for _ in range(80):
+        x = round(random.uniform(0, 100), 1)
+        y = round(x * random.uniform(0.5, 0.9) + random.uniform(0, 15), 1)
+        points.append({"x": x, "y": y})
+    return {"points": points}
+
+
+@router.get("/uptime")
+async def get_uptime(
+    station: str = Query(...),
+    start: str = Query(...),
+    end: str = Query(...),
+):
+    """Return daily data availability for a station."""
+    try:
+        start_dt = datetime.strptime(start[:10], "%Y-%m-%d")
+        end_dt = datetime.strptime(end[:10], "%Y-%m-%d")
+    except ValueError:
+        start_dt = datetime.utcnow() - timedelta(days=7)
+        end_dt = datetime.utcnow()
+
+    days = []
+    cursor = start_dt
+    while cursor <= end_dt:
+        total = 1440
+        valid = random.randint(int(total * 0.82), total)
+        days.append({
+            "date": cursor.strftime("%d-%m-%Y"),
+            "total_points": total,
+            "valid_points": valid,
+            "availability_pct": round((valid / total) * 100, 1),
+        })
+        cursor += timedelta(days=1)
+    return {"days": days}
+
+
+@router.get("/shift")
+async def get_shift(
+    station: str = Query(...),
+    start: str = Query(...),
+    end: str = Query(...),
+):
+    """Return per-shift summary statistics."""
+    shifts = [
+        {
+            "name": "Morning (06-14)",
+            "avg": round(random.uniform(30, 50), 1),
+            "min": round(random.uniform(5, 15), 1),
+            "max": round(random.uniform(60, 80), 1),
+        },
+        {
+            "name": "Evening (14-22)",
+            "avg": round(random.uniform(25, 45), 1),
+            "min": round(random.uniform(5, 15), 1),
+            "max": round(random.uniform(55, 75), 1),
+        },
+        {
+            "name": "Night (22-06)",
+            "avg": round(random.uniform(20, 40), 1),
+            "min": round(random.uniform(3, 12), 1),
+            "max": round(random.uniform(45, 65), 1),
+        },
+    ]
+    return {"shifts": shifts}
+
+
+@router.get("/fortnight")
+async def get_fortnight(
+    station: str = Query(...),
+    month: str = Query(...),
+    year: str = Query(...),
+):
+    """Return 15-day block summaries for a given month."""
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    try:
+        m_idx = int(month) - 1
+        m_label = month_names[m_idx] if 0 <= m_idx < 12 else month
+    except ValueError:
+        m_label = month
+
+    blocks = [
+        {
+            "label": f"1-15 {m_label}",
+            "availability_pct": round(random.uniform(85, 99), 1),
+            "parameters": {
+                "PM2.5": round(random.uniform(15, 60), 1),
+                "PM10": round(random.uniform(30, 120), 1),
+                "NO2": round(random.uniform(10, 40), 1),
+            },
+        },
+        {
+            "label": f"16-{m_label[-1]} {m_label}",
+            "availability_pct": round(random.uniform(85, 99), 1),
+            "parameters": {
+                "PM2.5": round(random.uniform(15, 60), 1),
+                "PM10": round(random.uniform(30, 120), 1),
+                "NO2": round(random.uniform(10, 40), 1),
+            },
+        },
+    ]
+    return {"blocks": blocks}

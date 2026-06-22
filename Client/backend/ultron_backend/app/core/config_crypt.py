@@ -2,10 +2,6 @@
 """
 UltrON — Configuration Encryption / Decryption Utilities
 Uses cryptography Fernet (AES-128 in CBC mode with HMAC-SHA256).
-
-WARNING: This encryption is obfuscation only; the derivation key is bundled.
-Only the public anon key and non-sensitive settings may be stored here.
-Never store the service_role key or other true secrets.
 """
 
 import base64
@@ -14,13 +10,36 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet
 
+def _get_secret_key_from_file() -> str:
+    """Read SECRET_KEY directly from secret.key file to avoid circular import."""
+    from pathlib import Path
+    import sys
+    IS_FROZEN = getattr(sys, "frozen", False)
+    if IS_FROZEN:
+        app_dir = Path(sys.executable).parent.resolve()
+    else:
+        app_dir = Path(__file__).parent.parent.resolve()
+    key_file = app_dir / "secret.key"
+    try:
+        if key_file.is_file():
+            key = key_file.read_text(encoding="utf-8").strip()
+            if key:
+                return key
+    except Exception:
+        pass
+    return ""
+
+
 def get_fernet_key() -> bytes:
     """
     Derives a secure, deterministic key for Fernet.
-    Uses a fixed salt and password so that the compiled binary can
-    always decrypt the encrypted configuration without external state.
+    Uses the app's SECRET_KEY setting as the password so that the compiled
+    binary can always decrypt the encrypted configuration without external state.
     """
-    password = b"UltrON.Security.Password.Key.2026.Sunshine"
+    password = _get_secret_key_from_file().encode("utf-8")
+    if not password:
+        from app.config import settings
+        password = settings.SECRET_KEY.encode("utf-8")
     salt = b"UltrON_Fixed_Salt_2026_#SunshineTech"
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
