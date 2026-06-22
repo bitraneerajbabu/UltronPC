@@ -96,6 +96,12 @@ async def init_db():
                 if "is_cpcb_active" not in existing_cols:
                     await conn.execute(text("ALTER TABLE server_config ADD COLUMN is_cpcb_active BOOLEAN DEFAULT TRUE"))
                     log.info("Migrated: added 'is_cpcb_active' column to server_config")
+                if "led_channel_id" not in existing_cols:
+                    await conn.execute(text("ALTER TABLE server_config ADD COLUMN led_channel_id INTEGER"))
+                    log.info("Migrated: added 'led_channel_id' column to server_config")
+                if "led_station_name" not in existing_cols:
+                    await conn.execute(text("ALTER TABLE server_config ADD COLUMN led_station_name VARCHAR(100)"))
+                    log.info("Migrated: added 'led_station_name' column to server_config")
         except Exception as mig_err:
             log.warning(f"server_config migration skipped: {mig_err}")
 
@@ -109,6 +115,12 @@ async def init_db():
                 if "cpcb_parameter" not in existing_mapping_cols:
                     await conn.execute(text("ALTER TABLE server_parameter_mapping ADD COLUMN cpcb_parameter VARCHAR(100)"))
                     log.info("Migrated: added 'cpcb_parameter' column to server_parameter_mapping")
+                if "led_channel_name" not in existing_mapping_cols:
+                    await conn.execute(text("ALTER TABLE server_parameter_mapping ADD COLUMN led_channel_name VARCHAR(100)"))
+                    log.info("Migrated: added 'led_channel_name' column to server_parameter_mapping")
+                if "led_unit" not in existing_mapping_cols:
+                    await conn.execute(text("ALTER TABLE server_parameter_mapping ADD COLUMN led_unit VARCHAR(50)"))
+                    log.info("Migrated: added 'led_unit' column to server_parameter_mapping")
         except Exception as mig_err:
             log.warning(f"server_parameter_mapping migration skipped: {mig_err}")
 
