@@ -112,6 +112,23 @@ hidden = [
     "aiofiles",
     # python-dotenv
     "dotenv",
+    # Rate limiting (slowapi) & dependencies
+    "slowapi",
+    "slowapi.util",
+    "limits",
+    "limits.storage",
+    "limits.strategies",
+    "packaging",
+    "deprecated",
+    # httpx (async HTTP client for license, poll, push, rajapi)
+    "httpx",
+    "httpx._transports.asgi",
+    "httpx._transports.wsgi",
+    "h2",
+    "httpcore",
+    "httpcore._backends.asyncio",
+    "httpcore._backends.sync",
+    "sniffio",
     # tzdata / tzlocal needed by APScheduler
     "tzdata",
     "tzlocal",
