@@ -10,11 +10,11 @@ set /p PI_IP="Enter Raspberry Pi IP Address (e.g. 192.168.1.100): "
 
 echo.
 echo Uploading updated backend files to %PI_IP%...
-scp "C:\Users\sunsh\OneDrive\Music\UltrON\server\backend\app\schemas\api_models.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/schemas/api_models.py
-scp "C:\Users\sunsh\OneDrive\Music\UltrON\server\backend\app\api\endpoints\sites.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/api/endpoints/sites.py
-scp "C:\Users\sunsh\OneDrive\Music\UltrON\server\backend\app\api\endpoints\sync.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/api/endpoints/sync.py
-scp "C:\Users\sunsh\OneDrive\Music\UltrON\server\backend\app\models\core.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/models/core.py
-scp "C:\Users\sunsh\OneDrive\Music\UltrON\server\backend\migrate_add_last_sync.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/migrate_add_last_sync.py
+scp "%~dp0server\backend\app\schemas\api_models.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/schemas/api_models.py
+scp "%~dp0server\backend\app\api\endpoints\sites.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/api/endpoints/sites.py
+scp "%~dp0server\backend\app\api\endpoints\sync.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/api/endpoints/sync.py
+scp "%~dp0server\backend\app\models\core.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/models/core.py
+scp "%~dp0server\backend\migrate_add_last_sync.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/migrate_add_last_sync.py
 
 echo.
 echo Running database migration on Pi...

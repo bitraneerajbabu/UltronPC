@@ -13,11 +13,12 @@ class Settings(BaseSettings):
     
     # Postgres Database URI
     # Default assumes postgres runs locally on the Pi
-    DATABASE_URL: str = os.environ.get("DATABASE_URL", "postgresql://ultron_admin:my_secure_password@127.0.0.1:5432/ultron_central")
+    # IMPORTANT: Set DATABASE_URL in .env for production
+    DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
 
     # Admin key for protected endpoints (site creation, deletion)
     # Set ADMIN_KEY in server .env — must match what's in client_manager.py
-    ADMIN_KEY: str = os.environ.get("ADMIN_KEY", "Raj123.0")
+    ADMIN_KEY: str = os.environ.get("ADMIN_KEY", "")
 
     model_config = SettingsConfigDict(env_file=".env")
 
@@ -25,5 +26,9 @@ settings = Settings()
 
 if not settings.SECRET_KEY:
     print("WARNING: SECRET_KEY is not set in .env! Generate one with: openssl rand -hex 32", file=sys.stderr)
-if settings.ADMIN_KEY == "Raj123.0":
-    print("WARNING: ADMIN_KEY is using default (Raj123.0). For production set via .env", file=sys.stderr)
+if not settings.DATABASE_URL:
+    print("WARNING: DATABASE_URL is not set in .env! Using default localhost.", file=sys.stderr)
+    settings.DATABASE_URL = "postgresql://ultron_admin:changeme@127.0.0.1:5432/ultron_central"
+if not settings.ADMIN_KEY:
+    print("WARNING: ADMIN_KEY is not set in .env! Using insecure default.", file=sys.stderr)
+    settings.ADMIN_KEY = "changeme"

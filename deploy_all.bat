@@ -14,21 +14,21 @@ if "%PI_HOST%"=="" set PI_HOST=rajapi.com
 
 echo.
 echo ------ [1/5] Deploying backend Python files ------
-scp server\backend\app\api\endpoints\sites.py pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/api/endpoints/sites.py
-scp server\backend\app\api\endpoints\sync.py pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/api/endpoints/sync.py
-scp server\backend\app\models\core.py pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/models/core.py
-scp server\backend\app\schemas\api_models.py pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/schemas/api_models.py
-scp server\backend\migrate_add_last_sync.py pi@%PI_HOST%:/home/pi/rajapi_server/backend/migrate_add_last_sync.py
+scp "%~dp0server\backend\app\api\endpoints\sites.py" pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/api/endpoints/sites.py
+scp "%~dp0server\backend\app\api\endpoints\sync.py" pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/api/endpoints/sync.py
+scp "%~dp0server\backend\app\models\core.py" pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/models/core.py
+scp "%~dp0server\backend\app\schemas\api_models.py" pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/schemas/api_models.py
+scp "%~dp0server\backend\migrate_add_last_sync.py" pi@%PI_HOST%:/home/pi/rajapi_server/backend/migrate_add_last_sync.py
 
 echo.
 echo ------ [2/5] Deploying frontend dist/ ------
-scp -r server\frontend\dist pi@%PI_HOST%:/home/pi/rajapi_server/frontend/
+scp -r "%~dp0server\frontend\dist" pi@%PI_HOST%:/home/pi/rajapi_server/frontend/
 
 echo.
 echo ------ [3/5] Deploying MQTT broker config ------
 ssh pi@%PI_HOST% "mkdir -p /home/pi/rajapi_server/mqtt/config && mkdir -p /home/pi/rajapi_server/mqtt/data && mkdir -p /home/pi/rajapi_server/mqtt/log"
-scp rajapi_server\config\mosquitto.conf pi@%PI_HOST%:/home/pi/rajapi_server/mqtt/config/mosquitto.conf
-scp rajapi_server\docker-compose.yml pi@%PI_HOST%:/home/pi/rajapi_server/mqtt/docker-compose.yml
+scp "%~dp0rajapi_server\config\mosquitto.conf" pi@%PI_HOST%:/home/pi/rajapi_server/mqtt/config/mosquitto.conf
+scp "%~dp0rajapi_server\docker-compose.yml" pi@%PI_HOST%:/home/pi/rajapi_server/mqtt/docker-compose.yml
 
 echo.
 echo ------ [4/5] Running DB migration + Restarting backend ------

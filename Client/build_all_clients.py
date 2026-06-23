@@ -25,32 +25,18 @@ from pathlib import Path
 # Get api_key from rajapi.com dashboard (click the site, copy the key)
 # =============================================================================
 CLIENT_LIST = [
-    {
-        "name":       "Beger_Plaints",
-        "api_key":    "uk_YDBPebBPokwBwYbnhYOKR671f_BDpmW3qkflY82_9Cs",
-        "station_id": "beger_plaints",
-    },
-    {
-        "name":       "ABD_AAQMS_1",
-        "api_key":    "uk_MP4DjZ_ahg81TjI_nbvqr84exyUxbkVuy-wB20-HSzk",
-        "station_id": "abd_aaqms_1",
-    },
-    {
-        "name":       "ABD_AAQMS_2",
-        "api_key":    "uk_Hh0APVVaE3Vj-3_Qs5Ys68GxT9VtQQkC1AxveR0CGRo",
-        "station_id": "abd_aaqms_2",
-    },
-    {
-        "name":       "ABD_CAAQMS_3",
-        "api_key":    "uk__B5v8mIu5bzwP0vt_G9HwGRtFD2AlhnFqb8vJ4UL9pc",
-        "station_id": "abd_caaqms_3",
-    },
-    {
-        "name":       "Beger_AAQMS_1",
-        "api_key":    "uk_FKgaMWnscxX18ia9dPwn_CNfQ59ML5mnVtKiKa1cSeg",
-        "station_id": "beger_aaqms_1",
-    },
+    # {
+    #     "name":       "example_site",
+    #     "api_key":    "your-rajapi-api-key",
+    #     "station_id": "example_station",
+    # },
 ]
+
+# =============================================================================
+# IMPORTANT: To build clients, uncomment and edit entries above with real keys
+# from your rajapi.com dashboard. Do NOT commit real API keys to version control!
+# Instead, pass them via environment variables or a separate .env.clients file.
+# =============================================================================
 # =============================================================================
 
 # Paths (relative to this script which lives in client/)
