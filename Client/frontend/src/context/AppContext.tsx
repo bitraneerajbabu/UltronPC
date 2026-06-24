@@ -22,9 +22,9 @@ export const AppProvider = ({ children }) => {
     activeAlarms: 0,
   });
   const [activeScreen, setActiveScreen] = useState('dashboardScreen');
-  const [currentUser, setCurrentUser] = useState(sessionStorage.getItem('ultron_user') || null);
-  const [currentUserRole, setCurrentUserRole] = useState(sessionStorage.getItem('ultron_role') || null);
-  const [authToken, setAuthToken] = useState(sessionStorage.getItem('ultron_token') || null);
+  const [currentUser, setCurrentUser] = useState(localStorage.getItem('ultron_user') || null);
+  const [currentUserRole, setCurrentUserRole] = useState(localStorage.getItem('ultron_role') || null);
+  const [authToken, setAuthToken] = useState(localStorage.getItem('ultron_token') || null);
   const [loading, setLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [broadcasts, setBroadcasts] = useState<any[]>([]);
@@ -67,7 +67,7 @@ export const AppProvider = ({ children }) => {
 
   // ─── Authenticated fetch helper ────────────────────────────────────────────
   const authFetch = useCallback(async (url: string, options: any = {}) => {
-    const token = sessionStorage.getItem('ultron_token');
+    const token = localStorage.getItem('ultron_token');
     const headers = {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -76,9 +76,9 @@ export const AppProvider = ({ children }) => {
     try {
       const res = await fetch(url, { ...options, headers });
       if (res.status === 401) {
-        sessionStorage.removeItem('ultron_token');
-        sessionStorage.removeItem('ultron_user');
-        sessionStorage.removeItem('ultron_role');
+        localStorage.removeItem('ultron_token');
+        localStorage.removeItem('ultron_user');
+        localStorage.removeItem('ultron_role');
         setAuthToken(null);
         setCurrentUser(null);
         setCurrentUserRole(null);
@@ -425,9 +425,9 @@ export const AppProvider = ({ children }) => {
 
       const data = await res.json();
       // Persist token + role
-      sessionStorage.setItem('ultron_token', data.access_token);
-      sessionStorage.setItem('ultron_user', data.username);
-      sessionStorage.setItem('ultron_role', data.role);
+      localStorage.setItem('ultron_token', data.access_token);
+      localStorage.setItem('ultron_user', data.username);
+      localStorage.setItem('ultron_role', data.role);
       setAuthToken(data.access_token);
       setCurrentUser(data.username);
       setCurrentUserRole(data.role);
@@ -446,7 +446,7 @@ export const AppProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      const token = sessionStorage.getItem('ultron_token');
+      const token = localStorage.getItem('ultron_token');
       if (token) {
         await fetch(`${API_BASE}/auth/logout`, {
           method: 'POST',
@@ -456,9 +456,9 @@ export const AppProvider = ({ children }) => {
     } catch (e) {
       // Ignore network errors on logout
     }
-    sessionStorage.removeItem('ultron_token');
-    sessionStorage.removeItem('ultron_user');
-    sessionStorage.removeItem('ultron_role');
+    localStorage.removeItem('ultron_token');
+    localStorage.removeItem('ultron_user');
+    localStorage.removeItem('ultron_role');
     setAuthToken(null);
     setCurrentUser(null);
     setCurrentUserRole(null);

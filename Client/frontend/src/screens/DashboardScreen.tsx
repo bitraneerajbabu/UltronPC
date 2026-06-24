@@ -69,21 +69,19 @@ interface ParameterCardProps {
 const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, deviceName, isSelected, onClick }: ParameterCardProps) => {
   const isOffline = !data || data.status !== 'online';
   const valFloat = parseFloat(data?.value);
-  const clampedVal = valFloat < 0 ? 0 : valFloat;
   const formattedVal = isOffline 
     ? 'N/A' 
     : (!isNaN(valFloat) 
-        ? clampedVal.toFixed(p.tag_name === 'CO' ? 2 : (p.tag_name === 'Temperature' || p.tag_name === 'Humidity') ? 1 : 2)
+        ? valFloat.toFixed(p.tag_name === 'CO' ? 2 : (p.tag_name === 'Temperature' || p.tag_name === 'Humidity') ? 1 : 2)
         : '0.00');
   const displayTimestamp = isOffline ? (data?.timestamp && data?.timestamp !== '—' ? data.timestamp : '—') : currentTime;
   const state = getParamState(p, data);
 
   const avgFloat = parseFloat(avgVal);
-  const clampedAvg = avgFloat < 0 ? 0 : avgFloat;
   const formattedAvgVal = isOffline 
     ? 'N/A' 
     : (!isNaN(avgFloat) 
-        ? clampedAvg.toFixed(p.tag_name === 'CO' ? 2 : (p.tag_name === 'Temperature' || p.tag_name === 'Humidity') ? 1 : 2)
+        ? avgFloat.toFixed(p.tag_name === 'CO' ? 2 : (p.tag_name === 'Temperature' || p.tag_name === 'Humidity') ? 1 : 2)
         : '0.00');
 
   let formattedTimestamp = '—';
