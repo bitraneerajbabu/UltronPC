@@ -328,6 +328,16 @@ async def health():
     return {"status": "ok", "ts": datetime.utcnow().isoformat()}
 
 
+@app.get("/show-window", include_in_schema=False)
+async def show_window():
+    window = getattr(app.state, "window", None)
+    if window:
+        window.show()
+        window.restore()
+        return {"status": "restored"}
+    return {"status": "no_window"}
+
+
 # ─── Serve Built Frontend (SPA) ───────────────────────────────────────────────
 # The Vite production build lands in ui_dist/ (same dir as this app package).
 # We mount it LAST so API routes always take priority.
