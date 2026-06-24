@@ -46,6 +46,7 @@ export const ApiMappingsScreen = () => {
 
   const [rajapiUrl, setRajapiUrl] = useState('');
   const [rajapiKey, setRajapiKey] = useState('');
+  const [rajapiAmcKey, setRajapiAmcKey] = useState('');
   const [rajapiStatus, setRajapiStatus] = useState(null);
   const [rajapiSaving, setRajapiSaving] = useState(false);
 
@@ -234,10 +235,10 @@ export const ApiMappingsScreen = () => {
   };
 
   const handleRajapiVerify = async () => {
-    if (!rajapiUrl || !rajapiKey) { showToast('URL and API Key required.', 'warn'); return; }
+    if (!rajapiUrl || (!rajapiKey && !rajapiAmcKey)) { showToast('URL and at least one key required.', 'warn'); return; }
     setRajapiSaving(true);
     try {
-      const res = await authFetch(`${API_BASE}/license/verify`, { method: 'POST', body: JSON.stringify({ api_url: rajapiUrl, api_key: rajapiKey }) });
+      const res = await authFetch(`${API_BASE}/license/verify`, { method: 'POST', body: JSON.stringify({ api_url: rajapiUrl, api_key: rajapiKey, amc_key: rajapiAmcKey }) });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Verify failed');
       showToast('Central sync configured successfully.', 'success');
       setRajapiStatus('active');
@@ -449,14 +450,18 @@ export const ApiMappingsScreen = () => {
                 {rajapiStatus === 'active' ? 'Licensed & Connected' : rajapiStatus === 'inactive' ? 'Not Configured' : 'Checking...'}
               </span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={s()}>API URL</label>
                 <input type="text" value={rajapiUrl} onChange={e => setRajapiUrl(e.target.value)} placeholder="https://rajapi.com/api/v1/sync/" style={ipt} />
               </div>
               <div>
-                <label style={s()}>API Key</label>
-                <input type="password" value={rajapiKey} onChange={e => setRajapiKey(e.target.value)} placeholder="Enter API key" style={ipt} />
+                <label style={s()}>AMC Token (Site Key)</label>
+                <input type="password" value={rajapiKey} onChange={e => setRajapiKey(e.target.value)} placeholder="Enter site API key" style={ipt} />
+              </div>
+              <div>
+                <label style={s()}>AMC Key (Device Key)</label>
+                <input type="password" value={rajapiAmcKey} onChange={e => setRajapiAmcKey(e.target.value)} placeholder="Enter device API key" style={ipt} />
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

@@ -38,6 +38,7 @@ def _update_env_enc(updates: dict) -> None:
 class LicenseVerifyRequest(BaseModel):
     api_url: str
     api_key: str
+    amc_key: str = ""
 
 @router.get("/status")
 async def get_license_status():
@@ -45,8 +46,10 @@ async def get_license_status():
     key = os.environ.get("CENTRAL_API_KEY", "").strip()
     url = os.environ.get("CENTRAL_API_URL", "https://rajapi.com/api/v1/sync/").strip()
     
+    amc_key = os.environ.get("AMC_KEY", "").strip()
+    
     if not key:
-        return {"licensed": False}
+        return {"licensed": False, "has_amc_key": bool(amc_key)}
         
     # Actively test the key against the server
     payload = {"client_id": "setup_test", "points": []}
@@ -61,8 +64,8 @@ async def get_license_status():
                 _update_env_enc({"CENTRAL_API_KEY": ""})
                 return {"licensed": False}
                 
-            # If 200 (or any other error like network failure, we assume licensed for offline fallback)
-            return {"licensed": True}
+                # If 200 (or any other error like network failure, we assume licensed for offline fallback)
+            return {"licensed": True, "has_amc_key": bool(amc_key)}
     except httpx.RequestError:
         # Offline network failure, assume licensed to allow local UI access
         return {"licensed": True}
@@ -87,13 +90,19 @@ async def verify_and_save_license(req: LicenseVerifyRequest):
                 raise HTTPException(status_code=401, detail=f"Server rejected key (Code {resp.status_code})")
                 
             # Merge license keys into existing config — don't overwrite other settings
-            _update_env_enc({
+            amc_key = req.amc_key.strip() if req.amc_key else ""
+            updates = {
                 "CENTRAL_API_URL": url,
                 "CENTRAL_API_KEY": key,
-            })
+            }
+            if amc_key:
+                updates["AMC_KEY"] = amc_key
+            _update_env_enc(updates)
             
             os.environ["CENTRAL_API_URL"] = url
             os.environ["CENTRAL_API_KEY"] = key
+            if amc_key:
+                os.environ["AMC_KEY"] = amc_key
             
             log.info(f"License verified and saved: key={key[:10]}...")
             return {"success": True, "detail": "License verified and saved successfully."}

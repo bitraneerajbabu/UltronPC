@@ -195,6 +195,7 @@ function App() {
   
   const [setupApiUrl, setSetupApiUrl] = useState('https://rajapi.com/api/v1/sync/');
   const [setupApiKey, setSetupApiKey] = useState('');
+  const [setupAmcKey, setSetupAmcKey] = useState('');
   const [setupTesting, setSetupTesting] = useState(false);
   const [setupResult, setSetupResult] = useState('');
 
@@ -377,7 +378,7 @@ function App() {
         <div className="login-card setup-card">
           <h2 className="login-title">License & AMC Setup</h2>
           <p className="setup-description">
-            Paste the AMC Token from rajapi.com to unlock UltrON.
+            Paste the AMC Token (site key) and AMC Key (device key) from rajapi.com to unlock UltrON.
           </p>
 
           <form onSubmit={async (e) => {
@@ -388,7 +389,7 @@ function App() {
               const res = await fetch('/api/v1/license/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ api_url: setupApiUrl, api_key: setupApiKey })
+                body: JSON.stringify({ api_url: setupApiUrl, api_key: setupApiKey, amc_key: setupAmcKey })
               });
               if (res.ok) {
                 setSetupResult("Success! Configuration saved.");
@@ -418,7 +419,7 @@ function App() {
               />
             </div>
             <div className="form-group">
-              <label htmlFor="setupApiKey" className="form-label">AMC Token</label>
+              <label htmlFor="setupApiKey" className="form-label">AMC Token (Site Key)</label>
               <input
                 id="setupApiKey"
                 type="text"
@@ -426,6 +427,17 @@ function App() {
                 value={setupApiKey}
                 onChange={e => setSetupApiKey(e.target.value)}
                 required
+                placeholder="uk_..."
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="setupAmcKey" className="form-label">AMC Key (Device Key — optional)</label>
+              <input
+                id="setupAmcKey"
+                type="text"
+                className="form-input"
+                value={setupAmcKey}
+                onChange={e => setSetupAmcKey(e.target.value)}
                 placeholder="uk_..."
               />
             </div>
