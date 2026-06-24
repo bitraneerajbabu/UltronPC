@@ -16,11 +16,26 @@ import ssl
 
 # Use default CA certificates for secure HTTPS connections.
 # Falls back to unverified if the system CA store is unavailable.
-def _get_ssl_context():
+def _get_ssl_context(verified=True):
+    if verified:
+        try:
+            return ssl.create_default_context()
+        except Exception:
+            pass
+    return ssl._create_unverified_context()
+
+def _urlopen(url):
+    """Open a URL with SSL verification, falling back to unverified on failure."""
+    from urllib.error import URLError
+    ctx = _get_ssl_context(verified=True)
     try:
-        return ssl.create_default_context()
-    except Exception:
-        return ssl._create_unverified_context()
+        return urllib.request.urlopen(url, context=ctx)
+    except URLError as e:
+        import ssl as _ssl
+        if isinstance(e.reason, _ssl.SSLCertVerificationError):
+            ctx = _get_ssl_context(verified=False)
+            return urllib.request.urlopen(url, context=ctx)
+        raise
 
 # Config — change this to match your repository
 GITHUB_REPO = "bitraneerajbabu/UltronPC"
@@ -37,8 +52,7 @@ def _github_json(url):
             "Accept": "application/vnd.github.v3+json",
         }
     )
-    ctx = _get_ssl_context()
-    with urllib.request.urlopen(req, context=ctx) as response:
+    with _urlopen(req) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -237,12 +251,11 @@ def main():
                 sys.exit(1)
 
         import shutil
-        ctx = _get_ssl_context()
         req = urllib.request.Request(
             download_url,
             headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
         )
-        with urllib.request.urlopen(req, context=ctx) as response, open(str(target_exe), "wb") as out_file:
+        with _urlopen(req) as response, open(str(target_exe), "wb") as out_file:
             shutil.copyfileobj(response, out_file)
         print("[OK] Download complete!")
     except Exception as e:
