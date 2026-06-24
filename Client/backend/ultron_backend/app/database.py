@@ -153,4 +153,4 @@ async def init_db():
 
         pass
 
-    log.info("Database ready ✓")
+    log.info("Database ready [OK]")
