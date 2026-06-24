@@ -116,7 +116,14 @@ export const TrendsScreen = () => {
         parameter: series.name,
         value: series.values[idx] !== null ? series.values[idx].toFixed(2) : 'NA',
         unit: series.unit || '',
-        quality: series.qualities[idx] ? series.qualities[idx].toUpperCase() : 'GOOD',
+        quality: (() => {
+          const q = series.qualities[idx] ? series.qualities[idx].toUpperCase() : 'GOOD';
+          if (q === 'U' || q === 'GOOD') return 'GOOD';
+          if (q === 'O' || q === 'OUT_OF_RANGE') return 'OUT_OF_RANGE';
+          if (q === 'E' || q === 'COMMS_FAIL' || q === 'SENSOR_FAIL') return 'ERROR';
+          if (q === 'N' || q === 'NEGATIVE') return 'NEGATIVE';
+          return q;
+        })(),
         source: 'POLL'
       }));
       setTableRows(rows);
