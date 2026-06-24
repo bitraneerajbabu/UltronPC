@@ -571,16 +571,18 @@ function App() {
             </div>
           </div>
           <div className="marquee-container" style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-            <div className="marquee-content" style={{ animationDuration: broadcasts && broadcasts.length > 0 ? '25s' : '35s' }}>
-              {broadcasts && broadcasts.length > 0 ? (
-                broadcasts.map((b, i) => (
-                  <span key={b.id} style={{ color: b.severity === 'critical' ? '#ef4444' : b.severity === 'warn' ? '#f59e0b' : 'inherit' }}>
-                    {b.message}{i < broadcasts.length - 1 ? '  ◆  ' : ''}
-                  </span>
-                ))
-              ) : (
-                <span>Data available at this portal is as per CPCB prescribed procedure published at cpcb.nic.in!</span>
-              )}
+            <div style={{ width: '100%', overflow: 'hidden' }}>
+              <div className="marquee-content" style={{ animationDuration: broadcasts && broadcasts.length > 0 ? '25s' : '35s' }}>
+                {broadcasts && broadcasts.length > 0 ? (
+                  broadcasts.map((b, i) => (
+                    <span key={b.id} style={{ color: b.severity === 'critical' ? '#ef4444' : b.severity === 'warn' ? '#f59e0b' : 'inherit' }}>
+                      {b.message}{i < broadcasts.length - 1 ? '  ◆  ' : ''}
+                    </span>
+                  ))
+                ) : (
+                  <span>Data available at this portal is as per CPCB prescribed procedure published at cpcb.nic.in!</span>
+                )}
+              </div>
             </div>
           </div>
         </footer>
