@@ -23,6 +23,9 @@ DB_FILE = HERE / "ultron.db"
 # ── Hidden imports ────────────────────────────────────────────────────────────
 # Modules discovered via dynamic import / entry_points that PyInstaller misses.
 hidden = [
+    # Python 3.14 compat — built-in C extensions not auto-detected by PyInstaller
+    "select",
+    "selectors",
     # uvicorn internals loaded by string at runtime
     "uvicorn.logging",
     "uvicorn.loops",
