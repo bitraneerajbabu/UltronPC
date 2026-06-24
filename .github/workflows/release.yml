@@ -45,6 +45,12 @@ jobs:
           pip install pyinstaller pywebview
         working-directory: client/backend/ultron_backend
 
+      - name: Create Config File from Template
+        run: |
+          Copy-Item .env.template .env
+          python run.py --encrypt-env
+        working-directory: client/backend/ultron_backend
+
       - name: Build UltrON.exe
         run: python -m PyInstaller UltrON.spec --noconfirm
         working-directory: client/backend/ultron_backend

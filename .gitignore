@@ -22,4 +22,10 @@ build/
 *.db-shm
 *.db-wal
 github_token.txt
-secret.key
+secret.key
+
+# Local debug and appdata dumps
+decrypted_env.txt
+err.txt
+out.txt
+*.appdata
