@@ -2404,7 +2404,7 @@ body {
 }
 
 .marquee-content span::after {
-  content: 'âœ¦';
+  content: '\2726';
   margin-left: 20px;
   margin-right: 20px;
   color: #14b8a6 !important;
