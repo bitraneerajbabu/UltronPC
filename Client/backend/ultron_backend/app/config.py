@@ -44,6 +44,54 @@ if IS_FROZEN:
         except Exception as copy_err:
             print(f"[UltrON] Failed to copy template configuration: {copy_err}", file=sys.stderr)
 
+
+def _recover_config(is_frozen: bool, env_file: Path, env_enc_file: Path, app_dir: Path, bundled_env_enc: Path | None) -> None:
+    """Attempt to recover configuration when .env.enc is missing or corrupted.
+
+    Tries bundled copy (frozen mode), then plain .env, then .env.bak.
+    If a plain config is found, it re-encrypts to .env.enc for next boot.
+    """
+    recovered = False
+    # 1. Frozen mode: try bundled .env.enc from _MEIPASS
+    if is_frozen and bundled_env_enc is not None and bundled_env_enc.is_file():
+        try:
+            import shutil
+            shutil.copy2(str(bundled_env_enc), str(env_enc_file))
+            print(f"[UltrON] Replaced missing/corrupted .env.enc with bundled version.", file=sys.stderr)
+            from app.core.config_crypt import decrypt_file_to_string
+            decrypted_content = decrypt_file_to_string(str(env_enc_file))
+            config_dict = dotenv.dotenv_values(stream=io.StringIO(decrypted_content))
+            for k, v in config_dict.items():
+                if v is not None:
+                    os.environ[k] = v
+            recovered = True
+        except Exception as retry_err:
+            print(f"[UltrON] Bundled .env.enc recovery failed: {retry_err}", file=sys.stderr)
+    # 2. Fallback to plain config file and re-encrypt
+    if not recovered:
+        for fallback in (env_file, app_dir / ".env.bak"):
+            if fallback.is_file():
+                try:
+                    config_dict = dotenv.dotenv_values(str(fallback))
+                    for k, v in config_dict.items():
+                        if v is not None:
+                            os.environ[k] = v
+                    try:
+                        from app.core.config_crypt import encrypt_file, secure_delete_file
+                        encrypt_file(str(fallback), str(env_enc_file))
+                        if is_frozen:
+                            secure_delete_file(str(fallback))
+                        print(f"[UltrON] Re-encrypted config from {fallback.name} -> .env.enc", file=sys.stderr)
+                    except Exception as enc_err:
+                        print(f"[UltrON] Could not re-encrypt config: {enc_err}", file=sys.stderr)
+                    recovered = True
+                    break
+                except Exception as fb_err:
+                    print(f"[UltrON] Fallback {fallback.name} failed: {fb_err}", file=sys.stderr)
+    if not recovered:
+        print("[UltrON] WARNING: No valid configuration found. Using defaults.", file=sys.stderr)
+
+
 if ENV_FILE.is_file() and IS_FROZEN:
     # Auto-encrypt unencrypted .env in packaged mode for security
     try:
@@ -75,13 +123,16 @@ elif ENV_ENC_FILE.is_file():
     try:
         from app.core.config_crypt import decrypt_file_to_string
         decrypted_content = decrypt_file_to_string(str(ENV_ENC_FILE))
-        # Parse and inject into os.environ
         config_dict = dotenv.dotenv_values(stream=io.StringIO(decrypted_content))
         for k, v in config_dict.items():
             if v is not None:
                 os.environ[k] = v
     except Exception as e:
         print(f"[UltrON] Error loading/decrypting .env.enc: {e}", file=sys.stderr)
+        _recover_config(IS_FROZEN, ENV_FILE, ENV_ENC_FILE, APP_DIR, BUNDLE_ENV_ENC if IS_FROZEN else None)
+else:
+    # No .env.enc — try plain .env or .env.bak, then re-encrypt
+    _recover_config(IS_FROZEN, ENV_FILE, ENV_ENC_FILE, APP_DIR, BUNDLE_ENV_ENC if IS_FROZEN else None)
 
 
 
