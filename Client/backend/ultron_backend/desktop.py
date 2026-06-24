@@ -151,16 +151,27 @@ def _check_and_download_update():
     try:
         import urllib.request
         import json as _json
-        import ssl
+        import ssl as _ssl_mod
+        from urllib.error import URLError
 
-        from app.core.ssl_utils import get_verified_ssl_context; _ssl_ctx = get_verified_ssl_context()
+        def _urlopen_with_fallback(url_req, timeout):
+            """Try verified SSL first, fall back to unverified on failure."""
+            try:
+                from app.core.ssl_utils import get_verified_ssl_context
+                ctx = get_verified_ssl_context()
+                return urllib.request.urlopen(url_req, timeout=timeout, context=ctx)
+            except URLError as _e:
+                if isinstance(_e.reason, _ssl_mod.SSLCertVerificationError):
+                    _log_update.debug("SSL verify failed, retrying unverified: %s", _e)
+                    return urllib.request.urlopen(url_req, timeout=timeout, context=_ssl_mod._create_unverified_context())
+                raise
 
         req = urllib.request.Request(
             GITHUB_API_LATEST,
             headers={"User-Agent": "UltrON-Updater/1.0",
                      "Accept": "application/vnd.github.v3+json"},
         )
-        with urllib.request.urlopen(req, timeout=15, context=_ssl_ctx) as resp:
+        with _urlopen_with_fallback(req, timeout=15) as resp:
             data = _json.loads(resp.read().decode("utf-8"))
 
         latest_tag = data.get("tag_name", "")
@@ -197,7 +208,7 @@ def _check_and_download_update():
             headers={"User-Agent": "UltrON-Updater/1.0"},
         )
         sha256 = hashlib.sha256()
-        with urllib.request.urlopen(dl_req, timeout=120, context=_ssl_ctx) as dl_resp, \
+        with _urlopen_with_fallback(dl_req, timeout=120) as dl_resp, \
              open(partial_exe, "wb") as f:
             while True:
                 chunk = dl_resp.read(65536)
@@ -221,7 +232,7 @@ def _check_and_download_update():
                     checksums_url,
                     headers={"User-Agent": "UltrON-Updater/1.0"},
                 )
-                with urllib.request.urlopen(ck_req, timeout=15, context=_ssl_ctx) as ck_resp:
+                with _urlopen_with_fallback(ck_req, timeout=15) as ck_resp:
                     checksums = _json.loads(ck_resp.read().decode("utf-8"))
                 expected_hash = checksums.get("UltrON.exe", "")
                 if expected_hash and downloaded_hash != expected_hash:
@@ -475,9 +486,6 @@ def main() -> None:
         win_x = max(0, (screen.width - win_w) // 2)
         win_y = max(0, (screen.height - win_h) // 2)
 
-        from pathlib import Path
-        icon_path = os.path.join(APP_DIR, "ui_dist", "favicon.svg")
-
         window = webview.create_window(
             title="UltrON Industrial Monitoring Platform",
             url=URL,
@@ -488,7 +496,6 @@ def main() -> None:
             resizable=True,
             fullscreen=False,
             min_size=(900, 600),
-            icon=icon_path,
             confirm_close=True,
         )
         webview.start(

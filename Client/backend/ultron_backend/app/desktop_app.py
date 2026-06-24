@@ -35,9 +35,6 @@ def run_native(host: str = "127.0.0.1", port: int = 8000, log_level: str = "info
     APP_DIR = _find_app_dir()
     title = "UltrON Industrial Monitoring Platform"
 
-    # Try loading a custom window icon
-    icon_path = str(APP_DIR / "ui_dist" / "favicon.svg")
-
     # Start server in background thread
     server_thread = threading.Thread(
         target=_start_server,
@@ -67,7 +64,6 @@ def run_native(host: str = "127.0.0.1", port: int = 8000, log_level: str = "info
         resizable=True,
         fullscreen=False,
         min_size=(900, 600),
-        icon=icon_path,
         confirm_close=True,
     )
 
