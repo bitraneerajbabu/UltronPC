@@ -438,6 +438,18 @@ def main() -> None:
     log.info("  sys.path[0]: %s", sys.path[0])
     log.info("=" * 60)
 
+    # Check if server is already running
+    if _port_open(HOST, PORT):
+        log.info("UltrON is already running in the background. Restoring window...")
+        try:
+            import urllib.request
+            req = urllib.request.Request(f"{URL}/show-window", method="GET")
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                log.info("Restore request response: %s", resp.read().decode())
+        except Exception as e:
+            log.error("Failed to restore window: %s", e)
+        sys.exit(0)
+
     # Prevent sleep while running
     _prevent_sleep()
     threading.Thread(target=_keepalive_loop, daemon=True, name="keepalive").start()
@@ -496,8 +508,19 @@ def main() -> None:
             resizable=True,
             fullscreen=False,
             min_size=(900, 600),
-            confirm_close=True,
+            confirm_close=False,
         )
+
+        from app.main import app as asgi_app
+        asgi_app.state.window = window
+
+        def on_closing():
+            log.info("Window close intercept: hiding window instead of exiting")
+            window.hide()
+            return False
+
+        window.events.closing += on_closing
+
         webview.start(
             gui=None,
             debug=False,

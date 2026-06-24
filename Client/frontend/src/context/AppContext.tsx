@@ -177,7 +177,7 @@ export const AppProvider = ({ children }) => {
               newLiveData[param.tag_name] = {
                 value: p.value,
                 unit: param.unit || '',
-                status: (p.quality === 'good' || p.quality === 'out_of_range' || p.quality === 'uncertain' || p.quality === 'U' || p.quality === 'O') ? 'online' : 'offline',
+                status: (p.quality === 'good' || p.quality === 'out_of_range' || p.quality === 'uncertain' || p.quality === 'U' || p.quality === 'O' || p.quality === 'N') ? 'online' : 'offline',
                 timestamp: formatTimestamp(parseUtcDate(p.timestamp))
               };
             }
@@ -309,7 +309,7 @@ export const AppProvider = ({ children }) => {
           setLiveData(prev => {
             const next = { ...prev };
           points.forEach(pt => {
-              const isOnline = pt.quality === 'good' || pt.quality === 'out_of_range' || pt.quality === 'uncertain' || pt.quality === 'U' || pt.quality === 'O';
+              const isOnline = pt.quality === 'good' || pt.quality === 'out_of_range' || pt.quality === 'uncertain' || pt.quality === 'U' || pt.quality === 'O' || pt.quality === 'N';
               const prevPoint = prev[pt.tag_name];
               let ts = formatTimestamp(parseUtcDate(pt.timestamp));
               if (!isOnline && prevPoint && prevPoint.timestamp) {
