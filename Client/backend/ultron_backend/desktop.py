@@ -160,9 +160,10 @@ def _check_and_download_update():
                 from app.core.ssl_utils import get_verified_ssl_context
                 ctx = get_verified_ssl_context()
                 return urllib.request.urlopen(url_req, timeout=timeout, context=ctx)
-            except URLError as _e:
-                if isinstance(_e.reason, _ssl_mod.SSLCertVerificationError):
-                    _log_update.debug("SSL verify failed, retrying unverified: %s", _e)
+            except Exception as _e:
+                err_msg = str(_e).lower()
+                if "cert" in err_msg or "ssl" in err_msg or "verify" in err_msg:
+                    _log_update.warning("SSL verify failed, retrying unverified: %s", _e)
                     return urllib.request.urlopen(url_req, timeout=timeout, context=_ssl_mod._create_unverified_context())
                 raise
 

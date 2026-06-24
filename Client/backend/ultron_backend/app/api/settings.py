@@ -65,13 +65,12 @@ async def _get_lan_ip() -> str:
 async def _check_internet() -> bool:
     try:
         import urllib.request
-        import ssl
-        ctx = ssl.create_default_context()
+        from app.core.ssl_utils import urlopen_with_ssl_fallback
         req = urllib.request.Request(
             "https://clients3.google.com/generate_204",
             method="GET",
         )
-        with urllib.request.urlopen(req, context=ctx, timeout=5) as resp:
+        with urlopen_with_ssl_fallback(req, timeout=5) as resp:
             return resp.status == 204
     except Exception:
         return False
@@ -281,7 +280,7 @@ async def check_firmware():
     current_version = settings.APP_VERSION
 
     try:
-        from app.core.ssl_utils import get_verified_ssl_context; ctx = get_verified_ssl_context()
+        from app.core.ssl_utils import urlopen_with_ssl_fallback
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(
             url,
@@ -290,7 +289,7 @@ async def check_firmware():
                 "Accept": "application/vnd.github.v3+json",
             }
         )
-        with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
+        with urlopen_with_ssl_fallback(req, timeout=10) as resp:
             data = _json.loads(resp.read().decode("utf-8"))
 
         latest_tag = data.get("tag_name", "").lstrip("v")
@@ -378,7 +377,7 @@ def _do_firmware_download(custom_url=None):
     _fw_download_state = {"state": "downloading", "percent": 0, "message": "Fetching release info…", "restart_required": False}
 
     try:
-        from app.core.ssl_utils import get_verified_ssl_context; ctx = get_verified_ssl_context()
+        from app.core.ssl_utils import urlopen_with_ssl_fallback
 
         if custom_url:
             download_url = custom_url
@@ -388,7 +387,7 @@ def _do_firmware_download(custom_url=None):
             import json as _json
             url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
             req = urllib.request.Request(url, headers={"User-Agent": "UltrON-Updater/1.0", "Accept": "application/vnd.github.v3+json"})
-            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+            with urlopen_with_ssl_fallback(req, timeout=15) as resp:
                 data = _json.loads(resp.read().decode("utf-8"))
 
             download_url = ""
@@ -414,7 +413,7 @@ def _do_firmware_download(custom_url=None):
         flag_path = os.path.join(install_dir, "update_pending.flag")
 
         download_req = urllib.request.Request(download_url, headers={"User-Agent": "UltrON-Updater/1.0"})
-        with urllib.request.urlopen(download_req, context=ctx) as resp:
+        with urlopen_with_ssl_fallback(download_req) as resp:
             total = int(resp.getheader("Content-Length") or 0)
             downloaded = 0
             chunk_size = 65536
