@@ -24,6 +24,7 @@ from app.core.security import (
     oauth2_scheme,
 )
 from app.core.logger import get_logger, get_audit_logger
+from app.config import settings
 
 log = get_logger("ultron.auth")
 audit = get_audit_logger()
