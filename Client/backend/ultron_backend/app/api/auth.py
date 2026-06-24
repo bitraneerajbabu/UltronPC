@@ -38,7 +38,6 @@ class SetupOverrideRequest(BaseModel):
 
 
 @router.post("/setup-override")
-@limiter.limit("3/minute")
 async def setup_override(request: Request, payload: SetupOverrideRequest):
     """Validate setup override credentials server-side against ADMIN_PASSWORD."""
     if payload.username == settings.ADMIN_USERNAME and payload.password == settings.ADMIN_PASSWORD:

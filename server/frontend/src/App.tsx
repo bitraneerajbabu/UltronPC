@@ -132,33 +132,6 @@ function App() {
   const [editingDeviceId, setEditingDeviceId] = useState<number|null>(null)
   const [editingDeviceName, setEditingDeviceName] = useState('')
 
-  const fallbackCopyTextToClipboard = (text: string) => {
-    const textArea = document.createElement("textarea");
-    textArea.value = text;
-    textArea.style.top = "0";
-    textArea.style.left = "0";
-    textArea.style.position = "fixed";
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    try {
-      document.execCommand('copy');
-    } catch (err) {
-      console.error('Fallback: Oops, unable to copy', err);
-    }
-    document.body.removeChild(textArea);
-  };
-
-  const copyToClipboard = (text: string) => {
-    if (!navigator.clipboard) {
-      fallbackCopyTextToClipboard(text);
-      return;
-    }
-    navigator.clipboard.writeText(text).catch(() => {
-      fallbackCopyTextToClipboard(text);
-    });
-  };
-
   const adminFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
     const adminKey = sessionStorage.getItem('rajapi_admin_key') || '';
     return fetch(url, {
@@ -519,7 +492,6 @@ function App() {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       return site.name.toLowerCase().includes(q) || 
-             site.api_key.toLowerCase().includes(q) || 
              (site.location && site.location.toLowerCase().includes(q));
     }
     return true;
@@ -650,6 +622,16 @@ function App() {
             </div>
           </div>
 
+          {/* Column Headers */}
+          <div className="flex items-center px-4 py-1.5 border-b border-brand-border/30 bg-brand-border/20 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+            <div className="w-16 flex-shrink-0"></div>
+            <div className="flex-1 grid grid-cols-12 items-center gap-4">
+              <div className="col-span-4">Site</div>
+              <div className="col-span-5">Location / Status</div>
+              <div className="col-span-3 text-right pr-4">Expiry</div>
+            </div>
+          </div>
+
           {/* List Items */}
           <div className="flex-1 overflow-y-auto">
             {filteredSites.length === 0 ? (
@@ -670,9 +652,9 @@ function App() {
 
                     {/* Site Details */}
                     <div className="flex-1 grid grid-cols-12 items-center gap-4">
-                      <div className="col-span-3 font-bold text-gray-800 truncate">{site.name}</div>
-                      
-                      <div className="col-span-3 flex flex-col gap-0.5">
+                      <div className="col-span-4 font-bold text-gray-800 truncate">{site.name}</div>
+                       
+                      <div className="col-span-5 flex flex-col gap-0.5">
                         <span className="text-gray-600 truncate flex items-center gap-2">
                           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${site.is_active ? 'bg-emerald-600' : 'bg-red-500'}`}></span>
                           {site.location || 'Unknown Location'}
@@ -714,28 +696,8 @@ function App() {
                         </div>
                       </div>
                       
-                      {/* Token Section */}
-                      <div className="col-span-4 flex items-center gap-2 text-gray-600 truncate">
-                        <span className="bg-gray-200/80 border border-brand-border px-2 py-0.5 rounded text-xs text-gray-600 font-mono truncate max-w-[150px]">
-                          {site.api_key}
-                        </span>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyToClipboard(site.api_key);
-                            alert("AMC Token copied to clipboard!");
-                          }}
-                          className="opacity-0 group-hover:opacity-100 p-1 hover:text-brand-accent transition-all"
-                          title="Copy AMC Token"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                        </button>
-                      </div>
-                      
                       {/* Expiry Date */}
-                      <div className="col-span-2 text-right font-medium text-gray-600 pr-4">
+                      <div className="col-span-3 text-right font-medium text-gray-600 pr-4">
                         {site.amc_expiry ? new Date(site.amc_expiry).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-'}
                       </div>
                     </div>
