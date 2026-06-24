@@ -1,9 +1,13 @@
 # Run this from your machine on the Pi's network (192.168.1.x)
 # Usage: .\deploy.ps1
+# Prerequisites:
+#   1. SSH key-based auth configured: ssh-copy-id pi@raj.local
+#   2. Passwordless sudo for rajapi on Pi:
+#      echo "pi ALL=(ALL) NOPASSWD: /bin/systemctl restart rajapi" | sudo tee /etc/sudoers.d/rajapi
 
 $PI = "pi@raj.local"
 $REMOTE = "/home/pi/rajapi_server/backend"
-$LOCAL = "C:\Users\sunsh\OneDrive\Music\UltrON\server"
+$LOCAL = Join-Path $PSScriptRoot "."
 
 Write-Host "=== Deploying RajAPI server updates ===" -ForegroundColor Cyan
 
@@ -23,8 +27,22 @@ scp "$LOCAL\backend\app\schemas\api_models.py" "${PI}:${REMOTE}/app/schemas/"
 Write-Host "`n[2/4] Copying frontend build..." -ForegroundColor Yellow
 scp -r "$LOCAL\frontend\dist\*" "${PI}:${REMOTE}/frontend/dist/"
 
-# 3. Restart service
+# 3. Restart service using key-based auth + passwordless sudo
 Write-Host "`n[3/4] Restarting rajapi service..." -ForegroundColor Yellow
-$pw = Read-Host -Prompt "Enter sudo password for pi" -AsSecureString; $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($pw); $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr); echo $plain | ssh "${PI}" "sudo -S systemctl restart rajapi"
+ssh "${PI}" "sudo systemctl restart rajapi"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: Failed to restart rajapi service. Check SSH key setup." -ForegroundColor Red
+    exit 1
+}
+
+# 4. Health check
+Write-Host "`n[4/4] Running health check..." -ForegroundColor Yellow
+Start-Sleep -Seconds 3
+$health = ssh "${PI}" "curl -sf http://localhost:8000/api/v1/sites/ > /dev/null && echo 'healthy' || echo 'failed'"
+if ($health -eq 'healthy') {
+    Write-Host "API health check: OK" -ForegroundColor Green
+} else {
+    Write-Host "WARNING: API health check failed — service may still be starting." -ForegroundColor Yellow
+}
 
 Write-Host "`n=== Deployment complete! ===" -ForegroundColor Green

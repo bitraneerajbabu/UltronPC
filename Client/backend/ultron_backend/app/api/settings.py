@@ -281,7 +281,7 @@ async def check_firmware():
     current_version = settings.APP_VERSION
 
     try:
-        ctx = ssl._create_unverified_context()
+        from app.core.ssl_utils import get_verified_ssl_context; ctx = get_verified_ssl_context()
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(
             url,
@@ -378,7 +378,7 @@ def _do_firmware_download(custom_url=None):
     _fw_download_state = {"state": "downloading", "percent": 0, "message": "Fetching release info…", "restart_required": False}
 
     try:
-        ctx = ssl._create_unverified_context()
+        from app.core.ssl_utils import get_verified_ssl_context; ctx = get_verified_ssl_context()
 
         if custom_url:
             download_url = custom_url

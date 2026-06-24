@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "backend" / "ultron_backend"))
@@ -15,7 +16,7 @@ async def run():
             # Set api_id to 8244
             m.api_id = "8244"
             m.api_name = "site_2143"
-            m.api_password = "BERGER"
+            m.api_password = os.environ.get("BULK_API_PASSWORD", "")
             
             # Map specific parameters
             if m.parameter_id == 4: # NOX

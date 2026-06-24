@@ -324,13 +324,23 @@ function App() {
             </p>
 
             {showSetupLogin && (
-              <form onSubmit={(e) => {
+              <form onSubmit={async (e) => {
                 e.preventDefault();
-                if (setupUsername === 'token' && setupPassword === 'Ultron123.0') {
-                  setIsSetupAuthenticated(true);
-                  setSetupAuthError('');
-                } else {
-                  setSetupAuthError('Invalid setup credentials.');
+                try {
+                  const res = await fetch('/api/v1/auth/setup-override', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: setupUsername, password: setupPassword }),
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    setIsSetupAuthenticated(true);
+                    setSetupAuthError('');
+                  } else {
+                    setSetupAuthError(data.detail || 'Invalid setup credentials.');
+                  }
+                } catch {
+                  setSetupAuthError('Network error — could not reach server.');
                 }
               }} className="override-form">
                 <h3 className="override-form-title">AMC Token Renewal Override</h3>

@@ -176,8 +176,9 @@ function App() {
         body: JSON.stringify({ username, password })
       })
       if (res.ok) {
+        const data = await res.json()
         sessionStorage.setItem('rajapi_auth', 'true')
-        sessionStorage.setItem('rajapi_admin_key', password)
+        sessionStorage.setItem('rajapi_admin_key', data.admin_key || password)
         setIsLoggedIn(true)
         setLoginError('')
       } else {

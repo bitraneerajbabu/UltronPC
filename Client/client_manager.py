@@ -63,7 +63,7 @@ def _get_current_version() -> str:
 def _get_latest_github_version() -> str:
     """Fetch the latest release tag from GitHub (returns tag string or raises)."""
     import ssl
-    ctx = ssl._create_unverified_context()
+    ctx = ssl.create_default_context()
     req = urllib.request.Request(
         GITHUB_API_LATEST,
         headers={"User-Agent": "UltrON-Manager/1.0",

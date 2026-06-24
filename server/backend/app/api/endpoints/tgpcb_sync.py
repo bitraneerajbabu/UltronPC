@@ -150,9 +150,9 @@ def tgpcb_sync(payload: TgpcbPayload, db: Session = Depends(get_db)):
 
     # Return active broadcasts targeted at this site
     active_bcasts = db.query(Broadcast).filter(
-        Broadcast.is_active == True,
-        (Broadcast.expires_at == None) | (Broadcast.expires_at > now),
-        (Broadcast.target_all == True) | (Broadcast.target_site_id == site.id)
+        Broadcast.is_active.is_(True),
+        (Broadcast.expires_at.is_(None)) | (Broadcast.expires_at > now),
+        (Broadcast.target_all.is_(True)) | (Broadcast.target_site_id == site.id)
     ).all()
 
     return {

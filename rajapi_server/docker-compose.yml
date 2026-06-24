@@ -1,8 +1,6 @@
-version: '3.8'
-
 services:
   mqtt:
-    image: eclipse-mosquitto:latest
+    image: eclipse-mosquitto:2.0.18
     container_name: rajapi_mqtt
     ports:
       - "1883:1883"

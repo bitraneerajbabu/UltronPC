@@ -1,8 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 import os
+import time
+from collections import defaultdict
 from app.core.config import settings
 from app.db.database import engine, Base
 import logging
@@ -128,6 +131,23 @@ def _run_auto_migrations():
 
 _run_auto_migrations()
 
+# ─── Simple In-Memory Rate Limiter ─────────────────────────────────────────────
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+
+def _check_login_rate_limit(ip: str) -> None:
+    now = time.time()
+    attempts = _login_attempts[ip]
+    attempts[:] = [t for t in attempts if now - t < 60]
+    if len(attempts) >= 5:
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again in 60 seconds.")
+    attempts.append(now)
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
@@ -141,6 +161,8 @@ app.add_middleware(
         "http://127.0.0.1:8000",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "https://rajapi.com",
+        "http://rajapi.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -149,9 +171,11 @@ app.add_middleware(
 
 
 @app.post(f"{settings.API_V1_STR}/auth/login")
-async def login(payload: dict):
-    if payload.get("password") == settings.ADMIN_KEY:
-        return {"success": True}
+async def login(payload: LoginRequest, request: Request):
+    _check_login_rate_limit(request.client.host if request.client else "unknown")
+    if payload.password == settings.ADMIN_KEY:
+        return {"success": True, "admin_key": settings.ADMIN_KEY}
+    logger.warning(f"Failed login attempt from {request.client.host if request.client else 'unknown'}")
     return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
 
 

@@ -247,9 +247,11 @@ def main():
             sys.exit(1)
         sys.exit(0)
 
+    from app.config import settings
+
     print()
     print("  +======================================+")
-    print("  |   UltrON Industrial Platform  v1.0  |")
+    print(f"  |   UltrON Industrial Platform  v{settings.APP_VERSION}  |")
     print("  +======================================+")
     print()
 

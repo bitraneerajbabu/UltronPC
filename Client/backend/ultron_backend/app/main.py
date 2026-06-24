@@ -7,7 +7,7 @@ CORS for the frontend, and APScheduler for averaging + heartbeat.
 import asyncio
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -293,7 +293,7 @@ async def websocket_live(
         await websocket.send_json({
             "type": "connected",
             "message": f"Connected to {settings.APP_NAME} live stream",
-            "ts": datetime.utcnow().isoformat(),
+            "ts": datetime.now(timezone.utc).isoformat(),
             "subscribed_stations": sids,
         })
         # Keep connection open — just drain incoming (clients can send ping)

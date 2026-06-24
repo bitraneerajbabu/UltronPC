@@ -3,9 +3,11 @@ UltrON — Auth API
 Provides login, logout, and current-user endpoints.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from slowapi import Limiter
@@ -27,6 +29,26 @@ log = get_logger("ultron.auth")
 audit = get_audit_logger()
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+
+# ─── Setup Override ────────────────────────────────────────────────────────────
+class SetupOverrideRequest(BaseModel):
+    username: str
+    password: str
+
+
+@router.post("/setup-override")
+@limiter.limit("3/minute")
+async def setup_override(request: Request, payload: SetupOverrideRequest):
+    """Validate setup override credentials server-side against ADMIN_PASSWORD."""
+    if payload.username == settings.ADMIN_USERNAME and payload.password == settings.ADMIN_PASSWORD:
+        audit.info(f"Setup override successful: username='{payload.username}'")
+        return {"success": True}
+    audit.warning(f"Failed setup override attempt: username='{payload.username}'")
+    return JSONResponse(
+        {"success": False, "detail": "Invalid setup credentials."},
+        status_code=401,
+    )
 
 
 # ─── Login ────────────────────────────────────────────────────────────────────
@@ -51,7 +73,7 @@ async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depe
         )
 
     # Update last_login
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(timezone.utc)
     await db.commit()
 
     token = create_access_token({"sub": user.username, "role": user.role})

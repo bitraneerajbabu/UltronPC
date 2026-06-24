@@ -25,19 +25,19 @@ def get_active_broadcasts(
 ):
     now = datetime.now(timezone.utc)
     q = db.query(Broadcast).filter(
-        Broadcast.is_active == True,
-        (Broadcast.expires_at == None) | (Broadcast.expires_at > now)
+        Broadcast.is_active.is_(True),
+        (Broadcast.expires_at.is_(None)) | (Broadcast.expires_at > now)
     )
     # If a site is specified, only return broadcasts targeting that site
     if site_id is not None:
         q = q.filter(
-            (Broadcast.target_all == True) | (Broadcast.target_site_id == site_id)
+            (Broadcast.target_all.is_(True)) | (Broadcast.target_site_id == site_id)
         )
     elif api_key is not None:
         site = db.query(IndustrySite).filter(IndustrySite.api_key == api_key).first()
         if site:
             q = q.filter(
-                (Broadcast.target_all == True) | (Broadcast.target_site_id == site.id)
+                (Broadcast.target_all.is_(True)) | (Broadcast.target_site_id == site.id)
             )
     return q.order_by(Broadcast.created_at.desc()).all()
 

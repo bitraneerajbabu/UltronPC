@@ -14,11 +14,13 @@ from pathlib import Path
 import time
 import ssl
 
-# Disable SSL verification globally to prevent failures on machines with missing/outdated root certs or SSL proxy inspection
-try:
-    ssl._create_default_https_context = ssl._create_unverified_context
-except AttributeError:
-    pass
+# Use default CA certificates for secure HTTPS connections.
+# Falls back to unverified if the system CA store is unavailable.
+def _get_ssl_context():
+    try:
+        return ssl.create_default_context()
+    except Exception:
+        return ssl._create_unverified_context()
 
 # Config — change this to match your repository
 GITHUB_REPO = "bitraneerajbabu/UltronPC"
@@ -35,7 +37,7 @@ def _github_json(url):
             "Accept": "application/vnd.github.v3+json",
         }
     )
-    ctx = ssl._create_unverified_context()
+    ctx = _get_ssl_context()
     with urllib.request.urlopen(req, context=ctx) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -235,7 +237,7 @@ def main():
                 sys.exit(1)
 
         import shutil
-        ctx = ssl._create_unverified_context()
+        ctx = _get_ssl_context()
         req = urllib.request.Request(
             download_url,
             headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}

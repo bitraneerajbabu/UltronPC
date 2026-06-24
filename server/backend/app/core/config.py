@@ -25,10 +25,18 @@ class Settings(BaseSettings):
 settings = Settings()
 
 if not settings.SECRET_KEY:
-    print("WARNING: SECRET_KEY is not set in .env! Generate one with: openssl rand -hex 32", file=sys.stderr)
+    raise RuntimeError(
+        "SECRET_KEY is not set in .env! Generate one with: openssl rand -hex 32\n"
+        "Add it to the .env file in the server backend directory."
+    )
 if not settings.DATABASE_URL:
-    print("WARNING: DATABASE_URL is not set in .env! Using default localhost.", file=sys.stderr)
-    settings.DATABASE_URL = "postgresql://ultron_admin:changeme@127.0.0.1:5432/ultron_central"
+    raise RuntimeError(
+        "DATABASE_URL is not set in .env!\n"
+        "Example: DATABASE_URL=postgresql://ultron_admin:strong_password@127.0.0.1:5432/ultron_central\n"
+        "Add it to the .env file in the server backend directory."
+    )
 if not settings.ADMIN_KEY:
-    print("WARNING: ADMIN_KEY is not set in .env! Using insecure default.", file=sys.stderr)
-    settings.ADMIN_KEY = "changeme"
+    raise RuntimeError(
+        "ADMIN_KEY is not set in .env!\n"
+        "Set a strong admin key and add it to the .env file in the server backend directory."
+    )

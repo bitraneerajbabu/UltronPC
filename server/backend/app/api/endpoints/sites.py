@@ -16,7 +16,7 @@ def _require_admin(x_admin_key: Optional[str] = Header(default=None)):
         raise HTTPException(status_code=403, detail="Invalid or missing admin key")
 
 @router.get("/", response_model=List[SiteResponse])
-def get_sites(db: Session = Depends(get_db)):
+def get_sites(db: Session = Depends(get_db), _: None = Depends(_require_admin)):
     # Fast simple query — last_sync is stored directly on the row
     return db.query(IndustrySite).all()
 
@@ -49,7 +49,7 @@ def delete_site(site_id: int, db: Session = Depends(get_db), _: None = Depends(_
     return {"status": "deleted", "id": site_id}
 
 @router.get("/{site_id}/devices", response_model=List[DeviceResponse])
-def list_devices(site_id: int, db: Session = Depends(get_db)):
+def list_devices(site_id: int, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
     return db.query(Device).filter(Device.site_id == site_id).all()
 
 @router.post("/{site_id}/devices", response_model=DeviceResponse)
@@ -154,7 +154,7 @@ def update_site(site_id: int, payload: SiteUpdate, db: Session = Depends(get_db)
 
 
 @router.get("/{site_id}/telemetry/latest", response_model=List[LatestTelemetryPoint])
-def get_latest_telemetry(site_id: int, db: Session = Depends(get_db)):
+def get_latest_telemetry(site_id: int, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
     """
     Returns the most recent telemetry value for every parameter/tag at the given site.
     Uses DISTINCT ON (PostgreSQL native) — much faster than the correlated-subquery approach
@@ -205,7 +205,8 @@ def get_telemetry_history(
     to_date: Optional[datetime] = None,
     before: Optional[datetime] = None,
     limit: int = 500,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(_require_admin),
 ):
     """
     Return telemetry history for a specific parameter.
@@ -341,7 +342,7 @@ def prune_all_telemetry(keep_days: int = 7, db: Session = Depends(get_db), _: No
 
 
 @router.get("/locks/summary", response_model=List[LockSummary])
-def get_locks_summary(db: Session = Depends(get_db)):
+def get_locks_summary(db: Session = Depends(get_db), _: None = Depends(_require_admin)):
     return db.query(IndustrySite).with_entities(
         IndustrySite.id,
         IndustrySite.lock_status,
