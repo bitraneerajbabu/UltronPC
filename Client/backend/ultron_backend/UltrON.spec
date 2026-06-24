@@ -145,8 +145,15 @@ hidden = [
     "app.models",
     "app.schemas",
     "app.services",
-    # pywebview (desktop wrapper)
+    # pywebview (desktop native window wrapper)
     "webview",
+    "webview.platforms",
+    "webview.platforms.winforms",
+    "webview.platforms.winforms_edge",
+    "pythonnet",
+    "clr",
+    "clr_loader",
+    "app.desktop_app",
 ]
 
 # ── Collect data files ────────────────────────────────────────────────────────

@@ -231,7 +231,7 @@ def _check_and_download_update():
                     )
                     os.remove(partial_exe)
                     return
-                _log_update.info("Checksum verified ✓")
+                _log_update.info("Checksum verified [OK]")
             except Exception as ck_err:
                 _log_update.warning("Checksum verification skipped (%s)", ck_err)
 
@@ -244,7 +244,7 @@ def _check_and_download_update():
         with open(flag_path, "w") as f:
             f.write(latest_tag)
 
-        _log_update.info("Update %s downloaded ✓ — will apply on next launch.", latest_tag)
+        _log_update.info("Update %s downloaded [OK] — will apply on next launch.", latest_tag)
 
     except Exception as _e:
         # Non-fatal — log quietly
@@ -461,21 +461,42 @@ def main() -> None:
             pass
         sys.exit(1)
 
-    log.info("Server ready ✓  Opening window …")
+    log.info("Server ready [OK]  Opening window …")
 
-    # 4. Open window
+    # 4. Open native window
     try:
         import webview
-        log.info("pywebview version: %s", getattr(webview, "__version__", "unknown"))
+        log.info("pywebview loaded successfully")
+
+        # Compute a reasonable window size based on screen
+        screen = webview.screens[0]
+        win_w = min(1400, int(screen.width * 0.9))
+        win_h = min(900, int(screen.height * 0.9))
+        win_x = max(0, (screen.width - win_w) // 2)
+        win_y = max(0, (screen.height - win_h) // 2)
+
+        from pathlib import Path
+        icon_path = os.path.join(APP_DIR, "ui_dist", "favicon.svg")
+
         window = webview.create_window(
-            title="UltrON Industrial Platform",
+            title="UltrON Industrial Monitoring Platform",
             url=URL,
-            width=1280,
-            height=800,
+            width=win_w,
+            height=win_h,
+            x=win_x,
+            y=win_y,
             resizable=True,
-            min_size=(1024, 600),
+            fullscreen=False,
+            min_size=(900, 600),
+            icon=icon_path,
+            confirm_close=True,
         )
-        webview.start(debug=False)
+        webview.start(
+            gui=None,
+            debug=False,
+            private_mode=False,
+            storage_path=os.path.join(APP_DIR, "webview_data"),
+        )
         log.info("Window closed — exiting.")
     except ImportError:
         log.warning("pywebview not installed — opening system browser")

@@ -188,6 +188,7 @@ def main():
     parser.add_argument("--force-build", action="store_true", help="Force full frontend rebuild")
     parser.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
+    parser.add_argument("--native", action="store_true", help="Open in native desktop window instead of browser")
     parser.add_argument("--encrypt-env", action="store_true", help="Encrypt .env to .env.enc and rename .env to .env.bak")
     parser.add_argument("--decrypt-env", action="store_true", help="Decrypt .env.enc back to .env")
     args = parser.parse_args()
@@ -260,6 +261,12 @@ def main():
         ui_ok = UI_DIST_DIR.is_dir()
     else:
         ui_ok = build_frontend(force=args.force_build)
+
+    if args.native:
+        log("Native desktop window mode enabled.")
+        from app.desktop_app import run_native
+        run_native(host=args.host, port=args.port, log_level="info")
+        return
 
     if ui_ok:
         log("UI will be served at -> http://localhost:{}/".format(args.port))
