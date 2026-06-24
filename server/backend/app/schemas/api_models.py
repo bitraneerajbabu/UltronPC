@@ -22,6 +22,7 @@ class DeviceResponse(BaseModel):
     site_id: int
     name: str
     status: str = "offline"
+    api_key: Optional[str] = None
 
     class Config:
         from_attributes = True

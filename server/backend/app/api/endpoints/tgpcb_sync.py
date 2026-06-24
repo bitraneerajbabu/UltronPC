@@ -86,7 +86,12 @@ def tgpcb_sync(payload: TgpcbPayload, db: Session = Depends(get_db)):
     if not api_key:
         raise HTTPException(status_code=403, detail="Missing API key: set 'api_name' to your RajAPI site key")
 
+    # Try site-level key first, then device-level key
     site = db.query(IndustrySite).filter(IndustrySite.api_key == api_key).first()
+    if not site:
+        device = db.query(Device).filter(Device.api_key == api_key).first()
+        if device and device.site:
+            site = device.site
     if not site:
         raise HTTPException(status_code=403, detail="Invalid API key — site not found on RajAPI")
     if not site.is_active:

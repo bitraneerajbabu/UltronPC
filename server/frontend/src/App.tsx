@@ -126,7 +126,7 @@ function App() {
   const [savingExpiry, setSavingExpiry] = useState(false)
 
   // Devices state
-  const [siteDevices, setSiteDevices] = useState<{id:number;site_id:number;name:string;status:string}[]>([])
+  const [siteDevices, setSiteDevices] = useState<{id:number;site_id:number;name:string;status:string;api_key?:string}[]>([])
   const [loadingDevices, setLoadingDevices] = useState(false)
   const [newDeviceName, setNewDeviceName] = useState('')
   const [editingDeviceId, setEditingDeviceId] = useState<number|null>(null)
@@ -327,17 +327,17 @@ function App() {
   useEffect(() => {
     if (!isLoggedIn) return;
     const load = () => {
-      fetch('/api/v1/sites/')
-        .then(res => res.json())
-        .then(data => setSites(data))
+      adminFetch('/api/v1/sites/')
+        .then(res => res.ok ? res.json() : [])
+        .then(data => Array.isArray(data) && setSites(data))
         .catch(err => console.error(err));
-      fetch('/api/v1/broadcasts/')
-        .then(res => res.json())
-        .then(data => setBroadcasts(data))
+      adminFetch('/api/v1/broadcasts/')
+        .then(res => res.ok ? res.json() : [])
+        .then(data => Array.isArray(data) && setBroadcasts(data))
         .catch(err => console.error(err));
-      fetch('/api/v1/sites/locks/summary')
-        .then(res => res.json())
-        .then(data => setLocks(data))
+      adminFetch('/api/v1/sites/locks/summary')
+        .then(res => res.ok ? res.json() : [])
+        .then(data => Array.isArray(data) && setLocks(data))
         .catch(err => console.error(err));
     };
     load();
@@ -348,10 +348,10 @@ function App() {
   // Load parameters for history when a site is selected
   useEffect(() => {
     if (!historySiteId) { setHistoryParams([]); return; }
-    fetch(`/api/v1/sites/${historySiteId}/telemetry/latest`)
-      .then(res => res.json())
+    adminFetch(`/api/v1/sites/${historySiteId}/telemetry/latest`)
+      .then(res => res.ok ? res.json() : [])
       .then((data: {id: number; tag_name: string; name: string}[]) => {
-        setHistoryParams(data.map(p => ({id: p.id, tag_name: p.tag_name, name: p.name})));
+        if (Array.isArray(data)) setHistoryParams(data.map(p => ({id: p.id, tag_name: p.tag_name, name: p.name})));
       })
       .catch(err => console.error(err));
   }, [historySiteId])
@@ -365,11 +365,11 @@ function App() {
       params.set('parameter_id', String(historyParamId));
       if (historyFrom) params.set('from_date', new Date(historyFrom).toISOString());
       if (historyTo) params.set('to_date', new Date(historyTo).toISOString());
-      const res = await fetch(`/api/v1/sites/${historySiteId}/telemetry/history?${params}`);
+      const res = await adminFetch(`/api/v1/sites/${historySiteId}/telemetry/history?${params}`);
       if (res.ok) {
         const data = await res.json();
-        setHistoryData(data);
-        if (data.length > 0) setHistoryCursor(data[data.length - 1].timestamp);
+        if (Array.isArray(data)) setHistoryData(data);
+        if (Array.isArray(data) && data.length > 0) setHistoryCursor(data[data.length - 1].timestamp);
       }
     } catch (err) { console.error(err); }
     finally { setHistoryLoading(false); }
@@ -384,11 +384,11 @@ function App() {
       if (historyFrom) params.set('from_date', new Date(historyFrom).toISOString());
       if (historyTo) params.set('to_date', new Date(historyTo).toISOString());
       params.set('before', historyCursor);
-      const res = await fetch(`/api/v1/sites/${historySiteId}/telemetry/history?${params}`);
+      const res = await adminFetch(`/api/v1/sites/${historySiteId}/telemetry/history?${params}`);
       if (res.ok) {
         const data = await res.json();
-        setHistoryData(prev => [...(prev || []), ...data]);
-        if (data.length > 0) setHistoryCursor(data[data.length - 1].timestamp);
+        if (Array.isArray(data)) setHistoryData(prev => [...(prev || []), ...data]);
+        if (Array.isArray(data) && data.length > 0) setHistoryCursor(data[data.length - 1].timestamp);
       }
     } catch (err) { console.error(err); }
     finally { setHistoryLoading(false); }
@@ -437,10 +437,10 @@ function App() {
   const fetchLiveData = useCallback(async (siteId: number) => {
     setLiveDataLoading(true);
     try {
-      const res = await fetch(`/api/v1/sites/${siteId}/telemetry/latest`);
+      const res = await adminFetch(`/api/v1/sites/${siteId}/telemetry/latest`);
       if (res.ok) {
         const data = await res.json();
-        setLiveData(data);
+        if (Array.isArray(data)) setLiveData(data);
       }
     } catch (err) {
       console.error(err);
@@ -461,9 +461,9 @@ function App() {
   useEffect(() => {
     if (!activeSite) { setSiteDevices([]); return; }
     setLoadingDevices(true);
-    fetch(`/api/v1/sites/${activeSite.id}/devices`)
-      .then(r => r.json())
-      .then(d => { setSiteDevices(d); setLoadingDevices(false); })
+    adminFetch(`/api/v1/sites/${activeSite.id}/devices`)
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { if (Array.isArray(d)) setSiteDevices(d); setLoadingDevices(false); })
       .catch(() => setLoadingDevices(false));
   }, [activeSite]);
 
@@ -963,14 +963,34 @@ function App() {
                         }}
                       />
                     ) : (
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <span className="text-sm font-medium text-gray-800">{d.name}</span>
                         <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full ${
                           d.status === 'online' ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-500'
                         }`}>{d.status}</span>
+                        {d.api_key && (
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="text-[10px] font-mono text-gray-400 truncate max-w-[120px]">{d.api_key}</span>
+                            <button onClick={() => { navigator.clipboard.writeText(d.api_key!); alert('Device key copied!'); }}
+                              className="text-gray-400 hover:text-brand-accent transition-colors" title="Copy device API key">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                     <div className="flex items-center gap-1 ml-2">
+                      <button onClick={async () => {
+                        if (!confirm(`Regenerate API key for "${d.name}"? Old key will stop working.`)) return;
+                        const res = await adminFetch(`/api/v1/sites/${activeSite.id}/devices/${d.id}/renew-key`, {method: 'POST'});
+                        if (res.ok) { const updated = await res.json(); setSiteDevices(siteDevices.map(x => x.id === d.id ? updated : x)); }
+                      }} className="p-1 rounded hover:bg-amber-100 text-gray-500 hover:text-amber-600 transition-colors" title="Regenerate API key">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                        </svg>
+                      </button>
                       <button onClick={() => { setEditingDeviceId(d.id); setEditingDeviceName(d.name); }}
                         className="p-1 rounded hover:bg-brand-border/50 text-gray-500 hover:text-brand-btn transition-colors"
                         title="Rename"
@@ -1507,11 +1527,13 @@ function App() {
               });
               setLockModal(null);
               const [sitesRes, locksRes] = await Promise.all([
-                fetch('/api/v1/sites/'),
-                fetch('/api/v1/sites/locks/summary')
+                adminFetch('/api/v1/sites/'),
+                adminFetch('/api/v1/sites/locks/summary')
               ]);
-              setSites(await sitesRes.json());
-              setLocks(await locksRes.json());
+              const newSites = sitesRes.ok ? await sitesRes.json() : [];
+              const newLocks = locksRes.ok ? await locksRes.json() : [];
+              if (Array.isArray(newSites)) setSites(newSites);
+              if (Array.isArray(newLocks)) setLocks(newLocks);
             }} className={`px-6 py-2 rounded-lg text-gray-800 font-bold transition-colors ${
               lockModal.status === 'unlocked' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-red-600 hover:bg-red-500'
             }`}>{lockModal.status === 'unlocked' ? 'Unlock' : 'Lock'}</button>

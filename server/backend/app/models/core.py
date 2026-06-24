@@ -57,6 +57,7 @@ class Device(Base):
     site_id = Column(Integer, ForeignKey("industry_sites.id"))
     name = Column(String)
     status = Column(String, default="offline")
+    api_key = Column(String, unique=True, index=True, nullable=True)
     
     site = relationship("IndustrySite", back_populates="devices")
     parameters = relationship("Parameter", back_populates="device", cascade="all, delete-orphan")

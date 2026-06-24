@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 from app.db.database import get_db
 from app.models.core import IndustrySite, PendingCommand
-from app.core.config import settings
+from app.api.deps import AuthContext, get_auth_context
 
 router = APIRouter()
 
@@ -14,16 +14,14 @@ SUPPORTED_COMMANDS = {"restart_polling", "reboot_system", "factory_reset"}
 class CommandRequest(BaseModel):
     action: str
 
-def _require_admin(x_admin_key: Optional[str] = Header(default=None)):
-    if x_admin_key != settings.ADMIN_KEY:
-        raise HTTPException(status_code=403, detail="Invalid or missing admin key")
-
 @router.get("/supported")
 def get_supported_commands():
     return {"commands": sorted(SUPPORTED_COMMANDS)}
 
 @router.post("/sites/{site_id}/command")
-def send_command(site_id: int, payload: CommandRequest, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+def send_command(site_id: int, payload: CommandRequest, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
+    if not auth.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
     site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")

@@ -1,13 +1,15 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 import os
 import time
 from collections import defaultdict
 from app.core.config import settings
-from app.db.database import engine, Base
+from app.db.database import engine, Base, get_db
+from app.models.core import IndustrySite, Device
 import logging
 
 # Set up logging
@@ -109,6 +111,16 @@ def _run_auto_migrations():
         except Exception as e:
             logger.warning(f"Auto-migration for broadcast columns skipped: {e}")
 
+        # Add api_key column to devices table if missing
+        try:
+            dev_cols = {c["name"] for c in inspector.get_columns("devices")}
+            if "api_key" not in dev_cols:
+                conn.execute(text("ALTER TABLE devices ADD COLUMN api_key VARCHAR(255) UNIQUE"))
+                conn.commit()
+                logger.info("Auto-migration: added 'api_key' column to devices")
+        except Exception as e:
+            logger.warning(f"Auto-migration for devices.api_key skipped: {e}")
+
         # Create pending_commands table if not exists
         try:
             conn.execute(text("""
@@ -171,10 +183,26 @@ app.add_middleware(
 
 
 @app.post(f"{settings.API_V1_STR}/auth/login")
-async def login(payload: LoginRequest, request: Request):
+async def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     _check_login_rate_limit(request.client.host if request.client else "unknown")
-    if payload.password == settings.ADMIN_KEY:
-        return {"success": True, "admin_key": settings.ADMIN_KEY}
+    key = payload.password
+
+    # Check admin key
+    if key == settings.ADMIN_KEY:
+        return {"success": True, "admin_key": key}
+
+    # Check site-level key
+    site = db.query(IndustrySite).filter(IndustrySite.api_key == key).first()
+    if site:
+        if not site.is_active:
+            return JSONResponse({"success": False, "detail": "Site is inactive"}, status_code=403)
+        return {"success": True, "admin_key": key}
+
+    # Check device-level key
+    device = db.query(Device).filter(Device.api_key == key).first()
+    if device:
+        return {"success": True, "admin_key": key}
+
     logger.warning(f"Failed login attempt from {request.client.host if request.client else 'unknown'}")
     return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
 
@@ -189,7 +217,10 @@ app.include_router(broadcasts.router, prefix=f"{settings.API_V1_STR}/broadcasts"
 app.include_router(commands.router, prefix=f"{settings.API_V1_STR}/commands", tags=["commands"])
 
 # Serve frontend build if it exists
-frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))
+_base = os.path.dirname(__file__)
+frontend_path = os.path.abspath(os.path.join(_base, "..", "..", "frontend", "dist"))
+if not os.path.exists(frontend_path):
+    frontend_path = os.path.abspath(os.path.join(_base, "..", "frontend", "dist"))
 if os.path.exists(frontend_path):
     app.mount("/assets", StaticFiles(directory=os.path.join(frontend_path, "assets")), name="assets")
     

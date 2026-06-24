@@ -1,17 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timezone
 from app.db.database import get_db
 from app.models.core import Broadcast, IndustrySite
 from app.schemas.api_models import BroadcastCreate, BroadcastResponse
-from app.core.config import settings
+from app.api.deps import AuthContext, get_auth_context
 
 router = APIRouter()
-
-def _require_admin(x_admin_key: Optional[str] = Header(default=None)):
-    if x_admin_key != settings.ADMIN_KEY:
-        raise HTTPException(status_code=403, detail="Invalid or missing admin key")
 
 @router.get("/", response_model=List[BroadcastResponse])
 def get_broadcasts(db: Session = Depends(get_db)):
@@ -42,7 +38,9 @@ def get_active_broadcasts(
     return q.order_by(Broadcast.created_at.desc()).all()
 
 @router.post("/", response_model=BroadcastResponse)
-def create_broadcast(payload: BroadcastCreate, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+def create_broadcast(payload: BroadcastCreate, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
+    if not auth.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
     if payload.target_site_id is not None:
         site = db.query(IndustrySite).filter(IndustrySite.id == payload.target_site_id).first()
         if not site:
@@ -60,7 +58,9 @@ def create_broadcast(payload: BroadcastCreate, db: Session = Depends(get_db), _:
     return bcast
 
 @router.put("/{broadcast_id}", response_model=BroadcastResponse)
-def update_broadcast(broadcast_id: int, payload: BroadcastCreate, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+def update_broadcast(broadcast_id: int, payload: BroadcastCreate, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
+    if not auth.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
     bcast = db.query(Broadcast).filter(Broadcast.id == broadcast_id).first()
     if not bcast:
         raise HTTPException(status_code=404, detail="Broadcast not found")
@@ -78,7 +78,9 @@ def update_broadcast(broadcast_id: int, payload: BroadcastCreate, db: Session = 
     return bcast
 
 @router.delete("/{broadcast_id}")
-def delete_broadcast(broadcast_id: int, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+def delete_broadcast(broadcast_id: int, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
+    if not auth.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
     bcast = db.query(Broadcast).filter(Broadcast.id == broadcast_id).first()
     if not bcast:
         raise HTTPException(status_code=404, detail="Broadcast not found")
@@ -87,7 +89,9 @@ def delete_broadcast(broadcast_id: int, db: Session = Depends(get_db), _: None =
     return {"status": "deleted", "id": broadcast_id}
 
 @router.put("/{broadcast_id}/toggle")
-def toggle_broadcast(broadcast_id: int, db: Session = Depends(get_db), _: None = Depends(_require_admin)):
+def toggle_broadcast(broadcast_id: int, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
+    if not auth.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
     bcast = db.query(Broadcast).filter(Broadcast.id == broadcast_id).first()
     if not bcast:
         raise HTTPException(status_code=404, detail="Broadcast not found")
