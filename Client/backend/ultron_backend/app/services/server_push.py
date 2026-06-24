@@ -157,12 +157,12 @@ async def _push_tgpcb(config: ServerConfig, db, mode: str):
                     res = await client.post(target_url, json=payload)
                     if res.status_code < 300:
                         log.info(
-                            f"[TGPCB/{mode.upper()}] ✓ DeviceID={device_id} → '{config.name}' HTTP {res.status_code}. "
+                            f"[TGPCB/{mode.upper()}] [OK] DeviceID={device_id} → '{config.name}' HTTP {res.status_code}. "
                             f"Parameters Posted: [{param_summary}]"
                         )
                     else:
                         log.warning(
-                            f"[TGPCB/{mode.upper()}] ✗ DeviceID={device_id} → '{config.name}' HTTP {res.status_code}: {res.text[:200]}. "
+                            f"[TGPCB/{mode.upper()}] [FAIL] DeviceID={device_id} → '{config.name}' HTTP {res.status_code}: {res.text[:200]}. "
                             f"Parameters Attempted: [{param_summary}]"
                         )
                 except Exception as e:
@@ -384,7 +384,7 @@ async def _push_cpcb(config: ServerConfig, db):
     
     param_summary = ", ".join(written_summary_items)
     log.info(
-        f"[CPCB] ✓ Wrote {len(new_rows)} new row(s) to '{file_path}'. "
+        f"[CPCB] [OK] Wrote {len(new_rows)} new row(s) to '{file_path}'. "
         f"Parameters Written: [{param_summary}]"
     )
 
@@ -516,11 +516,11 @@ async def check_connectivity():
         async with httpx.AsyncClient(timeout=5.0) as client:
             await client.get("https://clients3.google.com/generate_204")
         if not _last_net_ok:
-            log.info("[NET] ✓ Internet connectivity restored")
+            log.info("[NET] [OK] Internet connectivity restored")
             _last_net_ok = True
     except Exception:
         if _last_net_ok:
-            log.warning("[NET] ✗ Internet connectivity lost — pushes will be queued as pending")
+            log.warning("[NET] [FAIL] Internet connectivity lost — pushes will be queued as pending")
             _last_net_ok = False
 
 
@@ -562,15 +562,15 @@ async def retry_pending_uploads(db):
                 res = await client.post(target_url, json=p.payload)
                 if res.status_code < 300:
                     await db.delete(p)
-                    log.info(f"[RETRY] ✓ Delivered pending #{p.id} via {target_url}")
+                    log.info(f"[RETRY] [OK] Delivered pending #{p.id} via {target_url}")
                 else:
                     p.retry_count += 1
                     p.last_error = f"HTTP {res.status_code}"
-                    log.warning(f"[RETRY] ✗ Pending #{p.id} HTTP {res.status_code}")
+                    log.warning(f"[RETRY] [FAIL] Pending #{p.id} HTTP {res.status_code}")
             except Exception as e:
                 p.retry_count += 1
                 p.last_error = str(e)[:500]
-                log.warning(f"[RETRY] ✗ Pending #{p.id} failed: {e}")
+                log.warning(f"[RETRY] [FAIL] Pending #{p.id} failed: {e}")
 
     await db.commit()
 
@@ -673,7 +673,7 @@ async def run_server_push(mode: str = "live"):
                         last_error="Queued (locked/AMC expired)",
                     ))
             await db.commit()
-            log.info(f"[PUSH] ✓ Queued {len(servers)} server config(s) for delayed push")
+            log.info(f"[PUSH] [OK] Queued {len(servers)} server config(s) for delayed push")
             # Skip live push, still process delay retry
             if mode == "delay":
                 await retry_pending_uploads(db)

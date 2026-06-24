@@ -32,14 +32,11 @@ def _get_secret_key_from_file() -> str:
 
 def get_fernet_key() -> bytes:
     """
-    Derives a secure, deterministic key for Fernet.
-    Uses the app's SECRET_KEY setting as the password so that the compiled
-    binary can always decrypt the encrypted configuration without external state.
+    Derives a deterministic key for Fernet config obfuscation.
+    Uses a static key for configuration encryption so that the compiled
+    binary can always decrypt the bundled config on any machine.
     """
-    password = _get_secret_key_from_file().encode("utf-8")
-    if not password:
-        from app.config import settings
-        password = settings.SECRET_KEY.encode("utf-8")
+    password = b"UltrON_Obfuscation_Key_2026_#SunshineTech"
     salt = b"UltrON_Fixed_Salt_2026_#SunshineTech"
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),

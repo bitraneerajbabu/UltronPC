@@ -95,7 +95,7 @@ async def push_to_rajapi():
             resp = await client.post(settings.RAJAPI_SYNC_URL, json=payload)
             if resp.status_code < 300:
                 log.info(
-                    f"[RajAPI] ✓ Synced {len(variables)} parameters "
+                    f"[RajAPI] [OK] Synced {len(variables)} parameters "
                     f"to {settings.RAJAPI_SYNC_URL} (HTTP {resp.status_code})"
                 )
                 # Parse response for broadcast messages and lock status
@@ -122,12 +122,12 @@ async def push_to_rajapi():
                             elif isinstance(broadcasts, str):
                                 sdb.add(Broadcast(message=broadcasts))
                             await sdb.commit()
-                            log.info(f"[RajAPI] ✓ Stored {len(broadcasts) if isinstance(broadcasts, list) else 1} broadcast(s)")
+                            log.info(f"[RajAPI] [OK] Stored {len(broadcasts) if isinstance(broadcasts, list) else 1} broadcast(s)")
                 except Exception as parse_err:
                     log.debug(f"[RajAPI] Response parse (non-critical): {parse_err}")
             else:
                 log.warning(
-                    f"[RajAPI] ✗ Sync HTTP {resp.status_code}: "
+                    f"[RajAPI] [FAIL] Sync HTTP {resp.status_code}: "
                     f"{resp.text[:300]}"
                 )
 
