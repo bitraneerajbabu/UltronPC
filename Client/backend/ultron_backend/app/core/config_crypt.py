@@ -18,7 +18,7 @@ def _get_secret_key_from_file() -> str:
     if IS_FROZEN:
         app_dir = Path(sys.executable).parent.resolve()
     else:
-        app_dir = Path(__file__).parent.parent.resolve()
+        app_dir = Path(__file__).parent.parent.parent.resolve()
     key_file = app_dir / "secret.key"
     try:
         if key_file.is_file():

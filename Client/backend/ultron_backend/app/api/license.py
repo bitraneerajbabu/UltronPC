@@ -2,10 +2,38 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import os
 import httpx
-from app.core.config_crypt import write_env_enc_from_dict
+from app.core.config_crypt import decrypt_file_to_string, write_env_enc_from_dict
 from app.config import APP_DIR
+from app.core.logger import get_logger
+import dotenv
+import io
 
+log = get_logger("ultron.license")
 router = APIRouter(prefix="/license", tags=["License Setup"])
+
+
+def _read_existing_env_enc() -> dict:
+    """Read existing .env.enc and return all key-value pairs, or empty dict."""
+    enc_file = str(APP_DIR / ".env.enc")
+    try:
+        if os.path.exists(enc_file):
+            decrypted = decrypt_file_to_string(enc_file)
+            return dict(dotenv.dotenv_values(stream=io.StringIO(decrypted)))
+    except Exception as e:
+        log.warning(f"Could not read existing .env.enc: {e}")
+    return {}
+
+
+def _update_env_enc(updates: dict) -> None:
+    """
+    Merge `updates` into the existing .env.enc without losing other keys.
+    This prevents overwriting ADMIN_PASSWORD, SECRET_KEY, etc.
+    """
+    enc_file = str(APP_DIR / ".env.enc")
+    existing = _read_existing_env_enc()
+    existing.update(updates)
+    write_env_enc_from_dict(existing, enc_file)
+
 
 class LicenseVerifyRequest(BaseModel):
     api_url: str
@@ -29,9 +57,8 @@ async def get_license_status():
                 # Key is invalid or AMC expired! Wipe it out so UI locks.
                 if "CENTRAL_API_KEY" in os.environ:
                     del os.environ["CENTRAL_API_KEY"]
-                # Wipe from .env.enc
-                enc_file = str(APP_DIR / ".env.enc")
-                write_env_enc_from_dict({"CENTRAL_API_URL": url, "CENTRAL_API_KEY": ""}, enc_file)
+                # Clear only the license key — preserve all other config
+                _update_env_enc({"CENTRAL_API_KEY": ""})
                 return {"licensed": False}
                 
             # If 200 (or any other error like network failure, we assume licensed for offline fallback)
@@ -59,18 +86,16 @@ async def verify_and_save_license(req: LicenseVerifyRequest):
             if resp.status_code != 200:
                 raise HTTPException(status_code=401, detail=f"Server rejected key (Code {resp.status_code})")
                 
-            # If valid, write to .env.enc and update current environment
-            data = {
+            # Merge license keys into existing config — don't overwrite other settings
+            _update_env_enc({
                 "CENTRAL_API_URL": url,
-                "CENTRAL_API_KEY": key
-            }
-            
-            enc_file = str(APP_DIR / ".env.enc")
-            write_env_enc_from_dict(data, enc_file)
+                "CENTRAL_API_KEY": key,
+            })
             
             os.environ["CENTRAL_API_URL"] = url
             os.environ["CENTRAL_API_KEY"] = key
             
+            log.info(f"License verified and saved: key={key[:10]}...")
             return {"success": True, "detail": "License verified and saved successfully."}
             
     except httpx.RequestError as e:

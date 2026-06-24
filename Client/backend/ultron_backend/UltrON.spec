@@ -115,6 +115,7 @@ hidden = [
     # Rate limiting (slowapi) & dependencies
     "slowapi",
     "slowapi.util",
+    "slowapi.errors",
     "limits",
     "limits.storage",
     "limits.strategies",
