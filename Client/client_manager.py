@@ -21,7 +21,7 @@ import urllib.error
 
 # ── Config ───────────────────────────────────────────────────────────────────
 RAJAPI_BASE        = "https://rajapi.com/api/v1"
-ADMIN_KEY          = "UltrON@RajAPI_Admin_2026!"   # Must match ADMIN_KEY on the Pi server
+ADMIN_KEY          = os.environ.get("RAJAPI_ADMIN_KEY", "")  # Must match ADMIN_KEY on the Pi server — set env var or press Enter to input
 GITHUB_REPO        = "bitraneerajbabu/UltronPC"
 GITHUB_API_LATEST  = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
@@ -672,5 +672,11 @@ class App(tk.Tk):
 
 
 if __name__ == "__main__":
+    if not ADMIN_KEY:
+        ADMIN_KEY = input("Enter RajAPI Admin Key: ").strip()
+        if not ADMIN_KEY:
+            print("[ERROR] Admin key is required.")
+            sys.exit(1)
+        print(f"[OK] Admin key set ({ADMIN_KEY[:10]}...)\n")
     app = App()
     app.mainloop()
