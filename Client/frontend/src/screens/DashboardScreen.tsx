@@ -110,7 +110,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
   const formattedVal = isOffline 
     ? 'N/A' 
     : (!isNaN(valFloat) 
-        ? valFloat.toFixed(p.tag_name === 'CO' ? 2 : (p.tag_name === 'Temperature' || p.tag_name === 'Humidity') ? 1 : 2)
+        ? valFloat.toFixed(2)
         : '0.00');
   const displayTimestamp = isOffline ? (data?.timestamp && data?.timestamp !== '—' ? data.timestamp : '—') : currentTime;
   const state = getParamState(p, data);
@@ -119,7 +119,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
   const formattedAvgVal = isOffline 
     ? 'N/A' 
     : (!isNaN(avgFloat) 
-        ? avgFloat.toFixed(p.tag_name === 'CO' ? 2 : (p.tag_name === 'Temperature' || p.tag_name === 'Humidity') ? 1 : 2)
+        ? avgFloat.toFixed(2)
         : '0.00');
 
   let formattedTimestamp = '—';

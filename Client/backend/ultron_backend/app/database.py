@@ -265,6 +265,16 @@ async def init_db():
         except Exception as mig_err:
             log.warning(f"cpcb_station_config migration skipped: {mig_err}")
 
-        pass
+        # 2.11 One-time fix: reset all scale_factor to 1.0 and offset to 0.0
+        # Removes incorrect scaling that was saved by earlier bugs (e.g. scale_factor=~1031)
+        try:
+            result = await conn.execute(text(
+                "UPDATE parameters SET scale_factor = 1.0, "
+                "\"offset\" = 0.0 "
+                "WHERE scale_factor != 1.0 OR \"offset\" != 0.0"
+            ))
+            log.info("Reset all scale_factor/offset to defaults — auto-fix applied")
+        except Exception as fix_err:
+            log.warning(f"scale_factor reset skipped: {fix_err}")
 
     log.info("Database ready [OK]")
