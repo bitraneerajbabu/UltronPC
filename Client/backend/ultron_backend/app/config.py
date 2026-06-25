@@ -169,7 +169,7 @@ class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.36"
+    APP_VERSION: str = "1.0.37"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -261,7 +261,7 @@ class Settings(BaseSettings):
         case_sensitive = False
 
     def model_post_init(self, __context):
-        self.APP_VERSION = "1.0.36"
+        self.APP_VERSION = "1.0.37"
         if not self.ADMIN_PASSWORD:
             print(
                 "[UltrON] FATAL: ADMIN_PASSWORD is not set in .env! "
