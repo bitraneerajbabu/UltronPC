@@ -169,7 +169,7 @@ class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.33"
+    APP_VERSION: str = "1.0.36"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -261,13 +261,14 @@ class Settings(BaseSettings):
         case_sensitive = False
 
     def model_post_init(self, __context):
-        self.APP_VERSION = "1.0.32"
+        self.APP_VERSION = "1.0.36"
         if not self.ADMIN_PASSWORD:
             print(
-                "[UltrON] WARNING: ADMIN_PASSWORD is not set in .env! "
-                "Set a strong password for security.",
+                "[UltrON] FATAL: ADMIN_PASSWORD is not set in .env! "
+                "Set a strong password before starting the server.",
                 file=sys.stderr,
             )
+            sys.exit(1)
 
     def ensure_dirs(self):
         """Create all required storage directories on startup."""

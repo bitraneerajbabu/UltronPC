@@ -93,6 +93,8 @@ class DeviceBase(BaseModel):
     csv_filename_pattern: Optional[str] = None
     csv_delimiter: Optional[str] = ","
     csv_timestamp_col: Optional[int] = None
+    request_hex: Optional[str] = None
+    response_delimiter: Optional[str] = "newline"
     poll_interval: int = 60
     timeout: int = 5
     retry_count: int = 3

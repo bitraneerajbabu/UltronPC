@@ -30,8 +30,44 @@ if not settings.SECRET_KEY:
 # ─── OAuth2 Scheme ────────────────────────────────────────────────────────────
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
-# ─── In-memory token blacklist (for logout) ───────────────────────────────────
-_blacklisted_tokens: set[str] = set()
+# ─── Token blacklist (file-backed for persistence across restarts) ─────────────
+import atexit
+_BLACKLIST_FILE = None
+
+
+def _get_blacklist_path():
+    global _BLACKLIST_FILE
+    if _BLACKLIST_FILE is None:
+        from pathlib import Path
+        import sys as _sys
+        if getattr(_sys, "frozen", False):
+            app_dir = Path(_sys.executable).parent.resolve()
+        else:
+            app_dir = Path(__file__).parent.parent.parent.resolve()
+        _BLACKLIST_FILE = app_dir / ".token_blacklist"
+    return _BLACKLIST_FILE
+
+
+def _load_blacklist() -> set[str]:
+    path = _get_blacklist_path()
+    if path.is_file():
+        try:
+            return set(line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+        except Exception:
+            return set()
+    return set()
+
+
+def _save_blacklist(tokens: set[str]):
+    path = _get_blacklist_path()
+    try:
+        path.write_text("\n".join(sorted(tokens)), encoding="utf-8")
+    except Exception:
+        pass
+
+
+_blacklisted_tokens: set[str] = _load_blacklist()
+atexit.register(lambda: _save_blacklist(_blacklisted_tokens))
 
 
 def hash_password(plain: str) -> str:

@@ -24,8 +24,15 @@ build/
 github_token.txt
 secret.key
 
+# Runtime output logs
+ultron_stdout.txt
+ultron_stderr.txt
+
 # Local debug and appdata dumps
 decrypted_env.txt
 err.txt
 out.txt
-*.appdata
+*.appdata
+
+# Token blacklist (persisted across restarts)
+.token_blacklist

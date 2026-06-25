@@ -15,27 +15,17 @@ import time
 import ssl
 
 # Use default CA certificates for secure HTTPS connections.
-# Falls back to unverified if the system CA store is unavailable.
-def _get_ssl_context(verified=True):
-    if verified:
-        try:
-            return ssl.create_default_context()
-        except Exception:
-            pass
-    return ssl._create_unverified_context()
+# Will fail on SSL errors — no unverified fallback.
+def _get_ssl_context():
+    try:
+        return ssl.create_default_context()
+    except Exception as e:
+        raise RuntimeError(f"Failed to create SSL context: {e}")
 
 def _urlopen(url):
-    """Open a URL with SSL verification, falling back to unverified on failure."""
-    from urllib.error import URLError
-    ctx = _get_ssl_context(verified=True)
-    try:
-        return urllib.request.urlopen(url, context=ctx)
-    except URLError as e:
-        import ssl as _ssl
-        if isinstance(e.reason, _ssl.SSLCertVerificationError):
-            ctx = _get_ssl_context(verified=False)
-            return urllib.request.urlopen(url, context=ctx)
-        raise
+    """Open a URL with SSL verification."""
+    ctx = _get_ssl_context()
+    return urllib.request.urlopen(url, context=ctx)
 
 # Config — change this to match your repository
 GITHUB_REPO = "bitraneerajbabu/UltronPC"

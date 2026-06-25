@@ -300,7 +300,7 @@ async def websocket_live(
         while True:
             data = await websocket.receive_text()
             if data == "ping":
-                await websocket.send_json({"type": "pong", "ts": datetime.utcnow().isoformat()})
+                await websocket.send_json({"type": "pong", "ts": datetime.now(timezone.utc).isoformat()})
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
         log.info("WS client disconnected")
@@ -325,7 +325,7 @@ async def root():
 
 @app.get("/health", include_in_schema=False)
 async def health():
-    return {"status": "ok", "ts": datetime.utcnow().isoformat()}
+    return {"status": "ok", "ts": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/show-window", include_in_schema=False)
