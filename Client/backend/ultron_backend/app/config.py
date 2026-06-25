@@ -8,7 +8,7 @@ Never store the service_role key or other true secrets.
 """
 
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
 from typing import Optional
 import os
 import sys
@@ -206,6 +206,18 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = Field(default="Master")
     ADMIN_PASSWORD: str = Field(default="")
 
+    @field_validator("SECRET_KEY", mode="before")
+    @classmethod
+    def validate_secret_key(cls, v):
+        if not v or str(v).strip() == "":
+            return _load_or_create_secret_key()
+        return v
+
+    @field_validator("APP_VERSION", mode="before")
+    @classmethod
+    def validate_app_version(cls, v):
+        return cls.model_fields["APP_VERSION"].default
+
     # ─── WebSocket ────────────────────────────────────────────
     WS_LIVE_PUSH_INTERVAL: int = 5
 
@@ -261,7 +273,6 @@ class Settings(BaseSettings):
         case_sensitive = False
 
     def model_post_init(self, __context):
-        self.APP_VERSION = "1.0.39"
         if not self.ADMIN_PASSWORD:
             print(
                 "[UltrON] FATAL: ADMIN_PASSWORD is not set in .env! "
