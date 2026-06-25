@@ -21,7 +21,7 @@ def _decode_registers(registers: list[int], data_type: str, byte_order: str) -> 
 
     Modbus word order options:
       - "big"          : Big-endian word order, big-endian bytes    (AB CD)
-      - "big_swap"     : Big-endian word order, bytes swapped       (BA DC)
+      - "big_swap"     : Little-endian word order, big-endian bytes (CD AB) (Swapped Float/Long/Double)
       - "little"       : Little-endian word order, big-endian bytes (CD AB)
       - "little_swap"  : Little-endian word order, bytes swapped    (DC BA)
     """
@@ -30,8 +30,8 @@ def _decode_registers(registers: list[int], data_type: str, byte_order: str) -> 
             if len(registers) < 2:
                 return None
 
-            # Apply word order: 'little' or 'little_swap' reverses the register order
-            if byte_order in ("little", "little_swap"):
+            # Apply word order: 'little', 'little_swap', or 'big_swap' reverses the register order
+            if byte_order in ("little", "little_swap", "big_swap"):
                 w0, w1 = registers[1], registers[0]   # swap word positions
             else:
                 w0, w1 = registers[0], registers[1]   # big: first register is MSW
@@ -40,7 +40,7 @@ def _decode_registers(registers: list[int], data_type: str, byte_order: str) -> 
             raw = struct.pack(">HH", w0, w1)
 
             # Apply byte swap within each word if requested
-            if byte_order in ("big_swap", "little_swap"):
+            if byte_order in ("little_swap",):
                 raw = bytes([raw[1], raw[0], raw[3], raw[2]])
 
             if data_type == "float32":
@@ -60,12 +60,12 @@ def _decode_registers(registers: list[int], data_type: str, byte_order: str) -> 
         elif data_type == "int64":
             if len(registers) < 4:
                 return None
-            if byte_order in ("little", "little_swap"):
+            if byte_order in ("little", "little_swap", "big_swap"):
                 regs = list(reversed(registers[:4]))
             else:
                 regs = list(registers[:4])
             raw = struct.pack(">HHHH", *regs)
-            if byte_order in ("big_swap", "little_swap"):
+            if byte_order in ("little_swap",):
                 raw = bytes([raw[1], raw[0], raw[3], raw[2], raw[5], raw[4], raw[7], raw[6]])
             return float(struct.unpack(">q", raw)[0])
 
@@ -147,6 +147,15 @@ class ModbusTCPReader:
         if offset is None:
             offset = 0.0
 
+        # ModScan address translation (e.g. 40005 -> 4 for holding registers)
+        target_address = register_address
+        if register_type == "holding" and target_address >= 40001:
+            target_address -= 40001
+        elif register_type == "input_reg" and target_address >= 30001:
+            target_address -= 30001
+        elif register_type == "discrete_input" and target_address >= 10001:
+            target_address -= 10001
+
         has_override = (host is not None or port is not None)
         client = None
         cleanup_client = False
@@ -174,19 +183,19 @@ class ModbusTCPReader:
         try:
             if register_type == "holding":
                 result = await client.read_holding_registers(
-                    register_address, count=register_count, device_id=target_slave
+                    target_address, count=register_count, device_id=target_slave
                 )
             elif register_type == "input_reg":
                 result = await client.read_input_registers(
-                    register_address, count=register_count, device_id=target_slave
+                    target_address, count=register_count, device_id=target_slave
                 )
             elif register_type == "coil":
                 result = await client.read_coils(
-                    register_address, count=register_count, device_id=target_slave
+                    target_address, count=register_count, device_id=target_slave
                 )
             elif register_type == "discrete_input":
                 result = await client.read_discrete_inputs(
-                    register_address, count=register_count, device_id=target_slave
+                    target_address, count=register_count, device_id=target_slave
                 )
             else:
                 log.warning(f"Unknown register_type '{register_type}'")
