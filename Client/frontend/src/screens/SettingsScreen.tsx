@@ -271,7 +271,12 @@ export const SettingsScreen = () => {
           )}
         </div>
         {!fwInfo && !fwChecking && (
-          <button onClick={checkFirmware} style={{ ...BTN.ghost, marginBottom: '12px' }}>Check for Updates</button>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <button onClick={checkFirmware} style={BTN.ghost}>Check for Updates</button>
+            <button onClick={handleRestartApp} style={BTN.danger} disabled={actionLoading === 'restart'}>
+              {actionLoading === 'restart' ? 'Restarting…' : 'Restart App'}
+            </button>
+          </div>
         )}
         {fwChecking && <div style={{ fontSize: '12px', color: T.textMuted, marginBottom: '12px' }}>Checking for updates…</div>}
         {fwInfo?.update_available && fwInfo.release_notes && (
@@ -285,7 +290,7 @@ export const SettingsScreen = () => {
             <button style={BTN.primary} onClick={startFirmwareDownload}>Download Latest</button>
           )}
           {fwProgress?.state === 'downloading' && (
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, marginRight: '10px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: T.textMuted, marginBottom: '4px' }}>
                 <span>{fwProgress.message}</span>
                 <span>{fwProgress.percent}%</span>
@@ -296,10 +301,15 @@ export const SettingsScreen = () => {
             </div>
           )}
           {fwProgress?.state === 'done' && (
-            <div style={{ fontSize: '12px', fontWeight: '600', color: '#10b981' }}>{fwProgress.message}</div>
+            <div style={{ fontSize: '12px', fontWeight: '600', color: '#10b981', marginRight: '10px' }}>{fwProgress.message}</div>
           )}
           {fwProgress?.state === 'error' && (
-            <div style={{ fontSize: '12px', fontWeight: '600', color: '#ef4444' }}>{fwProgress.message}</div>
+            <div style={{ fontSize: '12px', fontWeight: '600', color: '#ef4444', marginRight: '10px' }}>{fwProgress.message}</div>
+          )}
+          {fwInfo && (
+            <button style={{ ...BTN.danger, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>
+              {actionLoading === 'restart' ? 'Restarting…' : 'Restart App'}
+            </button>
           )}
         </div>
         <div style={{ borderTop: `1px solid ${T.primaryBorder}`, paddingTop: '12px' }}>
