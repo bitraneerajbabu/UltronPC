@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, LineController, Filler } from 'chart.js';
-import { T, GLASS_CARD, getParamState } from '../theme';
+import { T, GLASS_CARD, getParamState, getParamTheme } from '../theme';
 import { Sparkline } from '../components/Sparkline';
 import { AlarmsInspectorModal } from '../components/AlarmsInspectorModal';
 
@@ -22,6 +22,44 @@ const StackIcon = () => (
     <path d="M9 18h6" />
     <path d="M12 7c.2-.8.8-.8 1 0s.8.8 1 0" />
     <path d="M10 5c.2-.8.8-.8 1 0s.8.8 1 0" />
+  </svg>
+);
+
+const StationIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
+    <path d="M22 22H2" />
+    <path d="M17 22V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v17" />
+  </svg>
+);
+
+const OnlineIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    <path d="m9 11 2 2 4-4" />
+  </svg>
+);
+
+const OfflineIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <line x1="12" y1="9" x2="12" y2="13" />
+    <line x1="12" y1="17" x2="12.01" y2="17" />
+  </svg>
+);
+
+const AlarmIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9z" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </svg>
+);
+
+const NetworkIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
+    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+    <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+    <line x1="6" y1="6" x2="6.01" y2="6" />
+    <line x1="6" y1="18" x2="6.01" y2="18" />
   </svg>
 );
 
@@ -102,24 +140,68 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
   const limit = p.alarm_high !== null ? `>${p.alarm_high}` : '—';
   const range = `${p.min_valid !== null ? p.min_valid : '0'} - ${p.max_valid !== null ? p.max_valid : '1000'}`;
 
-  const SensorIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#475569' }}>
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-    </svg>
-  );
+  // Get parameter-specific styling theme
+  const paramTheme = getParamTheme(p.tag_name);
+
+  // Dynamic status-blended sparkline and icon styling
+  // Nominal states use parameter theme colors; warning/critical use their warning/danger states
+  const isGood = state.cls === 'sensor-card-good';
+  const sparklineColor = isGood ? paramTheme.color : state.dot;
+
+  // Custom Icon based on tag name
+  const renderIcon = () => {
+    const name = (p.tag_name || '').toLowerCase();
+    const strokeColor = paramTheme.color;
+    
+    if (name.includes('temp')) {
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+        </svg>
+      );
+    }
+    if (name.includes('hum')) {
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+        </svg>
+      );
+    }
+    if (name.includes('wind') || name.includes('ws') || name.includes('wd') || name.includes('speed') || name.includes('dir')) {
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/>
+        </svg>
+      );
+    }
+    if (name.includes('pm') || name.includes('co') || name.includes('so2') || name.includes('no') || name.includes('o3') || name.includes('dust') || name.includes('ozone')) {
+      return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17.5 19A3.5 3.5 0 0 0 21 15.5c0-2.79-2.54-4.5-5-4.5-.42-1.89-1.78-3.5-3.5-3.5a4.34 4.34 0 0 0-4 3c-2.42.36-4.5 2.21-4.5 4.5A3.5 3.5 0 0 0 7.5 19z"/>
+        </svg>
+      );
+    }
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+      </svg>
+    );
+  };
 
   return (
     <div className={`sensor-card ${state.cls}`} onClick={onClick} style={{ 
       display: 'flex', flexDirection: 'column', padding: '20px', 
-      borderRadius: '12px', border: isSelected ? '2px solid #0f766e' : `1px solid ${state.dot}`, 
-      backgroundColor: '#fff', boxShadow: isSelected ? '0 4px 12px rgba(15,118,110,0.15)' : '0 2px 10px rgba(0,0,0,0.02)',
+      borderRadius: '12px', 
+      border: isSelected ? `2.5px solid ${paramTheme.color}` : `1px solid ${isGood ? paramTheme.border : state.dot}`, 
+      backgroundColor: 'rgba(252, 248, 238, 0.85)', 
+      boxShadow: isSelected ? `0 4px 16px ${paramTheme.glow}` : '0 2px 10px rgba(0,0,0,0.02)',
       position: 'relative', cursor: 'pointer', transition: 'all 0.2s ease'
     }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '40px', height: '40px', backgroundColor: '#f8fafc', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <SensorIcon />
+          <div style={{ width: '40px', height: '40px', backgroundColor: paramTheme.bg, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {renderIcon()}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>{p.tag_name}</span>
@@ -135,7 +217,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
       </div>
 
       {/* Main Value Block */}
-      <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '16px', marginBottom: '16px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+      <div style={{ backgroundColor: 'rgba(245, 238, 224, 0.5)', borderRadius: '8px', padding: '16px', marginBottom: '16px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
         <span style={{ fontSize: '32px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1' }}>{formattedVal}</span>
         <span style={{ fontSize: '14px', fontWeight: '700', color: '#64748b' }}>{unit}</span>
       </div>
@@ -157,11 +239,11 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
       </div>
 
       {/* Sparkline Block */}
-      <div style={{ backgroundColor: '#f8fafc', borderRadius: '8px', padding: '12px', marginBottom: '16px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ backgroundColor: 'rgba(245, 238, 224, 0.5)', borderRadius: '8px', padding: '12px', marginBottom: '16px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
          <div style={{ position: 'absolute', top: '10px', left: '10%', right: '10%', borderTop: '1px dotted #ef4444', opacity: 0.4 }}></div>
          <div style={{ position: 'absolute', top: '20px', left: '10%', right: '10%', borderTop: '1px dotted #f97316', opacity: 0.4 }}></div>
          <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '10px' }}>
-           <Sparkline data={history} color={state.dot} width={180} height={20} />
+           <Sparkline data={history} color={sparklineColor} width={180} height={20} />
          </div>
       </div>
 
@@ -343,6 +425,8 @@ export const DashboardScreen = () => {
           const paramObj = parameters.find(p => p.tag_name === activeParam) || {};
           const unit = paramObj.unit || '';
           
+          const activeParamTheme = getParamTheme(activeParam);
+          
           chartInstanceRef.current = new ChartJS(ctx, {
             type: 'line',
             data: {
@@ -350,11 +434,11 @@ export const DashboardScreen = () => {
               datasets: [{
                 label: `${paramObj.name || activeParam} (${unit})`,
                 data: dataPointsRef.current.datasets[activeParam] || [],
-                borderColor: T.primary,
-                backgroundColor: 'rgba(15,118,110,0.07)',
+                borderColor: activeParamTheme.color,
+                backgroundColor: activeParamTheme.glow,
                 fill: true,
                 tension: 0.35,
-                pointBackgroundColor: T.primary,
+                pointBackgroundColor: activeParamTheme.color,
                 pointBorderColor: '#fff',
                 pointRadius: 3,
                 pointHoverRadius: 6
@@ -449,9 +533,14 @@ export const DashboardScreen = () => {
 
     const currentParamObj = parameters.find(p => p.tag_name === selectedParam) || {};
     const unit = currentParamObj.unit || '';
+    const activeParamTheme = getParamTheme(selectedParam);
+    
     chartInstanceRef.current.data.labels = dataPointsRef.current.labels;
     chartInstanceRef.current.data.datasets[0].label = `${currentParamObj.name || selectedParam} (${unit})`;
     chartInstanceRef.current.data.datasets[0].data = dataPointsRef.current.datasets[selectedParam] || [];
+    chartInstanceRef.current.data.datasets[0].borderColor = activeParamTheme.color;
+    chartInstanceRef.current.data.datasets[0].backgroundColor = activeParamTheme.glow;
+    chartInstanceRef.current.data.datasets[0].pointBackgroundColor = activeParamTheme.color;
     chartInstanceRef.current.update('none');
 
   }, [liveData, selectedParam, parameters]);
@@ -582,72 +671,73 @@ export const DashboardScreen = () => {
         <div className="card">
           <div className="section-title">System Summary</div>
           <div className="grid-5">
-            <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(15,118,110,0.18)', background: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)', border: '1px solid rgba(15,118,110,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Stations</div>
-                <div style={{ fontSize: '26px', fontWeight: '800', color: T.text, marginTop: '4px', fontFamily: T.fontMono }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Stations</div>
+                <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono }}>
                   {String(kpis.totalStations).padStart(2, '0')}
                 </div>
               </div>
             </div>
 
-            <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.success}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(16,185,129,0.18)', background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Online Parameters</div>
-                <div style={{ fontSize: '26px', fontWeight: '800', color: T.success, marginTop: '4px', fontFamily: T.fontMono }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Online Parameters</div>
+                <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono }}>
                   {String(kpis.onlineDevices).padStart(2, '0')}
                 </div>
               </div>
             </div>
 
-            <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.danger}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(239,68,68,0.18)', background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Offline Parameters</div>
-                <div style={{ fontSize: '26px', fontWeight: '800', color: T.danger, marginTop: '4px', fontFamily: T.fontMono }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Offline Parameters</div>
+                <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono }}>
                   {String(kpis.offlineDevices).padStart(2, '0')}
                 </div>
               </div>
             </div>
 
             <div className="kpi-card" onClick={() => setShowAlarmsModal(true)} style={{
-              ...GLASS_CARD,
+              borderRadius: '12px',
               padding: '16px 20px',
-              boxShadow: T.shadowSm,
-              borderLeft: `4px solid ${kpis.activeAlarms > 0 ? T.danger : T.primary}`,
+              boxShadow: kpis.activeAlarms > 0 ? '0 4px 16px rgba(239,68,68,0.25)' : '0 4px 16px rgba(245,158,11,0.18)',
+              background: kpis.activeAlarms > 0 ? 'linear-gradient(135deg, #dc2626 0%, #f87171 100%)' : 'linear-gradient(135deg, #b45309 0%, #f59e0b 100%)',
+              border: kpis.activeAlarms > 0 ? '1px solid rgba(239,68,68,0.35)' : '1px solid rgba(245,158,11,0.35)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              cursor: 'pointer'
+              cursor: 'pointer',
             }}>
               <div>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active Alarms</div>
-                <div style={{ fontSize: '26px', fontWeight: '800', color: kpis.activeAlarms > 0 ? T.danger : T.text, marginTop: '4px', fontFamily: T.fontMono, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active Alarms</div>
+                <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono, display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {String(kpis.activeAlarms).padStart(2, '0')}
                 </div>
               </div>
             </div>
 
-            <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.info}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(56,189,248,0.18)', background: 'linear-gradient(135deg, #0369a1 0%, #38bdf8 100%)', border: '1px solid rgba(56,189,248,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ width: '100%' }}>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>PC Network</div>
-                <div style={{ fontSize: '13px', fontWeight: '800', color: T.text, fontFamily: T.fontMono, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>PC Network</div>
+                <div style={{ fontSize: '13px', fontWeight: '800', color: '#fff', fontFamily: T.fontMono, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span>{networkInfo?.lan_ip || '---'}</span>
                   <span style={{
                     display: 'inline-flex', alignItems: 'center', gap: '4px',
                     fontSize: '10px', fontWeight: '700', textTransform: 'uppercase',
-                    color: networkInfo?.internet_connected ? T.success : T.danger
+                    color: '#fff'
                   }}>
                     <span style={{
                       width: '7px', height: '7px', borderRadius: '50%',
-                      backgroundColor: networkInfo?.internet_connected ? T.success : T.danger,
-                      boxShadow: networkInfo?.internet_connected ? `0 0 6px ${T.success}` : `0 0 6px ${T.danger}`,
+                      backgroundColor: networkInfo?.internet_connected ? '#86efac' : '#fca5a5',
+                      boxShadow: networkInfo?.internet_connected ? '0 0 6px #86efac' : '0 0 6px #fca5a5',
                       display: 'inline-block'
                     }}></span>
                     {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
                   </span>
                 </div>
                 {networkInfo?.hostname && (
-                  <div style={{ fontSize: '10px', fontWeight: '600', color: T.textFaint, marginTop: '4px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.7)', marginTop: '4px' }}>
                     {networkInfo.hostname}
                   </div>
                 )}
@@ -720,92 +810,83 @@ export const DashboardScreen = () => {
       <div className="card">
         <div className="section-title">System Summary</div>
         <div className="grid-5">
-          <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.primary}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(15,118,110,0.18)', background: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)', border: '1px solid rgba(15,118,110,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Stations</div>
-              <div style={{ fontSize: '26px', fontWeight: '800', color: T.text, marginTop: '4px', fontFamily: T.fontMono }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Stations</div>
+              <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono }}>
                 {String(kpis.totalStations).padStart(2, '0')}
               </div>
             </div>
           </div>
 
-          <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.success}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(16,185,129,0.18)', background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Online Parameters</div>
-              <div style={{ fontSize: '26px', fontWeight: '800', color: T.success, marginTop: '4px', fontFamily: T.fontMono }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Online Parameters</div>
+              <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono }}>
                 {String(kpis.onlineDevices).padStart(2, '0')}
               </div>
             </div>
           </div>
 
-          <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.danger}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(239,68,68,0.18)', background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Offline Parameters</div>
-              <div style={{ fontSize: '26px', fontWeight: '800', color: T.danger, marginTop: '4px', fontFamily: T.fontMono }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Offline Parameters</div>
+              <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono }}>
                 {String(kpis.offlineDevices).padStart(2, '0')}
               </div>
             </div>
           </div>
 
           <div className="kpi-card" onClick={() => setShowAlarmsModal(true)} style={{
-            ...GLASS_CARD,
+            borderRadius: '12px',
             padding: '16px 20px',
-            boxShadow: T.shadowSm,
-            borderLeft: `4px solid ${kpis.activeAlarms > 0 ? T.danger : T.primary}`,
+            boxShadow: kpis.activeAlarms > 0 ? '0 4px 16px rgba(239,68,68,0.25)' : '0 4px 16px rgba(245,158,11,0.18)',
+            background: kpis.activeAlarms > 0 ? 'linear-gradient(135deg, #dc2626 0%, #f87171 100%)' : 'linear-gradient(135deg, #b45309 0%, #f59e0b 100%)',
+            border: kpis.activeAlarms > 0 ? '1px solid rgba(239,68,68,0.35)' : '1px solid rgba(245,158,11,0.35)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             cursor: 'pointer',
-            transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-          }}
-            onMouseEnter={e => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = T.shadowMd;
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = T.shadowSm;
-            }}
-          >
+          }}>
             <div>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active Alarms</div>
-              <div style={{ fontSize: '26px', fontWeight: '800', color: kpis.activeAlarms > 0 ? T.danger : T.text, marginTop: '4px', fontFamily: T.fontMono, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active Alarms</div>
+              <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {String(kpis.activeAlarms).padStart(2, '0')}
                 {kpis.activeAlarms > 0 && (
                   <span style={{
                     width: '8px',
                     height: '8px',
-                    background: T.danger,
+                    background: '#fff',
                     borderRadius: '50%',
                     display: 'inline-block',
-                    boxShadow: `0 0 8px ${T.danger}`
+                    boxShadow: '0 0 8px #fff'
                   }}></span>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="kpi-card" style={{ ...GLASS_CARD, padding: '16px 20px', boxShadow: T.shadowSm, borderLeft: `4px solid ${T.info}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(56,189,248,0.18)', background: 'linear-gradient(135deg, #0369a1 0%, #38bdf8 100%)', border: '1px solid rgba(56,189,248,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ width: '100%' }}>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>PC Network</div>
-              <div style={{ fontSize: '13px', fontWeight: '800', color: T.text, fontFamily: T.fontMono, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>PC Network</div>
+              <div style={{ fontSize: '13px', fontWeight: '800', color: '#fff', fontFamily: T.fontMono, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span>{networkInfo?.lan_ip || '---'}</span>
                 <span style={{
                   display: 'inline-flex', alignItems: 'center', gap: '4px',
                   fontSize: '10px', fontWeight: '700', textTransform: 'uppercase',
-                  color: networkInfo?.internet_connected ? T.success : T.danger
+                  color: '#fff'
                 }}>
                   <span style={{
                     width: '7px', height: '7px', borderRadius: '50%',
-                    backgroundColor: networkInfo?.internet_connected ? T.success : T.danger,
-                    boxShadow: networkInfo?.internet_connected ? `0 0 6px ${T.success}` : `0 0 6px ${T.danger}`,
+                    backgroundColor: networkInfo?.internet_connected ? '#86efac' : '#fca5a5',
+                    boxShadow: networkInfo?.internet_connected ? '0 0 6px #86efac' : '0 0 6px #fca5a5',
                     display: 'inline-block'
                   }}></span>
                   {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
                 </span>
               </div>
               {networkInfo?.hostname && (
-                <div style={{ fontSize: '10px', fontWeight: '600', color: T.textFaint, marginTop: '4px' }}>
+                <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.7)', marginTop: '4px' }}>
                   {networkInfo.hostname}
                 </div>
               )}
@@ -822,7 +903,9 @@ export const DashboardScreen = () => {
           zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
         }} onClick={() => setIsTrendsModalOpen(false)}>
           <div style={{
-            backgroundColor: '#fff', borderRadius: '16px', width: '100%', maxWidth: '900px',
+            backgroundColor: 'rgba(253, 250, 242, 0.95)', backdropFilter: 'blur(25px)', WebkitBackdropFilter: 'blur(25px)',
+            border: '1px solid rgba(235, 225, 205, 0.9)',
+            borderRadius: '16px', width: '100%', maxWidth: '900px',
             padding: '24px', boxShadow: T.shadowLg, position: 'relative'
           }} onClick={e => e.stopPropagation()}>
             <button 
