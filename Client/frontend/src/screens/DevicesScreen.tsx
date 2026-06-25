@@ -51,11 +51,12 @@ const genTag = (name) => !name ? '' : name.trim().toUpperCase().replace(/[^A-Z0-
 const renderCsvPattern = (pattern) => {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
-  return 'Today: ' + (pattern || '{YYYYMMDD}.csv')
+  return 'Today → ' + (pattern || '{YYYYMMDD}.csv')
     .replace('{YYYYMMDD}', d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()))
     .replace('{YYYY-MM-DD}', d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()))
     .replace('{DD-MM-YYYY}', p(d.getDate()) + '-' + p(d.getMonth()+1) + '-' + d.getFullYear())
     .replace('{DDMMYYYY}', p(d.getDate()) + p(d.getMonth()+1) + d.getFullYear())
+    .replace('{DD.MM.YYYY}', p(d.getDate()) + '.' + p(d.getMonth()+1) + '.' + d.getFullYear())
     .replace('{date}', d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()));
 };
 
@@ -133,10 +134,10 @@ export const DevicesScreen = () => {
     if (!form.name) return showToast('Monitored Sensor name is required.', 'error');
     if (!globalDevice) return showToast('Initializing global gateway, please wait...', 'error');
     if (form.input_type === 'csv' && form.csv_mode === 'fixed' && !form.csv_path?.trim()) {
-      return showToast('CSV fixed file path is required.', 'error');
+      return showToast('File path is required for fixed CSV/Excel mode.', 'error');
     }
     if (form.input_type === 'csv' && form.csv_mode === 'daily' && !form.csv_folder?.trim()) {
-      return showToast('CSV daily folder is required.', 'error');
+      return showToast('Folder path is required for daily rotating CSV/Excel mode.', 'error');
     }
 
     setSaving(true);
@@ -293,61 +294,120 @@ export const DevicesScreen = () => {
               </div>
 
               <div>
-                <label style={s()}>Protocol</label>
+                <label style={s()}>Protocol / Data Source</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   {['modbus_tcp', 'modbus_rtu', 'csv'].map(proto => (
                     <button key={proto} onClick={() => setForm(p => ({ ...p, input_type: proto }))} style={btnStyle(form.input_type === proto)}>
-                      {proto === 'modbus_tcp' ? 'TCP' : proto === 'modbus_rtu' ? 'RS485' : 'CSV'}
+                      {proto === 'modbus_tcp' ? 'TCP' : proto === 'modbus_rtu' ? 'RS485' : 'CSV / Excel'}
                     </button>
                   ))}
                 </div>
               </div>
 
               {form.input_type === 'csv' ? (
-                <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {['daily', 'fixed'].map(mode => (
-                      <button key={mode} onClick={() => setForm(p => ({ ...p, csv_mode: mode }))} style={btnStyle(form.csv_mode === mode)}>
-                        {mode === 'daily' ? 'Daily Rotating' : 'Fixed File'}
-                      </button>
-                    ))}
-                  </div>
-                  {form.csv_mode === 'daily' ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                      <div>
-                        <label style={s()}>Folder Path</label>
-                        <input type="text" name="csv_folder" value={form.csv_folder || ''} onChange={handleChange} style={ipt} placeholder="C:\Data\Station1" />
-                      </div>
-                      <div>
-                        <label style={s()}>Filename Pattern</label>
-                        <input type="text" name="csv_filename_pattern" value={form.csv_filename_pattern || ''} onChange={handleChange} style={ipt} placeholder="{YYYYMMDD}.csv" />
-                      </div>
+                <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+                  {/* Mode toggle */}
+                  <div>
+                    <label style={s()}>File Mode</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {['daily', 'fixed'].map(mode => (
+                        <button key={mode} onClick={() => setForm(p => ({ ...p, csv_mode: mode }))} style={btnStyle(form.csv_mode === mode)}>
+                          {mode === 'daily' ? '📅 Daily Rotating (new file each day)' : '📄 Fixed File (single file)'}
+                        </button>
+                      ))}
                     </div>
+                  </div>
+
+                  {/* Daily mode fields */}
+                  {form.csv_mode === 'daily' ? (
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                          <label style={s()}>📁 Folder Path</label>
+                          <input
+                            type="text" name="csv_folder"
+                            value={form.csv_folder || ''}
+                            onChange={handleChange}
+                            style={ipt}
+                            placeholder={String.raw`C:\Users\sunsh\OneDrive\Desktop`}
+                          />
+                          <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Full path to the folder containing daily files</div>
+                        </div>
+                        <div>
+                          <label style={s()}>📝 Filename Pattern</label>
+                          <input
+                            type="text" name="csv_filename_pattern"
+                            value={form.csv_filename_pattern || ''}
+                            onChange={handleChange}
+                            style={ipt}
+                            placeholder="{DD.MM.YYYY} Daily Rep..xlsx"
+                          />
+                          <div style={{ fontSize: '10px', color: '#0369a1', marginTop: '4px', fontWeight: '600' }}>
+                            {renderCsvPattern(form.csv_filename_pattern)}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Token reference */}
+                      <div style={{ background: '#dbeafe', borderRadius: '8px', padding: '10px 12px', fontSize: '11px', color: '#1e40af', lineHeight: 1.7 }}>
+                        <strong>📅 Date Tokens:</strong>&nbsp;
+                        <code>{'{DD.MM.YYYY}'}</code> → 26.06.2026 &nbsp;|&nbsp;
+                        <code>{'{DD-MM-YYYY}'}</code> → 26-06-2026 &nbsp;|&nbsp;
+                        <code>{'{YYYYMMDD}'}</code> → 20260626 &nbsp;|&nbsp;
+                        <code>{'{YYYY-MM-DD}'}</code> → 2026-06-26
+                      </div>
+                    </>
                   ) : (
+                    /* Fixed mode field */
                     <div>
-                      <label style={s()}>File Path</label>
-                      <input type="text" name="csv_path" value={form.csv_path || ''} onChange={handleChange} style={ipt} placeholder="C:\Data\readings.csv" />
+                      <label style={s()}>📄 Full File Path (.csv or .xlsx)</label>
+                      <input
+                        type="text" name="csv_path"
+                        value={form.csv_path || ''}
+                        onChange={handleChange}
+                        style={ipt}
+                        placeholder={String.raw`C:\Users\sunsh\OneDrive\Desktop\readings.csv`}
+                      />
+                      <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Supports both .csv and .xlsx files</div>
                     </div>
                   )}
+
+                  {/* Shared fields: delimiter + timestamp col */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                     <div>
                       <label style={s()}>Delimiter</label>
-                      <input type="text" name="csv_delimiter" value={form.csv_delimiter || ','} onChange={handleChange} style={ipt} maxLength={5} />
+                      <input
+                        type="text" name="csv_delimiter"
+                        value={form.csv_delimiter || ','}
+                        onChange={handleChange}
+                        style={ipt} maxLength={5}
+                        placeholder=","
+                      />
+                      <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>For .xlsx files, leave as comma (ignored)</div>
                     </div>
                     <div>
-                      <label style={s()}>Timestamp Col</label>
-                      <input type="number" name="csv_timestamp_col" value={form.csv_timestamp_col ?? 0} onChange={handleChange} style={ipt} min={0} />
+                      <label style={s()}>Timestamp Column (0=A)</label>
+                      <input
+                        type="number" name="csv_timestamp_col"
+                        value={form.csv_timestamp_col ?? 0}
+                        onChange={handleChange}
+                        style={ipt} min={0}
+                      />
+                      <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Col A=0, B=1, C=2, D=3…</div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '2px' }}>
-                      <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: '600' }}>
-                        {form.csv_mode === 'daily'
-                          ? renderCsvPattern(form.csv_filename_pattern)
-                          : 'A=0, B=1, C=2, D=3'}
+                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: '2px' }}>
+                      <label style={s()}>Data Column (Register Address)</label>
+                      <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: '600', background: '#e0f2fe', padding: '8px 10px', borderRadius: '6px' }}>
+                        Set Register Address = column index (A=0, B=1, C=2…)
                       </span>
                     </div>
                   </div>
-                  <div style={{ fontSize: '11px', color: '#0369a1', fontWeight: '500', padding: '8px 10px', background: '#e0f2fe', borderRadius: '6px', lineHeight: 1.5 }}>
-                    CSV format: Row 1 = header (skipped), Row 2+ = data. Column mapping: register_address = column index (col A=0, B=1, C=2...). Timestamp col reads date/time from that column.
+
+                  {/* Info box */}
+                  <div style={{ fontSize: '11px', color: '#0f766e', fontWeight: '500', padding: '10px 12px', background: '#d1fae5', borderRadius: '8px', lineHeight: 1.6, border: '1px solid #6ee7b7' }}>
+                    <strong>✅ Supported Formats:</strong> CSV (.csv) and Excel (.xlsx)<br />
+                    <strong>📊 Excel layout:</strong> Header rows (Date, column names, units) are auto-skipped. Footer rows (MAX/MIN/AVG) are also auto-skipped. UltrON reads the last hourly data row.<br />
+                    <strong>🔢 Column mapping:</strong> Use Register Address = column index. For your daily report: NOX=1, PM10=2, PM25=3, SO2=4
                   </div>
                 </div>
               ) : form.input_type === 'modbus_rtu' ? (

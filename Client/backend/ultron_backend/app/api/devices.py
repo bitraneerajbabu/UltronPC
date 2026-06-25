@@ -365,8 +365,8 @@ async def test_device_connection(device_id: int, db: AsyncSession = Depends(get_
         elif protocol == "csv":
             import os
             if device.csv_folder:
-                from app.services.csv_watcher import DailyCSVWatcher
-                watcher = DailyCSVWatcher(
+                from app.services.csv_watcher import DailySmartWatcher
+                watcher = DailySmartWatcher(
                     device.csv_folder,
                     device.csv_filename_pattern or "{YYYYMMDD}.csv",
                     device.csv_delimiter or ",",
@@ -377,10 +377,10 @@ async def test_device_connection(device_id: int, db: AsyncSession = Depends(get_
             else:
                 csv_path = device.csv_path or ""
             if not csv_path:
-                return {"success": False, "message": "No CSV source configured", "latency_ms": None}
+                return {"success": False, "message": "No CSV/Excel source configured", "latency_ms": None}
             exists = os.path.exists(csv_path)
             if not exists:
-                return {"success": False, "message": f"CSV file not found: {csv_path}", "latency_ms": None}
+                return {"success": False, "message": f"File not found: {csv_path}", "latency_ms": None}
 
         else:
             return {"success": False, "message": f"Protocol '{protocol}' not supported for connection test", "latency_ms": None}

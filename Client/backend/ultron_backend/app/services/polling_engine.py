@@ -22,7 +22,7 @@ from app.models.telemetry import LiveData, HistoricalData, AverageType, DataQual
 from app.services.modbus_tcp import ModbusTCPReader
 from app.services.modbus_rtu import ModbusRTUReader
 from app.services.tcp_custom import TCPCustomReader
-from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher
+from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher, SmartWatcher, DailySmartWatcher
 from app.services.data_quality import dq_engine
 from app.services.alarm_engine import alarm_engine
 from app.websocket_manager import ws_manager
@@ -77,7 +77,8 @@ def _get_csv_watcher(device: Device) -> Optional[CSVWatcher]:
         return None
     if device.id not in _csv_watchers:
         if device.csv_folder:
-            _csv_watchers[device.id] = DailyCSVWatcher(
+            # DailySmartWatcher auto-detects .csv vs .xlsx from the filename pattern
+            _csv_watchers[device.id] = DailySmartWatcher(
                 device.csv_folder,
                 device.csv_filename_pattern or "{YYYYMMDD}.csv",
                 device.csv_delimiter or ",",
@@ -85,7 +86,8 @@ def _get_csv_watcher(device: Device) -> Optional[CSVWatcher]:
                 device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
             )
         else:
-            _csv_watchers[device.id] = CSVWatcher(
+            # SmartWatcher auto-detects .csv vs .xlsx from the file path extension
+            _csv_watchers[device.id] = SmartWatcher(
                 device.csv_path,
                 device.csv_delimiter or ",",
                 device.poll_interval or 60,
