@@ -69,17 +69,17 @@ body {
 
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-  background: radial-gradient(at 0% 0%, rgba(204, 229, 230, 0.45) 0, transparent 45%),
+  background: radial-gradient(at 0% 0%, rgba(245, 230, 200, 0.45) 0, transparent 45%),
 
-              radial-gradient(at 50% 0%, rgba(220, 241, 235, 0.5) 0, transparent 40%),
+              radial-gradient(at 50% 0%, rgba(253, 244, 215, 0.5) 0, transparent 40%),
 
-              radial-gradient(at 100% 0%, rgba(200, 224, 241, 0.45) 0, transparent 45%),
+              radial-gradient(at 100% 0%, rgba(240, 225, 195, 0.45) 0, transparent 45%),
 
-              radial-gradient(at 0% 100%, rgba(224, 236, 242, 0.4) 0, transparent 50%),
+              radial-gradient(at 0% 100%, rgba(245, 235, 210, 0.4) 0, transparent 50%),
 
-              radial-gradient(at 100% 100%, rgba(210, 240, 230, 0.5) 0, transparent 50%),
+              radial-gradient(at 100% 100%, rgba(250, 240, 220, 0.5) 0, transparent 50%),
 
-              #f8fafc;
+              #faf6ee;
 
   color: #334155;
 
@@ -100,15 +100,15 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 10% 20%, rgba(221, 240, 237, 0.8) 0%, rgba(230, 244, 245, 0.7) 90%);
+  background: radial-gradient(circle at 10% 20%, rgba(250, 240, 220, 0.85) 0%, rgba(245, 232, 205, 0.75) 90%);
 }
 
 .login-card {
   width: 460px;
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(253, 250, 242, 0.75);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(235, 225, 205, 0.8);
   border-radius: 20px;
   padding: 48px 44px;
   box-shadow: 0 20px 50px rgba(15, 118, 110, 0.08),
@@ -182,7 +182,7 @@ body {
 
   border-radius: 10px;
 
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(253, 250, 242, 0.7);
 
   font-size: 14px;
 
@@ -202,7 +202,7 @@ body {
 
   outline: none;
 
-  background: #ffffff;
+  background: #fdfcf7;
 
   border-color: #0f766e;
 
@@ -276,13 +276,13 @@ body {
 
   height: 80px;
 
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(253, 250, 242, 0.55);
 
   backdrop-filter: blur(20px);
 
   -webkit-backdrop-filter: blur(20px);
 
-  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+  border-bottom: 1px solid rgba(235, 225, 205, 0.6);
 
   display: flex;
 
@@ -338,13 +338,13 @@ body {
 
   width: 250px;
 
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(253, 250, 242, 0.45);
 
   backdrop-filter: blur(20px);
 
   -webkit-backdrop-filter: blur(20px);
 
-  border-right: 1px solid rgba(255, 255, 255, 0.5);
+  border-right: 1px solid rgba(235, 225, 205, 0.5);
 
   padding: 0;
 
@@ -402,9 +402,9 @@ body {
 
 .nav-button:hover {
 
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(253, 250, 242, 0.7);
 
-  border-color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(235, 225, 205, 0.7);
 
   color: #0f766e;
 
@@ -512,13 +512,13 @@ body {
 
 .card {
 
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(252, 248, 238, 0.65);
 
   backdrop-filter: blur(16px);
 
   -webkit-backdrop-filter: blur(16px);
 
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(235, 225, 205, 0.6);
 
   border-radius: 16px;
 
@@ -631,15 +631,13 @@ body {
 
 .kpi-card {
 
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(253, 250, 242, 0.75);
 
   backdrop-filter: blur(12px);
 
   -webkit-backdrop-filter: blur(12px);
 
-  border: 1px solid rgba(255, 255, 255, 0.7);
-
-  border-left: 5px solid #0f766e;
+  border: 1px solid rgba(235, 225, 205, 0.8);
 
   border-radius: 14px;
 
@@ -662,8 +660,6 @@ body {
   box-shadow: 0 10px 25px rgba(15, 118, 110, 0.08),
 
               inset 0 1px 1px rgba(255, 255, 255, 1);
-
-  border-left-color: #14b8a6;
 
 }
 
@@ -709,13 +705,13 @@ body {
 
 .sensor-card {
 
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(252, 248, 238, 0.7);
 
   backdrop-filter: blur(12px);
 
   -webkit-backdrop-filter: blur(12px);
 
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(235, 225, 205, 0.7);
 
   border-top: 5px solid #0f766e;
 
@@ -1107,7 +1103,7 @@ body {
 
   border: 1px solid rgba(15, 118, 110, 0.25);
 
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(253, 250, 242, 0.65);
 
   border-radius: 10px;
 
@@ -1283,7 +1279,7 @@ body {
 
   font-size: 13px;
 
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(253, 250, 242, 0.4);
 
 }
 
@@ -1291,7 +1287,7 @@ body {
 
 .table th {
 
-  background: rgba(241, 245, 249, 0.7);
+  background: rgba(245, 238, 224, 0.7);
 
   color: #475569;
 
@@ -1425,7 +1421,7 @@ body {
 
   border-radius: 6px;
 
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(253, 250, 242, 0.7);
 
   font-family: inherit;
 
@@ -1503,7 +1499,7 @@ body {
 
   color: #0f172a;
 
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(253, 250, 242, 0.65);
 
 }
 
@@ -1513,7 +1509,7 @@ body {
 
   outline: none;
 
-  background: #ffffff;
+  background: #fdfcf7;
 
   border-color: #0f766e;
 
@@ -1559,13 +1555,13 @@ body {
 
 .modal-container {
 
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(253, 250, 242, 0.9);
 
   backdrop-filter: blur(30px);
 
   -webkit-backdrop-filter: blur(30px);
 
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(235, 225, 205, 0.8);
 
   border-radius: 20px;
 
@@ -1929,13 +1925,13 @@ body {
 
 .live-status-item {
 
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(253, 250, 242, 0.5);
 
   padding: 14px 18px;
 
   border-radius: 10px;
 
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(235, 225, 205, 0.5);
 
 }
 
@@ -2370,10 +2366,10 @@ body {
 /* Scrolling Copyright Marquee */
 .copyright-footer {
   width: 100%;
-  background: rgba(255, 255, 255, 0.4) !important;
+  background: rgba(253, 250, 242, 0.5) !important;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-top: 1px solid rgba(255, 255, 255, 0.6) !important;
+  border-top: 1px solid rgba(235, 225, 205, 0.6) !important;
   overflow: hidden;
   padding: 12px 0;
 }
@@ -2437,10 +2433,10 @@ body {
 }
 
 .modal-wrapper {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(253, 250, 242, 0.95);
   backdrop-filter: blur(25px);
   -webkit-backdrop-filter: blur(25px);
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(235, 225, 205, 0.9);
   width: 100%;
   max-width: 800px;
   border-radius: 16px;

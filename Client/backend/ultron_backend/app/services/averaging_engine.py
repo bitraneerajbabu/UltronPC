@@ -5,6 +5,7 @@ from raw telemetry and stores them as separate AverageType records.
 Runs on a schedule via APScheduler.
 """
 
+import math
 from datetime import datetime, timedelta
 # pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,28 @@ from app.database import AsyncSessionLocal
 from app.core.logger import get_logger
 
 log = get_logger("ultron.averaging")
+
+
+# ─── Wind Direction Detection ─────────────────────────────────────────────────
+def _is_wind_direction(param) -> bool:
+    name_lower = (param.name or "").lower()
+    tag_lower = (param.tag_name or "").lower()
+    unit_lower = (param.unit or "").lower()
+    
+    # Check unit or name indicators
+    has_wind_dir_indicators = (
+        "winddir" in tag_lower or 
+        "wind_dir" in tag_lower or 
+        tag_lower == "wd" or 
+        "wind direction" in name_lower or
+        "wind_direction" in name_lower
+    )
+    is_degree_unit = unit_lower in ("deg", "degree", "degrees", "°")
+    
+    # Exclude temperature to prevent false positives
+    is_temp = "temp" in tag_lower or "temp" in name_lower
+    
+    return (has_wind_dir_indicators or (is_degree_unit and "wind" in name_lower)) and not is_temp
 
 
 # ─── Average Window Definitions ───────────────────────────────────────────────
@@ -44,9 +67,17 @@ async def _compute_average(
     Compute mean of raw 'good' readings in [start, end) for a parameter
     and upsert an Averages record of the given avg_type.
     """
+    from app.models.parameter import Parameter
+
+    # Fetch parameter definition to check for wind direction
+    param_res = await db.execute(select(Parameter).where(Parameter.id == parameter_id))
+    parameter = param_res.scalar_one_or_none()
+    
+    is_wd = parameter and _is_wind_direction(parameter)
+
     # Fetch raw good-quality readings in the window
-    result = await db.execute(
-        select(func.avg(HistoricalData.value), func.count(HistoricalData.parameter_id))
+    raw_res = await db.execute(
+        select(HistoricalData.value)
         .where(
             and_(
                 HistoricalData.parameter_id == parameter_id,
@@ -56,13 +87,22 @@ async def _compute_average(
             )
         )
     )
-    row = result.one()
-    avg_val, count = row[0], row[1]
-    if avg_val is not None:
-        avg_val = round(float(avg_val), 2)
+    raw_vals = [float(row[0]) for row in raw_res.all() if row[0] is not None]
+    count = len(raw_vals)
 
     if count == 0:
         return   # no data in window — skip
+
+    if is_wd:
+        sin_sum = sum(math.sin(math.radians(v)) for v in raw_vals)
+        cos_sum = sum(math.cos(math.radians(v)) for v in raw_vals)
+        avg_rad = math.atan2(sin_sum / count, cos_sum / count)
+        avg_deg = math.degrees(avg_rad)
+        if avg_deg < 0:
+            avg_deg += 360
+        avg_val = round(avg_deg, 2)
+    else:
+        avg_val = round(sum(raw_vals) / count, 2)
 
     # Check if an average already exists for this window
     existing = await db.execute(
@@ -110,6 +150,13 @@ async def run_averaging_for_all_parameters():
             log.info("No parameters found — skipping averaging")
             return
 
+        # Load parameters definitions to detect wind direction parameters
+        from app.models.parameter import Parameter
+        param_result = await db.execute(
+            select(Parameter).where(Parameter.id.in_(param_ids))
+        )
+        parameters = {p.id: p for p in param_result.scalars().all()}
+
         for avg_type, delta in WINDOWS:
             # Round 'now' down to the nearest window boundary
             if delta.total_seconds() >= 86400:
@@ -145,7 +192,35 @@ async def run_averaging_for_all_parameters():
             for pid, avg_val, count in batch_rows:
                 if avg_val is None or count == 0:
                     continue
-                avg_val = round(float(avg_val), 2)
+
+                param = parameters.get(pid)
+                if param and _is_wind_direction(param):
+                    # Recalculate vector average for wind direction
+                    raw_result = await db.execute(
+                        select(HistoricalData.value)
+                        .where(
+                            and_(
+                                HistoricalData.parameter_id == pid,
+                                HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range, DataQuality.uncertain)),
+                                HistoricalData.timestamp >= start,
+                                HistoricalData.timestamp < end,
+                            )
+                        )
+                    )
+                    raw_vals = [float(r[0]) for r in raw_result.all() if r[0] is not None]
+                    if raw_vals:
+                        sin_sum = sum(math.sin(math.radians(v)) for v in raw_vals)
+                        cos_sum = sum(math.cos(math.radians(v)) for v in raw_vals)
+                        avg_rad = math.atan2(sin_sum / len(raw_vals), cos_sum / len(raw_vals))
+                        avg_deg = math.degrees(avg_rad)
+                        if avg_deg < 0:
+                            avg_deg += 360
+                        avg_val = round(avg_deg, 2)
+                    else:
+                        continue  # no valid raw values
+                else:
+                    avg_val = round(float(avg_val), 2)
+
                 existing = await db.execute(
                     select(Averages).where(
                         and_(

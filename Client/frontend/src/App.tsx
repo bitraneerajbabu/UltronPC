@@ -424,8 +424,8 @@ function App() {
             }}
           >
             <img
-              src="/assets/Ultron_logo.png"
-              alt="UltrON logo"
+              src="/assets/sunshine_logo.png"
+              alt="Sunshine logo"
               style={{
                 width: '160px',
                 height: 'auto',
@@ -532,7 +532,7 @@ function App() {
               onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; }}
               onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
             >
-              <img src="/assets/sunshine_logo.png" alt="Sunshine logo" style={{ display: 'block' }} />
+              <img src="/assets/Ultron_logo.png" alt="UltrON logo" style={{ display: 'block', height: '32px', width: 'auto' }} />
             </button>
           </div>
         </header>
