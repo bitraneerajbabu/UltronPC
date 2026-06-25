@@ -42,6 +42,8 @@ def _get_token() -> str:
         if tf.exists():
             tok = tf.read_text().strip()
     if not tok:
+        if "--ci" in sys.argv:
+            return "dummy_token"
         print("Error: set GITHUB_TOKEN env var or create github_token.txt", file=sys.stderr)
         sys.exit(1)
     return tok

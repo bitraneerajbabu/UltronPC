@@ -91,6 +91,16 @@ class ModbusRTUReader:
             scale_factor = 1.0
         if offset is None:
             offset = 0.0
+
+        # ModScan address translation (e.g. 40005 -> 4 for holding registers)
+        target_address = register_address
+        if register_type == "holding" and target_address >= 40001:
+            target_address -= 40001
+        elif register_type == "input_reg" and target_address >= 30001:
+            target_address -= 30001
+        elif register_type == "discrete_input" and target_address >= 10001:
+            target_address -= 10001
+
         target_port = serial_port if serial_port else self.port
         target_baud = baud_rate if baud_rate else self.baudrate
         target_dbits = data_bits if data_bits else self.data_bits
@@ -123,19 +133,19 @@ class ModbusRTUReader:
                 
                 if register_type == "holding":
                     result = await client.read_holding_registers(
-                        register_address, count=register_count, device_id=slave_id
+                        target_address, count=register_count, device_id=slave_id
                     )
                 elif register_type == "input_reg":
                     result = await client.read_input_registers(
-                        register_address, count=register_count, device_id=slave_id
+                        target_address, count=register_count, device_id=slave_id
                     )
                 elif register_type == "coil":
                     result = await client.read_coils(
-                        register_address, count=register_count, device_id=slave_id
+                        target_address, count=register_count, device_id=slave_id
                     )
                 elif register_type == "discrete_input":
                     result = await client.read_discrete_inputs(
-                        register_address, count=register_count, device_id=slave_id
+                        target_address, count=register_count, device_id=slave_id
                     )
                 else:
                     client.close()
@@ -173,19 +183,19 @@ class ModbusRTUReader:
                 try:
                     if register_type == "holding":
                         result = await self._client.read_holding_registers(
-                            register_address, count=register_count, device_id=slave_id
+                            target_address, count=register_count, device_id=slave_id
                         )
                     elif register_type == "input_reg":
                         result = await self._client.read_input_registers(
-                            register_address, count=register_count, device_id=slave_id
+                            target_address, count=register_count, device_id=slave_id
                         )
                     elif register_type == "coil":
                         result = await self._client.read_coils(
-                            register_address, count=register_count, device_id=slave_id
+                            target_address, count=register_count, device_id=slave_id
                         )
                     elif register_type == "discrete_input":
                         result = await self._client.read_discrete_inputs(
-                            register_address, count=register_count, device_id=slave_id
+                            target_address, count=register_count, device_id=slave_id
                         )
                     else:
                         log.warning(f"Unknown register_type '{register_type}'")
