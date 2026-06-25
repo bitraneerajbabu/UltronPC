@@ -127,7 +127,12 @@ export const DevicesScreen = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm(p => ({ ...p, [name]: type === 'checkbox' ? checked : (type === 'number' && value !== '' ? Number(value) : value) }));
+    if (type === 'number' && value === '') {
+      const defaults = { scale_factor: 1.0, offset: 0.0, register_count: 2 };
+      setForm(p => ({ ...p, [name]: name in defaults ? defaults[name] : '' }));
+    } else {
+      setForm(p => ({ ...p, [name]: type === 'checkbox' ? checked : (type === 'number' ? Number(value) : value) }));
+    }
   };
 
   const handleSave = async () => {

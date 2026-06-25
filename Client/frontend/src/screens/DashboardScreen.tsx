@@ -266,7 +266,7 @@ export const DashboardScreen = () => {
   const [networkInfo, setNetworkInfo] = useState<{ lan_ip: string; internet_connected: boolean; hostname: string } | null>(null);
   const [dismissedBroadcast, setDismissedBroadcast] = useState<number | null>(null);
 
-  // Poll latest telemetry and KPIs every 5 seconds for dashboard updates
+  // Poll latest telemetry every 5s, KPIs are pushed via WebSocket + cached on backend
   useEffect(() => {
     if (fetchLatestTelemetryAndKpis) {
       fetchLatestTelemetryAndKpis();
