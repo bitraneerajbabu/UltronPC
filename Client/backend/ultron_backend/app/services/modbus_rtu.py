@@ -87,6 +87,10 @@ class ModbusRTUReader:
         stop_bits: Optional[int] = None,
     ) -> tuple[Optional[float], str]:
         """Thread-safe read (via async lock) for RS485 shared bus."""
+        if scale_factor is None or scale_factor == 0:
+            scale_factor = 1.0
+        if offset is None:
+            offset = 0.0
         target_port = serial_port if serial_port else self.port
         target_baud = baud_rate if baud_rate else self.baudrate
         target_dbits = data_bits if data_bits else self.data_bits
@@ -235,9 +239,11 @@ class ModbusRTUReader:
                 parity=p.get("parity"),
                 stop_bits=p.get("stop_bits"),
             )
+            sf = p.get("scale_factor", 1.0) or 1.0
+            off = p.get("offset", 0.0) or 0.0
             raw_value = None
-            if value is not None and p["scale_factor"] not in (0, 0.0):
-                raw_value = (value - p["offset"]) / p["scale_factor"]
+            if value is not None and sf not in (0, 0.0):
+                raw_value = (value - off) / sf
 
             results.append({
                 "parameter_id": p["id"],

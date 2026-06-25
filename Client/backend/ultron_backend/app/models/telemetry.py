@@ -100,6 +100,7 @@ class HistoricalData(Base):
     __table_args__ = (
         Index("ix_historical_data_param_time", "parameter_id", "timestamp"),
         Index("ix_historical_data_timestamp", "timestamp"),
+        Index("ix_historical_data_ts_quality", "timestamp", "quality"),
     )
 
     def __repr__(self):

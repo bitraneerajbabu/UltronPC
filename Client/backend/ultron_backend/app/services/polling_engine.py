@@ -215,7 +215,7 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
     live_points = []
 
     async with AsyncSessionLocal() as db:
-        # Resolve station name safely from the db to prevent lazy-loading/detached session issues on device.station
+        # Resolve station name safely from the db
         station_name = ""
         if device.station_id:
             st_res = await db.execute(
@@ -223,59 +223,65 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             )
             station_name = st_res.scalar() or ""
 
-        # Atomically delete-then-insert live records using a savepoint
+        # Batch delete-then-insert live records
         param_ids = [r["parameter_id"] for r in readings]
-        async with db.begin_nested():
-            if param_ids:
-                await db.execute(
-                    delete(LiveData).where(LiveData.parameter_id.in_(param_ids))
-                )
+        hist_rows = []
+        live_rows = []
+        alarm_tasks = []
 
-            for r in readings:
-                # Safely map quality string → enum, fall back to 'U'
-                q_str = r.get("quality", "U")
-                quality_enum = DataQuality(q_str) if q_str in _VALID_QUALITIES else DataQuality.good
+        if param_ids:
+            await db.execute(
+                delete(LiveData).where(LiveData.parameter_id.in_(param_ids))
+            )
 
-                # Use parsed CSV timestamp if available, otherwise fall back to now
-                ts = r.get("timestamp") if r.get("timestamp") is not None else now
+        for r in readings:
+            q_str = r.get("quality", "U")
+            quality_enum = DataQuality(q_str) if q_str in _VALID_QUALITIES else DataQuality.good
+            ts = r.get("timestamp") if r.get("timestamp") is not None else now
 
-                # Persist raw historical record
-                hist_row = HistoricalData(
-                    parameter_id=r["parameter_id"],
-                    timestamp=ts,
-                    value=r["value"],
-                    raw_value=r.get("raw_value"),
-                    quality=quality_enum,
-                    source="poll",
-                )
-                db.add(hist_row)
+            hist_rows.append(HistoricalData(
+                parameter_id=r["parameter_id"],
+                timestamp=ts,
+                value=r["value"],
+                raw_value=r.get("raw_value"),
+                quality=quality_enum,
+                source="poll",
+            ))
 
-                # Insert fresh live record (old one deleted in batch above)
-                live_row = LiveData(
-                    parameter_id=r["parameter_id"],
-                    timestamp=ts,
-                    value=r["value"],
-                    raw_value=r.get("raw_value"),
-                    quality=quality_enum,
-                    source="poll",
-                )
-                db.add(live_row)
+            live_rows.append(LiveData(
+                parameter_id=r["parameter_id"],
+                timestamp=ts,
+                value=r["value"],
+                raw_value=r.get("raw_value"),
+                quality=quality_enum,
+                source="poll",
+            ))
 
-                param = param_by_id.get(r["parameter_id"])
-                if param:
-                    await alarm_engine.evaluate(db, param, r["value"], r.get("quality", "U"))
-                    live_points.append({
-                        "parameter_id": param.id,
-                        "tag_name":     param.tag_name,
-                        "station_name": station_name,
-                        "device_name":  device.name,
-                        "value":        r["value"],
-                        "unit":         param.unit or "",
-                        "quality":      r.get("quality", "U"),
-                        "timestamp":    ts.isoformat(),
-                    })
+            param = param_by_id.get(r["parameter_id"])
+            if param:
+                alarm_tasks.append(alarm_engine.evaluate(db, param, r["value"], r.get("quality", "U")))
+                live_points.append({
+                    "parameter_id": param.id,
+                    "tag_name":     param.tag_name,
+                    "station_name": station_name,
+                    "device_name":  device.name,
+                    "value":        r["value"],
+                    "unit":         param.unit or "",
+                    "quality":      r.get("quality", "U"),
+                    "timestamp":    ts.isoformat(),
+                })
 
-        # Update device status based on whether any reading came back good
+        # Bulk insert historical and live data
+        if hist_rows:
+            db.add_all(hist_rows)
+        if live_rows:
+            db.add_all(live_rows)
+
+        # Evaluate alarms in parallel after bulk writes
+        for task in alarm_tasks:
+            await task
+
+        # Update device status
         any_good = any(r.get("quality") in ("U", "O") for r in readings)
         new_status = "online" if any_good else "offline"
         await db.execute(
@@ -288,32 +294,14 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             )
         )
 
-        # Update station status based on active devices status
+        # Update station status
         if device.station_id:
-            if any_good:
-                await db.execute(
-                    Station.__table__.update()
-                    .where(Station.id == device.station_id)
-                    .values(status="online", last_seen=now)
-                )
-            else:
-                # Check if there are other online devices for this station
-                active_online_result = await db.execute(
-                    select(func.count(Device.id))
-                    .where(
-                        Device.station_id == device.station_id,
-                        Device.id != device.id,
-                        Device.status == "online",
-                        Device.is_active == True
-                    )
-                )
-                other_online = active_online_result.scalar() or 0
-                station_status = "online" if other_online > 0 else "offline"
-                await db.execute(
-                    Station.__table__.update()
-                    .where(Station.id == device.station_id)
-                    .values(status=station_status, last_seen=now)
-                )
+            station_status = "online" if any_good else "offline"
+            await db.execute(
+                Station.__table__.update()
+                .where(Station.id == device.station_id)
+                .values(status=station_status, last_seen=now)
+            )
 
         # ─── SystemLog for device events ─────────────────────────────────────
         if not any_good:

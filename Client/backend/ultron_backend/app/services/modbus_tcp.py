@@ -142,6 +142,10 @@ class ModbusTCPReader:
         target_host = host if host else self.host
         target_port = port if port else self.port
         target_slave = slave_id if slave_id is not None else self.slave_id
+        if scale_factor is None or scale_factor == 0:
+            scale_factor = 1.0
+        if offset is None:
+            offset = 0.0
 
         has_override = (host is not None or port is not None)
         client = None
@@ -251,9 +255,11 @@ class ModbusTCPReader:
                 port=p.get("port"),
                 slave_id=p.get("slave_id"),
             )
+            sf = p.get("scale_factor", 1.0) or 1.0
+            off = p.get("offset", 0.0) or 0.0
             raw_value = None
-            if value is not None and p["scale_factor"] not in (0, 0.0):
-                raw_value = (value - p["offset"]) / p["scale_factor"]
+            if value is not None and sf not in (0, 0.0):
+                raw_value = (value - off) / sf
 
             results.append({
                 "parameter_id": p["id"],

@@ -122,7 +122,7 @@ class ParameterUpdate(BaseModel):
             fields = [
                 "name", "tag_name", "description", "unit", "register_type", 
                 "register_address", "register_count", "data_type", "byte_order", 
-                "scale_factor", "offset", "min_valid", "max_valid", 
+                "min_valid", "max_valid", 
                 "alarm_low_low", "alarm_low", "alarm_high", "alarm_high_high", 
                 "alarm_severity", "alarm_enabled", "alarm_deadband", "display_order", 
                 "is_active", "host", "port", "serial_port", "baud_rate", 
@@ -131,6 +131,11 @@ class ParameterUpdate(BaseModel):
             for f in fields:
                 if data.get(f) == "":
                     data[f] = None
+            # Numeric fields with defaults: remove entirely when empty so DB default is preserved
+            numeric_with_defaults = ["scale_factor", "offset", "register_count"]
+            for f in numeric_with_defaults:
+                if data.get(f) in ("", None):
+                    data.pop(f, None)
         return data
 
 
