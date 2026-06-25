@@ -171,7 +171,70 @@ async def init_db():
         except Exception as mig_err:
             log.warning(f"devices migration skipped: {mig_err}")
 
-        # 2.7 Migrate: add calibration_mode / maintenance_mode to cpcb_station_config
+        # 2.7 Migrate: add new columns to parameters table (TCP Custom parsing + connection overrides)
+        try:
+            existing_param_cols = await conn.run_sync(get_columns, "parameters")
+            if existing_param_cols:
+                if "parse_method" not in existing_param_cols:
+                    await conn.execute(text("ALTER TABLE parameters ADD COLUMN parse_method VARCHAR(30) DEFAULT 'csv_col'"))
+                    log.info("Migrated: added 'parse_method' column to parameters")
+                if "parse_config" not in existing_param_cols:
+                    await conn.execute(text("ALTER TABLE parameters ADD COLUMN parse_config TEXT"))
+                    log.info("Migrated: added 'parse_config' column to parameters")
+                if "host" not in existing_param_cols:
+                    await conn.execute(text("ALTER TABLE parameters ADD COLUMN host VARCHAR(100)"))
+                    log.info("Migrated: added 'host' column to parameters")
+                if "port" not in existing_param_cols:
+                    await conn.execute(text("ALTER TABLE parameters ADD COLUMN port INTEGER"))
+                    log.info("Migrated: added 'port' column to parameters")
+                if "serial_port" not in existing_param_cols:
+                    await conn.execute(text("ALTER TABLE parameters ADD COLUMN serial_port VARCHAR(50)"))
+                    log.info("Migrated: added 'serial_port' column to parameters")
+                if "baud_rate" not in existing_param_cols:
+                    await conn.execute(text("ALTER TABLE parameters ADD COLUMN baud_rate INTEGER"))
+                    log.info("Migrated: added 'baud_rate' column to parameters")
+                if "data_bits" not in existing_param_cols:
+                    await conn.execute(text("ALTER TABLE parameters ADD COLUMN data_bits INTEGER"))
+                    log.info("Migrated: added 'data_bits' column to parameters")
+                if "parity" not in existing_param_cols:
+                    await conn.execute(text("ALTER TABLE parameters ADD COLUMN parity VARCHAR(5)"))
+                    log.info("Migrated: added 'parity' column to parameters")
+                if "stop_bits" not in existing_param_cols:
+                    await conn.execute(text("ALTER TABLE parameters ADD COLUMN stop_bits INTEGER"))
+                    log.info("Migrated: added 'stop_bits' column to parameters")
+                if "slave_id" not in existing_param_cols:
+                    await conn.execute(text("ALTER TABLE parameters ADD COLUMN slave_id INTEGER"))
+                    log.info("Migrated: added 'slave_id' column to parameters")
+        except Exception as mig_err:
+            log.warning(f"parameters migration skipped: {mig_err}")
+
+        # 2.8 Migrate: add new columns to stations table (connection config + status)
+        try:
+            existing_station_cols = await conn.run_sync(get_columns, "stations")
+            if existing_station_cols:
+                if "last_seen" not in existing_station_cols:
+                    await conn.execute(text("ALTER TABLE stations ADD COLUMN last_seen DATETIME"))
+                    log.info("Migrated: added 'last_seen' column to stations")
+                if "last_error" not in existing_station_cols:
+                    await conn.execute(text("ALTER TABLE stations ADD COLUMN last_error TEXT"))
+                    log.info("Migrated: added 'last_error' column to stations")
+        except Exception as mig_err:
+            log.warning(f"stations migration skipped: {mig_err}")
+
+        # 2.9 Migrate: add new columns to users table (created_by, last_login)
+        try:
+            existing_user_cols = await conn.run_sync(get_columns, "users")
+            if existing_user_cols:
+                if "created_by" not in existing_user_cols:
+                    await conn.execute(text("ALTER TABLE users ADD COLUMN created_by VARCHAR(80)"))
+                    log.info("Migrated: added 'created_by' column to users")
+                if "last_login" not in existing_user_cols:
+                    await conn.execute(text("ALTER TABLE users ADD COLUMN last_login DATETIME"))
+                    log.info("Migrated: added 'last_login' column to users")
+        except Exception as mig_err:
+            log.warning(f"users migration skipped: {mig_err}")
+
+        # 2.10 Migrate: add calibration_mode / maintenance_mode to cpcb_station_config
         try:
             existing_cpcb_cols = await conn.run_sync(get_columns, "cpcb_station_config")
             if existing_cpcb_cols:
