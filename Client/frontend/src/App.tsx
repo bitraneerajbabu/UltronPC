@@ -181,9 +181,28 @@ function App() {
     showToast,
     broadcasts,
     amcExpiry,
+    API_BASE,
   } = useContext(AppContext);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [localVersion, setLocalVersion] = useState('');
+
+  useEffect(() => {
+    const fetchVersion = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/version`);
+        if (res.ok) {
+          const data = await res.json();
+          setLocalVersion(data.version);
+        }
+      } catch (err) {
+        console.error("Failed to fetch app version:", err);
+      }
+    };
+    if (API_BASE) {
+      fetchVersion();
+    }
+  }, [API_BASE]);
 
   // License check removed — AMC block bypassed. Goes straight to Master login.
 
@@ -287,7 +306,23 @@ function App() {
       <div className="login-screen">
         <div className="login-card">
           <img src="/assets/Ultron_logo.png" className="login-logo" alt="UltrON Logo" />
-          <h2 className="login-title">Industrial Monitoring Platform</h2>
+          <h2 className="login-title" style={{ marginBottom: localVersion ? '2px' : '8px' }}>Industrial Monitoring Platform</h2>
+          {localVersion && (
+            <div style={{
+              fontSize: '11px',
+              fontWeight: '800',
+              color: '#0f766e',
+              background: 'rgba(15,118,110,0.08)',
+              padding: '3px 10px',
+              borderRadius: '99px',
+              display: 'inline-block',
+              marginBottom: '12px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              Version {localVersion}
+            </div>
+          )}
           <p className="login-description">
             Sign in with your credentials to access the system
           </p>

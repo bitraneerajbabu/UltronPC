@@ -269,6 +269,12 @@ app.include_router(broadcasts_api.router, prefix=PREFIX)
 app.include_router(cpcb_api.router, prefix=PREFIX)
 app.include_router(calibration_api.router, prefix=PREFIX)
 
+# ─── Public Version Endpoint ──────────────────────────────────────────────────
+@app.get("/api/v1/version")
+async def get_app_version():
+    return {"version": settings.APP_VERSION, "app_name": settings.APP_NAME}
+
+
 # ─── WebSocket Live Push ──────────────────────────────────────────────────────
 @app.websocket("/ws/live")
 async def websocket_live(
