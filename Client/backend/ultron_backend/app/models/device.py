@@ -58,6 +58,10 @@ class Device(Base):
     csv_delimiter = Column(String(5), default=",")
     csv_timestamp_col = Column(Integer, nullable=True)
 
+    # TCP Custom-specific
+    request_hex = Column(String(500), nullable=True)     # hex bytes to send before each read (e.g. "02 4D 31 30 34 30 34 37 43 03")
+    response_delimiter = Column(String(20), default="newline")  # "newline", "etx", "length"
+
     # Polling
     poll_interval = Column(Integer, default=60)    # seconds
     timeout = Column(Integer, default=5)            # seconds

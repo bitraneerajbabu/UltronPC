@@ -32,11 +32,17 @@ def _get_secret_key_from_file() -> str:
 
 def get_fernet_key() -> bytes:
     """
-    Derives a deterministic key for Fernet config obfuscation.
-    Uses a static key for configuration encryption so that the compiled
-    binary can always decrypt the bundled config on any machine.
+    Derives a Fernet key from the machine-local secret.key file.
+    Each installation gets a unique encryption key, so the bundled
+    .env.enc cannot be decrypted with the public source alone.
+    Falls back to the legacy derivation only if no secret.key exists
+    (first-run / fresh install scenario).
     """
-    password = b"UltrON_Obfuscation_Key_2026_#SunshineTech"
+    file_key = _get_secret_key_from_file()
+    if file_key:
+        password = file_key.encode("utf-8")
+    else:
+        password = b"UltrON_Obfuscation_Key_2026_#SunshineTech"
     salt = b"UltrON_Fixed_Salt_2026_#SunshineTech"
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),

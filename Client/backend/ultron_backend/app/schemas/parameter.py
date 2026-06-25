@@ -31,6 +31,10 @@ class ParameterBase(BaseModel):
     display_order: int = 0
     is_active: bool = True
 
+    # TCP Custom parsing
+    parse_method: Optional[str] = "csv_col"
+    parse_config: Optional[str] = None
+
     # Connection overrides
     host: Optional[str] = None
     port: Optional[int] = None
@@ -49,7 +53,7 @@ class ParameterBase(BaseModel):
                 "description", "unit", "min_valid", "max_valid", 
                 "alarm_low_low", "alarm_low", "alarm_high", "alarm_high_high",
                 "host", "port", "serial_port", "baud_rate", "data_bits", 
-                "parity", "stop_bits", "slave_id"
+                "parity", "stop_bits", "slave_id", "parse_config"
             ]
             for f in nullable_fields:
                 if data.get(f) == "":
@@ -96,6 +100,10 @@ class ParameterUpdate(BaseModel):
     alarm_deadband: Optional[float] = None
     display_order: Optional[int] = None
     is_active: Optional[bool] = None
+
+    # TCP Custom parsing
+    parse_method: Optional[str] = None
+    parse_config: Optional[str] = None
 
     # Connection overrides
     host: Optional[str] = None

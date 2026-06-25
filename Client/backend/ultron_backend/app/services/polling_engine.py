@@ -67,7 +67,11 @@ def _get_modbus_rtu(device: Device) -> ModbusRTUReader:
 def _get_tcp_custom(device: Device) -> TCPCustomReader:
     if device.id not in _tcp_custom:
         _tcp_custom[device.id] = TCPCustomReader(
-            host=device.host or "", port=device.port or 4001, timeout=device.timeout or 5
+            host=device.host or "",
+            port=device.port or 4001,
+            timeout=device.timeout or 5,
+            request_hex=device.request_hex,
+            response_delimiter=device.response_delimiter or "newline",
         )
     return _tcp_custom[device.id]
 
