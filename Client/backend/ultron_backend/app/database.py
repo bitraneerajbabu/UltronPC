@@ -103,6 +103,12 @@ async def init_db():
                 if "led_station_name" not in existing_cols:
                     await conn.execute(text("ALTER TABLE server_config ADD COLUMN led_station_name VARCHAR(100)"))
                     log.info("Migrated: added 'led_station_name' column to server_config")
+                if "live_url" not in existing_cols:
+                    await conn.execute(text("ALTER TABLE server_config ADD COLUMN live_url VARCHAR(500)"))
+                    log.info("Migrated: added 'live_url' column to server_config")
+                if "delay_url" not in existing_cols:
+                    await conn.execute(text("ALTER TABLE server_config ADD COLUMN delay_url VARCHAR(500)"))
+                    log.info("Migrated: added 'delay_url' column to server_config")
         except Exception as mig_err:
             log.warning(f"server_config migration skipped: {mig_err}")
 
@@ -122,6 +128,21 @@ async def init_db():
                 if "led_unit" not in existing_mapping_cols:
                     await conn.execute(text("ALTER TABLE server_parameter_mapping ADD COLUMN led_unit VARCHAR(50)"))
                     log.info("Migrated: added 'led_unit' column to server_parameter_mapping")
+                if "api_id" not in existing_mapping_cols:
+                    await conn.execute(text("ALTER TABLE server_parameter_mapping ADD COLUMN api_id VARCHAR(100)"))
+                    log.info("Migrated: added 'api_id' column to server_parameter_mapping")
+                if "api_name" not in existing_mapping_cols:
+                    await conn.execute(text("ALTER TABLE server_parameter_mapping ADD COLUMN api_name VARCHAR(100)"))
+                    log.info("Migrated: added 'api_name' column to server_parameter_mapping")
+                if "api_password" not in existing_mapping_cols:
+                    await conn.execute(text("ALTER TABLE server_parameter_mapping ADD COLUMN api_password VARCHAR(100)"))
+                    log.info("Migrated: added 'api_password' column to server_parameter_mapping")
+                if "api_vname" not in existing_mapping_cols:
+                    await conn.execute(text("ALTER TABLE server_parameter_mapping ADD COLUMN api_vname VARCHAR(100)"))
+                    log.info("Migrated: added 'api_vname' column to server_parameter_mapping")
+                if "api_unit" not in existing_mapping_cols:
+                    await conn.execute(text("ALTER TABLE server_parameter_mapping ADD COLUMN api_unit VARCHAR(50)"))
+                    log.info("Migrated: added 'api_unit' column to server_parameter_mapping")
         except Exception as mig_err:
             log.warning(f"server_parameter_mapping migration skipped: {mig_err}")
 
@@ -135,6 +156,18 @@ async def init_db():
                 if "csv_filename_pattern" not in existing_device_cols:
                     await conn.execute(text("ALTER TABLE devices ADD COLUMN csv_filename_pattern VARCHAR(200)"))
                     log.info("Migrated: added 'csv_filename_pattern' column to devices")
+                if "csv_delimiter" not in existing_device_cols:
+                    await conn.execute(text("ALTER TABLE devices ADD COLUMN csv_delimiter VARCHAR(5) DEFAULT ','"))
+                    log.info("Migrated: added 'csv_delimiter' column to devices")
+                if "csv_timestamp_col" not in existing_device_cols:
+                    await conn.execute(text("ALTER TABLE devices ADD COLUMN csv_timestamp_col INTEGER"))
+                    log.info("Migrated: added 'csv_timestamp_col' column to devices")
+                if "request_hex" not in existing_device_cols:
+                    await conn.execute(text("ALTER TABLE devices ADD COLUMN request_hex VARCHAR(500)"))
+                    log.info("Migrated: added 'request_hex' column to devices")
+                if "response_delimiter" not in existing_device_cols:
+                    await conn.execute(text("ALTER TABLE devices ADD COLUMN response_delimiter VARCHAR(20) DEFAULT 'newline'"))
+                    log.info("Migrated: added 'response_delimiter' column to devices")
         except Exception as mig_err:
             log.warning(f"devices migration skipped: {mig_err}")
 
@@ -148,6 +181,24 @@ async def init_db():
                 if "maintenance_mode" not in existing_cpcb_cols:
                     await conn.execute(text("ALTER TABLE cpcb_station_config ADD COLUMN maintenance_mode BOOLEAN DEFAULT FALSE"))
                     log.info("Migrated: added 'maintenance_mode' column to cpcb_station_config")
+                if "station_code" not in existing_cpcb_cols:
+                    await conn.execute(text("ALTER TABLE cpcb_station_config ADD COLUMN station_code VARCHAR(50)"))
+                    log.info("Migrated: added 'station_code' column to cpcb_station_config")
+                if "export_enabled" not in existing_cpcb_cols:
+                    await conn.execute(text("ALTER TABLE cpcb_station_config ADD COLUMN export_enabled BOOLEAN DEFAULT TRUE"))
+                    log.info("Migrated: added 'export_enabled' column to cpcb_station_config")
+                if "export_path" not in existing_cpcb_cols:
+                    await conn.execute(text("ALTER TABLE cpcb_station_config ADD COLUMN export_path VARCHAR(500) DEFAULT 'C:\\Data'"))
+                    log.info("Migrated: added 'export_path' column to cpcb_station_config")
+                if "cpcb_enabled" not in existing_cpcb_cols:
+                    await conn.execute(text("ALTER TABLE cpcb_station_config ADD COLUMN cpcb_enabled BOOLEAN DEFAULT TRUE"))
+                    log.info("Migrated: added 'cpcb_enabled' column to cpcb_station_config")
+                if "timezone" not in existing_cpcb_cols:
+                    await conn.execute(text("ALTER TABLE cpcb_station_config ADD COLUMN timezone VARCHAR(50) DEFAULT 'Asia/Kolkata'"))
+                    log.info("Migrated: added 'timezone' column to cpcb_station_config")
+                if "retention_count" not in existing_cpcb_cols:
+                    await conn.execute(text("ALTER TABLE cpcb_station_config ADD COLUMN retention_count INTEGER DEFAULT 97"))
+                    log.info("Migrated: added 'retention_count' column to cpcb_station_config")
         except Exception as mig_err:
             log.warning(f"cpcb_station_config migration skipped: {mig_err}")
 
