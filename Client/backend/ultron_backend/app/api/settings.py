@@ -152,6 +152,40 @@ async def polling_status():
     }
 
 
+# ─── Restart UltrON Application ────────────────────────────────────────────────
+@router.post("/restart-app", dependencies=[Depends(require_admin)])
+async def restart_app():
+    """
+    Restart the UltrON desktop application (frozen PyInstaller exe only).
+    Spawns a new process in the background, then exits the current one.
+    """
+    import sys, os, subprocess, threading
+
+    if not getattr(sys, "frozen", False):
+        raise HTTPException(status_code=400, detail="Restart is only supported in desktop (frozen) mode")
+
+    install_dir = os.path.dirname(sys.executable)
+    restart_flag = os.path.join(install_dir, "restart.flag")
+    try:
+        with open(restart_flag, "w") as f:
+            f.write("1")
+    except Exception:
+        pass
+
+    def _do_restart():
+        import time
+        time.sleep(2)
+        try:
+            subprocess.Popen([sys.executable])
+        except Exception:
+            pass
+        os._exit(0)
+
+    threading.Thread(target=_do_restart, daemon=True).start()
+    audit.info("App restart initiated via /settings/restart-app")
+    return {"success": True, "message": "Restarting UltrON…"}
+
+
 # ─── Reload Polling Engine ────────────────────────────────────────────────────
 @router.post("/reload-polling", dependencies=[Depends(require_admin)])
 async def reload_polling():

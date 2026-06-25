@@ -112,6 +112,14 @@ def _apply_pending_update():
 
 _apply_pending_update()
 
+# Check for restart flag (from /settings/restart-app)
+_restart_flag = os.path.join(APP_DIR, "restart.flag")
+if os.path.exists(_restart_flag):
+    try:
+        os.remove(_restart_flag)
+    except Exception:
+        pass
+
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 1.6 — Background Update Downloader
 # Silently checks GitHub for a newer release and downloads it in the background.
