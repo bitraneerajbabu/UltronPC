@@ -162,6 +162,20 @@ export const SettingsScreen = () => {
     finally { setActionLoading(''); }
   };
 
+  const handleRestartApp = async () => {
+    if (!window.confirm('Restart UltrON application?\n\nThe server will restart and this page will reload.')) return;
+    setActionLoading('restart');
+    try {
+      const res = await authFetch(`${API_BASE}/settings/restart-app`, { method: 'POST' });
+      if (!res.ok) throw new Error();
+      showToast('Restarting UltrON…', 'info');
+      setTimeout(() => window.location.reload(), 3000);
+    } catch {
+      showToast('Restart only supported in desktop mode.', 'error');
+      setActionLoading('');
+    }
+  };
+
   const handleResetTelemetry = async () => {
     if (!window.confirm('Clear ALL telemetry data? (readings, history, averages, alarms)\nConfig kept intact. Cannot be undone.')) return;
     setActionLoading('resetTel');
@@ -229,6 +243,7 @@ export const SettingsScreen = () => {
         <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
           <button style={BTN.primary} onClick={loadInfo} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</button>
           <button style={BTN.ghost} onClick={handleReloadPolling} disabled={!!actionLoading}>{actionLoading === 'reload' ? '…' : 'Reload Polling'}</button>
+          <button style={{ ...BTN.danger, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>{actionLoading === 'restart' ? 'Restarting…' : 'Restart App'}</button>
         </div>
       </div>
 
