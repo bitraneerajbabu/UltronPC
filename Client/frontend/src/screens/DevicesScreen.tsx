@@ -246,9 +246,9 @@ export const DevicesScreen = () => {
                         <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>{protoLabel}</span>
                       </td>
                       <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{proto !== 'csv' ? addr + ':' + port : addr}</td>
-                      <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{p.slave_id || dev?.slave_id || '�'}</td>
+                      <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{proto === 'iseo_tcp' ? '-' : (p.slave_id || dev?.slave_id || '')}</td>
                       <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{p.register_address}</td>
-                      <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>{getDataTypeLabel(p.data_type, p.byte_order)}</td>
+                      <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>{proto === 'iseo_tcp' ? '-' : getDataTypeLabel(p.data_type, p.byte_order)}</td>
                       <td style={{ padding: '12px 14px' }}>
                         <span style={{
                           fontSize: '10px', fontWeight: '700', padding: '3px 10px', borderRadius: '99px',
@@ -461,7 +461,7 @@ export const DevicesScreen = () => {
                 </>
               ) : (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: form.input_type === 'iseo_tcp' ? '1fr 1fr' : '1fr 1fr 1fr', gap: '12px' }}>
                     <div>
                       <label style={s()}>IP Address</label>
                       <input type="text" name="host" value={form.host} onChange={handleChange} style={ipt} placeholder="192.168.1.101" />
@@ -470,10 +470,12 @@ export const DevicesScreen = () => {
                       <label style={s()}>Port</label>
                       <input type="text" name="port" value={form.port} onChange={handleChange} style={ipt} placeholder="502" />
                     </div>
-                    <div>
-                      <label style={s()}>Slave ID</label>
-                      <input type="number" name="slave_id" value={form.slave_id} onChange={handleChange} style={ipt} />
-                    </div>
+                    {form.input_type !== 'iseo_tcp' && (
+                      <div>
+                        <label style={s()}>Slave ID</label>
+                        <input type="number" name="slave_id" value={form.slave_id} onChange={handleChange} style={ipt} />
+                      </div>
+                    )}
                   </div>
                   {(form.input_type === 'tcp_custom' || form.input_type === 'iseo_tcp') && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
@@ -496,35 +498,42 @@ export const DevicesScreen = () => {
               )}
               {form.input_type !== 'csv' && (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={s()}>Function Code</label>
-                      <select name="register_type" value={form.register_type} onChange={handleChange} style={ipt}>
-                        <option value="input_reg">04 Input Register</option>
-                        <option value="holding">03 Holding Register</option>
-                      </select>
+                  {form.input_type !== 'iseo_tcp' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <label style={s()}>Function Code</label>
+                        <select name="register_type" value={form.register_type} onChange={handleChange} style={ipt}>
+                          <option value="input_reg">04 Input Register</option>
+                          <option value="holding">03 Holding Register</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={s()}>Data Type</label>
+                        <select value={getDataTypeLabel(form.data_type, form.byte_order)} onChange={(e) => {
+                          const m = DT_MAP[e.target.value];
+                          if (m) setForm(p => ({ ...p, data_type: m.data_type, byte_order: m.byte_order }));
+                        }} style={ipt}>
+                          {DATA_TYPES.map(dt => (
+                            <option key={dt} value={dt}>{dt}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
+                  )}
+                  <div style={{ display: 'grid', gridTemplateColumns: form.input_type === 'iseo_tcp' ? '1fr' : '1fr 1fr', gap: '12px' }}>
                     <div>
-                      <label style={s()}>Data Type</label>
-                      <select value={getDataTypeLabel(form.data_type, form.byte_order)} onChange={(e) => {
-                        const m = DT_MAP[e.target.value];
-                        if (m) setForm(p => ({ ...p, data_type: m.data_type, byte_order: m.byte_order }));
-                      }} style={ipt}>
-                        {DATA_TYPES.map(dt => (
-                          <option key={dt} value={dt}>{dt}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={s()}>Start Address</label>
+                      <label style={s()}>{form.input_type === 'iseo_tcp' ? 'Field Index' : 'Start Address'}</label>
                       <input type="number" name="register_address" value={form.register_address} onChange={handleChange} style={ipt} />
+                      {form.input_type === 'iseo_tcp' && (
+                        <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>ASCII field index (0-based space-delimited position)</div>
+                      )}
                     </div>
-                    <div>
-                      <label style={s()}>Register Count</label>
-                      <input type="number" name="register_count" value={form.register_count} onChange={handleChange} style={ipt} />
-                    </div>
+                    {form.input_type !== 'iseo_tcp' && (
+                      <div>
+                        <label style={s()}>Register Count</label>
+                        <input type="number" name="register_count" value={form.register_count} onChange={handleChange} style={ipt} />
+                      </div>
+                    )}
                   </div>
                 </>
               )}
