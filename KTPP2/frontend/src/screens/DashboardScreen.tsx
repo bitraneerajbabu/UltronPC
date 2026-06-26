@@ -265,6 +265,7 @@ export const DashboardScreen = () => {
   const [avg15Mins, setAvg15Mins] = useState({});
   const [networkInfo, setNetworkInfo] = useState<{ lan_ip: string; internet_connected: boolean; hostname: string } | null>(null);
   const [dismissedBroadcast, setDismissedBroadcast] = useState<number | null>(null);
+  const [cpcbStatus, setCpcbStatus] = useState<{ enabled_stations: number; total_mappings: number; total_export_records: number; last_log: any } | null>(null);
 
   // Poll latest telemetry every 5s, KPIs are pushed via WebSocket + cached on backend
   useEffect(() => {
@@ -298,11 +299,24 @@ export const DashboardScreen = () => {
     }
   }, [authFetch, API_BASE]);
 
+  const fetchCpcbStatus = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/cpcb/status`);
+      if (res.ok) setCpcbStatus(await res.json());
+    } catch {}
+  }, [authFetch, API_BASE]);
+
   useEffect(() => {
     fetchNetworkInfo();
     const interval = setInterval(fetchNetworkInfo, 30000);
     return () => clearInterval(interval);
   }, [fetchNetworkInfo]);
+
+  useEffect(() => {
+    fetchCpcbStatus();
+    const interval = setInterval(fetchCpcbStatus, 15000);
+    return () => clearInterval(interval);
+  }, [fetchCpcbStatus]);
 
   // Keep clock running
   useEffect(() => {
@@ -746,6 +760,66 @@ export const DashboardScreen = () => {
           </div>
         </div>
 
+        {/* CPCB Status Card (empty state) */}
+        <div className="card" style={{ marginBottom: '16px' }}>
+          <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.primary} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+            CPCB / TSPCB Upload Status
+          </div>
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: '200px', padding: '12px 16px', background: T.primaryBg, borderRadius: '8px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: T.textMuted, textTransform: 'uppercase' }}>Last Upload</div>
+              <div style={{ fontSize: '15px', fontWeight: '800', color: T.text, marginTop: '4px' }}>
+                {cpcbStatus?.last_log
+                  ? (() => {
+                      try { return new Date(cpcbStatus.last_log.created_at).toLocaleString(); }
+                      catch { return cpcbStatus.last_log.created_at; }
+                    })()
+                  : '—'}
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: '200px', padding: '12px 16px', background: T.primaryBg, borderRadius: '8px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: T.textMuted, textTransform: 'uppercase' }}>Last Status</div>
+              <div style={{ fontSize: '15px', fontWeight: '800', color: T.text, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {cpcbStatus?.last_log ? (
+                  <>
+                    <span style={{
+                      width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block',
+                      backgroundColor: cpcbStatus.last_log.status === 'success' ? '#10b981' : cpcbStatus.last_log.status === 'partial_failure' ? '#f59e0b' : '#ef4444',
+                      boxShadow: cpcbStatus.last_log.status === 'success' ? '0 0 6px #10b981' : cpcbStatus.last_log.status === 'partial_failure' ? '0 0 6px #f59e0b' : '0 0 6px #ef4444',
+                    }}></span>
+                    {cpcbStatus.last_log.status === 'success' ? 'Success' : cpcbStatus.last_log.status === 'partial_failure' ? 'Partial Failure' : 'Failed'}
+                  </>
+                ) : '—'}
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: '150px', padding: '12px 16px', background: T.primaryBg, borderRadius: '8px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: T.textMuted, textTransform: 'uppercase' }}>Records</div>
+              <div style={{ fontSize: '15px', fontWeight: '800', color: T.text, marginTop: '4px' }}>
+                {cpcbStatus?.total_export_records ?? '—'}
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: '150px', padding: '12px 16px', background: T.primaryBg, borderRadius: '8px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: T.textMuted, textTransform: 'uppercase' }}>Mappings</div>
+              <div style={{ fontSize: '15px', fontWeight: '800', color: T.text, marginTop: '4px' }}>
+                {cpcbStatus?.total_mappings ?? '—'}
+              </div>
+            </div>
+          </div>
+          {cpcbStatus?.last_log?.message && (
+            <div style={{
+              marginTop: '8px', padding: '8px 12px', borderRadius: '6px',
+              background: cpcbStatus.last_log.status === 'success' ? '#f0fdf4' : '#fef2f2',
+              border: `1px solid ${cpcbStatus.last_log.status === 'success' ? '#bbf7d0' : '#fecaca'}`,
+              fontSize: '12px', color: cpcbStatus.last_log.status === 'success' ? '#166534' : '#991b1b'
+            }}>
+              {cpcbStatus.last_log.message}
+            </div>
+          )}
+        </div>
+
         {/* No Mapped Parameters Message */}
         <div className="card" style={{ padding: '40px 20px', textAlign: 'center', ...GLASS_CARD, boxShadow: T.shadowSm }}>
           <div style={{ fontSize: '18px', fontWeight: '600', color: T.textLabel, marginBottom: '10px' }}>
@@ -893,6 +967,66 @@ export const DashboardScreen = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* CPCB Status Card */}
+      <div className="card" style={{ marginBottom: '16px' }}>
+        <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.primary} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+          </svg>
+          CPCB / TSPCB Upload Status
+        </div>
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: '200px', padding: '12px 16px', background: T.primaryBg, borderRadius: '8px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: T.textMuted, textTransform: 'uppercase' }}>Last Upload</div>
+            <div style={{ fontSize: '15px', fontWeight: '800', color: T.text, marginTop: '4px' }}>
+              {cpcbStatus?.last_log
+                ? (() => {
+                    try { return new Date(cpcbStatus.last_log.created_at).toLocaleString(); }
+                    catch { return cpcbStatus.last_log.created_at; }
+                  })()
+                : '—'}
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: '200px', padding: '12px 16px', background: T.primaryBg, borderRadius: '8px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: T.textMuted, textTransform: 'uppercase' }}>Last Status</div>
+            <div style={{ fontSize: '15px', fontWeight: '800', color: T.text, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {cpcbStatus?.last_log ? (
+                <>
+                  <span style={{
+                    width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block',
+                    backgroundColor: cpcbStatus.last_log.status === 'success' ? '#10b981' : cpcbStatus.last_log.status === 'partial_failure' ? '#f59e0b' : '#ef4444',
+                    boxShadow: cpcbStatus.last_log.status === 'success' ? '0 0 6px #10b981' : cpcbStatus.last_log.status === 'partial_failure' ? '0 0 6px #f59e0b' : '0 0 6px #ef4444',
+                  }}></span>
+                  {cpcbStatus.last_log.status === 'success' ? 'Success' : cpcbStatus.last_log.status === 'partial_failure' ? 'Partial Failure' : 'Failed'}
+                </>
+              ) : '—'}
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: '150px', padding: '12px 16px', background: T.primaryBg, borderRadius: '8px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: T.textMuted, textTransform: 'uppercase' }}>Records</div>
+            <div style={{ fontSize: '15px', fontWeight: '800', color: T.text, marginTop: '4px' }}>
+              {cpcbStatus?.total_export_records ?? '—'}
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: '150px', padding: '12px 16px', background: T.primaryBg, borderRadius: '8px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: T.textMuted, textTransform: 'uppercase' }}>Mappings</div>
+            <div style={{ fontSize: '15px', fontWeight: '800', color: T.text, marginTop: '4px' }}>
+              {cpcbStatus?.total_mappings ?? '—'}
+            </div>
+          </div>
+        </div>
+        {cpcbStatus?.last_log?.message && (
+          <div style={{
+            marginTop: '8px', padding: '8px 12px', borderRadius: '6px',
+            background: cpcbStatus.last_log.status === 'success' ? '#f0fdf4' : '#fef2f2',
+            border: `1px solid ${cpcbStatus.last_log.status === 'success' ? '#bbf7d0' : '#fecaca'}`,
+            fontSize: '12px', color: cpcbStatus.last_log.status === 'success' ? '#166534' : '#991b1b'
+          }}>
+            {cpcbStatus.last_log.message}
+          </div>
+        )}
       </div>
 
       {/* Live Trends Modal */}

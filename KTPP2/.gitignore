@@ -10,3 +10,4 @@ secret.key
 dist/
 build/
 *.spec
+client_lock.json

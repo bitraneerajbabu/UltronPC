@@ -2,10 +2,49 @@ import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from './context/AppContext';
 
 import { DashboardScreen } from './screens/DashboardScreen';
+import { DevicesScreen } from './screens/DevicesScreen';
+import { ApiMappingsScreen } from './screens/ApiMappingsScreen';
 import { TrendsScreen } from './screens/TrendsScreen';
 import { ReportsScreen } from './screens/ReportsScreen';
 import { WindroseScreen } from './screens/WindroseScreen';
 import { AnalyticalReportsScreen } from './screens/AnalyticalReportsScreen';
+import { CPCBSettingsScreen } from './screens/CPCBSettingsScreen';
+import { CPCBMappingScreen } from './screens/CPCBMappingScreen';
+import { CPCBExportScreen } from './screens/CPCBExportScreen';
+import { CPCBLogsScreen } from './screens/CPCBLogsScreen';
+import { CPCB } from './screens/CPCB';
+
+const DevicesIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+    <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+    <line x1="6" y1="6" x2="6.01" y2="6" />
+    <line x1="6" y1="18" x2="6.01" y2="18" />
+    <line x1="20" y1="6" x2="20.01" y2="6" />
+    <line x1="20" y1="18" x2="20.01" y2="18" />
+  </svg>
+);
+
+const MappingsIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <path d="M8 6h13" />
+    <path d="M8 12h13" />
+    <path d="M8 18h13" />
+    <path d="M3 6h.01" />
+    <path d="M3 12h.01" />
+    <path d="M3 18h.01" />
+  </svg>
+);
+
+const CPCBIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/>
+    <line x1="16" y1="17" x2="8" y2="17"/>
+    <circle cx="12" cy="15" r="1" fill="currentColor"/>
+  </svg>
+);
 
 const DashboardIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
@@ -56,6 +95,9 @@ const AnalyticalReportsIcon = () => (
 
 const ALL_NAV = [
   { key: 'dashboardScreen', label: 'Dashboard', Icon: DashboardIcon, roles: ['admin', 'client'] },
+  { key: 'devicesScreen', label: 'Device & Config', Icon: DevicesIcon, roles: ['admin', 'client'] },
+  { key: 'apiMappingsScreen', label: 'API Mappings', Icon: MappingsIcon, roles: ['admin', 'client'] },
+  { key: 'cpcbScreen', label: 'CPCB', Icon: CPCBIcon, roles: ['admin', 'client'] },
   { key: 'trendsScreen', label: 'Trends', Icon: TrendsIcon, roles: ['admin', 'client'] },
   { key: 'reportsScreen', label: 'Reports', Icon: ReportsIcon, roles: ['admin', 'client'] },
   { key: 'windroseScreen', label: 'Windrose', Icon: WindroseIcon, roles: ['admin', 'client'] },
@@ -180,7 +222,7 @@ function App() {
 
   useEffect(() => {
     if (currentUserRole === 'client') {
-      const allowedScreens = ['dashboardScreen', 'trendsScreen', 'reportsScreen', 'windroseScreen', 'analyticalReportsScreen'];
+      const allowedScreens = ['dashboardScreen', 'devicesScreen', 'apiMappingsScreen', 'cpcbScreen', 'trendsScreen', 'reportsScreen', 'windroseScreen', 'analyticalReportsScreen'];
       if (!allowedScreens.includes(activeScreen)) {
         setActiveScreen('dashboardScreen');
       }
@@ -291,6 +333,9 @@ function App() {
   const renderScreen = () => {
     switch (activeScreen) {
       case 'dashboardScreen': return <DashboardScreen />;
+      case 'devicesScreen': return <DevicesScreen />;
+      case 'apiMappingsScreen': return <ApiMappingsScreen />;
+      case 'cpcbScreen': return <CPCB />;
       case 'trendsScreen': return <TrendsScreen />;
       case 'reportsScreen': return <ReportsScreen />;
       case 'windroseScreen': return <WindroseScreen />;
