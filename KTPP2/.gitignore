@@ -1,0 +1,12 @@
+node_modules/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.enc
+.env.bak
+secret.key
+dist/
+build/
+*.spec
