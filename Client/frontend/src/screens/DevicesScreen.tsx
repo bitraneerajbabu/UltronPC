@@ -34,6 +34,7 @@ const DEFAULT_PARAM = {
   serial_port: 'COM1', baud_rate: 9600, data_bits: 8, parity: 'N', stop_bits: 1,
   csv_mode: 'fixed', csv_path: '', csv_folder: '', csv_filename_pattern: '{YYYYMMDD}.csv',
   csv_delimiter: ',', csv_timestamp_col: 0,
+  request_hex: '', response_delimiter: 'newline',
 };
 
 const Plus = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
@@ -158,6 +159,8 @@ export const DevicesScreen = () => {
         parity: deviceProtocol === 'modbus_rtu' ? (form.parity || 'N') : null,
         stop_bits: deviceProtocol === 'modbus_rtu' ? (form.stop_bits || 1) : null,
         slave_id: form.slave_id || 1,
+        request_hex: (deviceProtocol === 'tcp_custom' || deviceProtocol === 'iseo_tcp') ? (form.request_hex || null) : null,
+        response_delimiter: (deviceProtocol === 'tcp_custom' || deviceProtocol === 'iseo_tcp') ? (form.response_delimiter || 'newline') : 'newline',
         csv_path: deviceProtocol === 'csv' && form.csv_mode === 'fixed' ? form.csv_path : null,
         csv_folder: deviceProtocol === 'csv' && form.csv_mode === 'daily' ? form.csv_folder : null,
         csv_filename_pattern: deviceProtocol === 'csv' && form.csv_mode === 'daily'
@@ -228,7 +231,7 @@ export const DevicesScreen = () => {
                 {parameters.map((p, i) => {
                   const dev = devices.find(d => d.id === p.device_id);
                   const proto = dev?.protocol || '�';
-                  const protoLabel = proto === 'modbus_tcp' ? 'Modbus TCP' : proto === 'modbus_rtu' ? 'Modbus RTU' : proto === 'csv' ? 'CSV' : proto;
+                  const protoLabel = proto === 'modbus_tcp' ? 'Modbus TCP' : proto === 'modbus_rtu' ? 'Modbus RTU' : proto === 'csv' ? 'CSV / Excel' : proto === 'tcp_custom' ? 'TCP Custom' : proto === 'iseo_tcp' ? 'ISEO TCP' : proto;
                   const addr = proto === 'csv'
                     ? (dev?.csv_folder ? dev.csv_folder + '\\' + (dev.csv_filename_pattern || '') : (dev?.csv_path || '�'))
                     : (p.host || dev?.host || '�');
@@ -301,9 +304,9 @@ export const DevicesScreen = () => {
               <div>
                 <label style={s()}>Protocol / Data Source</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {['modbus_tcp', 'modbus_rtu', 'csv'].map(proto => (
+                  {['modbus_tcp', 'modbus_rtu', 'tcp_custom', 'iseo_tcp', 'csv'].map(proto => (
                     <button key={proto} onClick={() => setForm(p => ({ ...p, input_type: proto }))} style={btnStyle(form.input_type === proto)}>
-                      {proto === 'modbus_tcp' ? 'TCP' : proto === 'modbus_rtu' ? 'RS485' : 'CSV / Excel'}
+                      {proto === 'modbus_tcp' ? 'TCP' : proto === 'modbus_rtu' ? 'RS485' : proto === 'tcp_custom' ? 'TCP Custom' : proto === 'iseo_tcp' ? 'ISEO TCP' : 'CSV / Excel'}
                     </button>
                   ))}
                 </div>
@@ -472,6 +475,23 @@ export const DevicesScreen = () => {
                       <input type="number" name="slave_id" value={form.slave_id} onChange={handleChange} style={ipt} />
                     </div>
                   </div>
+                  {(form.input_type === 'tcp_custom' || form.input_type === 'iseo_tcp') && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                      <div>
+                        <label style={s()}>Request Hex Command</label>
+                        <input type="text" name="request_hex" value={form.request_hex || ''} onChange={handleChange} style={ipt} placeholder="02 4D 31 30 34 30 34 37 43 03" />
+                        <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Hex bytes sent to device (space-separated)</div>
+                      </div>
+                      <div>
+                        <label style={s()}>Response Delimiter</label>
+                        <select name="response_delimiter" value={form.response_delimiter || 'newline'} onChange={handleChange} style={ipt}>
+                          <option value="newline">Newline (\n)</option>
+                          <option value="etx">ETX (0x03)</option>
+                        </select>
+                        <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Character that ends the device response</div>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
               {form.input_type !== 'csv' && (
