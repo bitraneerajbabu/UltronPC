@@ -22,6 +22,7 @@ from app.models.telemetry import LiveData, HistoricalData, AverageType, DataQual
 from app.services.modbus_tcp import ModbusTCPReader
 from app.services.modbus_rtu import ModbusRTUReader
 from app.services.tcp_custom import TCPCustomReader
+from app.services.iseo_tcp import IseoTCPReader
 from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher, SmartWatcher, DailySmartWatcher
 from app.services.data_quality import dq_engine
 from app.services.alarm_engine import alarm_engine
@@ -36,10 +37,11 @@ _VALID_QUALITIES = {q.value for q in DataQuality}
 
 # ─── Reader Pool ──────────────────────────────────────────────────────────────
 # Keep one reader instance per device to maintain persistent connections
-_tcp_readers:  Dict[int, ModbusTCPReader] = {}
-_rtu_readers:  Dict[str, ModbusRTUReader] = {}   # key = serial_port
-_tcp_custom:   Dict[int, TCPCustomReader] = {}
-_csv_watchers: Dict[int, CSVWatcher] = {}
+_tcp_readers:    Dict[int, ModbusTCPReader] = {}
+_rtu_readers:    Dict[str, ModbusRTUReader] = {}   # key = serial_port
+_tcp_custom:     Dict[int, TCPCustomReader] = {}
+_iseo_tcp:       Dict[int, IseoTCPReader] = {}
+_csv_watchers:   Dict[int, CSVWatcher] = {}
 
 
 def _get_modbus_tcp(device: Device) -> ModbusTCPReader:
@@ -76,6 +78,18 @@ def _get_tcp_custom(device: Device) -> TCPCustomReader:
     return _tcp_custom[device.id]
 
 
+def _get_iseo_tcp(device: Device) -> IseoTCPReader:
+    if device.id not in _iseo_tcp:
+        _iseo_tcp[device.id] = IseoTCPReader(
+            host=device.host or "",
+            port=device.port or 8001,
+            timeout=device.timeout or 5,
+            request_hex=device.request_hex,
+            response_delimiter=device.response_delimiter or "etx",
+        )
+    return _iseo_tcp[device.id]
+
+
 def _get_csv_watcher(device: Device) -> Optional[CSVWatcher]:
     if not device.csv_folder and not device.csv_path:
         return None
@@ -104,6 +118,7 @@ def _cleanup_reader(device_id: int, protocol: str, device: Device = None):
     """Remove stale reader instances from pool so fresh connections are made."""
     _tcp_readers.pop(device_id, None)
     _tcp_custom.pop(device_id, None)
+    _iseo_tcp.pop(device_id, None)
     # RS485 RTU: shared by port key — also evict if the device's port is known
     if device and device.serial_port:
         old_reader = _rtu_readers.pop(device.serial_port, None)
@@ -142,6 +157,8 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             "parity":           p.parity,
             "stop_bits":        p.stop_bits,
             "slave_id":         p.slave_id,
+            "parse_method":     p.parse_method,
+            "parse_config":     p.parse_config,
         }
         for p in parameters
     ]
@@ -163,6 +180,10 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
 
         elif protocol == "tcp_custom":
             reader = _get_tcp_custom(device)
+            readings = await reader.poll_parameters(param_dicts)
+
+        elif protocol == "iseo_tcp":
+            reader = _get_iseo_tcp(device)
             readings = await reader.poll_parameters(param_dicts)
 
         elif protocol == "csv":
@@ -496,6 +517,7 @@ async def reload_device(device_id: int):
     # Clear cached readers so fresh connections are made with new config
     _tcp_readers.pop(device_id, None)
     _tcp_custom.pop(device_id, None)
+    _iseo_tcp.pop(device_id, None)
     _csv_watchers.pop(device_id, None)
 
     async with AsyncSessionLocal() as db:
