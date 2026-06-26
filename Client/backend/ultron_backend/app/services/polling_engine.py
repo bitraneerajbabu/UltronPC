@@ -15,7 +15,7 @@ import httpx
 
 from app.database import AsyncSessionLocal
 from app.models.station import Station, StationStatus
-from app.models.device import Device
+from app.models.device import Device, DeviceProtocol
 from app.models.parameter import Parameter
 from app.models.telemetry import LiveData, HistoricalData, AverageType, DataQuality, SystemLog
 
@@ -177,6 +177,7 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
         elif protocol == "modbus_rtu":
             reader = _get_modbus_rtu(device)
             readings = await reader.read_all_parameters(device.slave_id or 1, param_dicts)
+            await reader.close()  # close RS485 after each poll — devices don't stream continuously
 
         elif protocol == "tcp_custom":
             reader = _get_tcp_custom(device)
@@ -483,7 +484,8 @@ async def start_polling():
         return
 
     for device in devices:
-        interval = device.poll_interval or settings.POLLING_DEFAULT_INTERVAL
+        rtu_default = device.poll_interval or 5 if device.protocol == DeviceProtocol.modbus_rtu else None
+        interval = rtu_default or device.poll_interval or settings.POLLING_DEFAULT_INTERVAL
         task = asyncio.create_task(
             _device_poll_loop(device.id, interval),
             name=f"poll-device-{device.id}",
@@ -525,7 +527,8 @@ async def reload_device(device_id: int):
         device = result.scalar_one_or_none()
 
     if device and device.is_active and _running:
-        interval = device.poll_interval or settings.POLLING_DEFAULT_INTERVAL
+        rtu_default = device.poll_interval or 5 if device.protocol == DeviceProtocol.modbus_rtu else None
+        interval = rtu_default or device.poll_interval or settings.POLLING_DEFAULT_INTERVAL
         task = asyncio.create_task(
             _device_poll_loop(device_id, interval),
             name=f"poll-device-{device_id}",
