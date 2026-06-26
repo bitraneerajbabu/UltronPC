@@ -14,13 +14,16 @@ from pathlib import Path
 import time
 import ssl
 
-# Use default CA certificates for secure HTTPS connections.
-# Will fail on SSL errors — no unverified fallback.
+# Use certifi for up-to-date CA certificates (bundled Mozilla CA bundle).
+# Falls back to system defaults if certifi is unavailable.
 def _get_ssl_context():
     try:
-        return ssl.create_default_context()
-    except Exception as e:
-        raise RuntimeError(f"Failed to create SSL context: {e}")
+        import certifi
+        cafile = certifi.where()
+        ctx = ssl.create_default_context(cafile=cafile)
+    except (ImportError, Exception):
+        ctx = ssl.create_default_context()
+    return ctx
 
 def _urlopen(url):
     """Open a URL with SSL verification."""
@@ -161,20 +164,82 @@ def get_desktop_path() -> Path:
     return Path(os.path.expanduser("~\\Desktop"))
 
 
-def create_desktop_shortcut(target_exe: str, shortcut_path: str):
-    """Creates a desktop shortcut natively using Windows Script Host via PowerShell."""
+def get_start_menu_path() -> Path:
+    """Get the Start Menu Programs folder for the current user."""
+    try:
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+        )
+        programs_val, _ = winreg.QueryValueEx(key, "Programs")
+        winreg.CloseKey(key)
+        programs_path = os.path.expandvars(programs_val)
+        if os.path.exists(programs_path):
+            return Path(programs_path)
+    except Exception:
+        pass
+    return Path(os.path.expanduser("~\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs"))
+
+
+def create_shortcut(target_exe: str, shortcut_path: str, description: str = ""):
+    """Creates a Windows shortcut using WScript.Shell via PowerShell."""
     working_dir = os.path.dirname(target_exe)
     ps_command = (
         f"$wsh = New-Object -ComObject WScript.Shell; "
         f"$shortcut = $wsh.CreateShortcut('{shortcut_path}'); "
         f"$shortcut.TargetPath = '{target_exe}'; "
         f"$shortcut.WorkingDirectory = '{working_dir}'; "
+        f"$shortcut.Description = '{description}'; "
         f"$shortcut.Save()"
     )
     try:
         subprocess.run(["powershell", "-Command", ps_command], capture_output=True, check=True)
     except Exception as e:
-        print(f"[WARNING] Could not create desktop shortcut: {e}")
+        print(f"[WARNING] Could not create shortcut '{shortcut_path}': {e}")
+
+
+def register_add_remove_programs(target_exe: str, version: str):
+    """Register in Windows Settings → Apps (Add/Remove Programs) under HKCU."""
+    try:
+        import winreg
+        uninstall_key = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\UltrON"
+        est_size = os.path.getsize(target_exe) // (1024 * 1024)  # MB
+        install_dir = os.path.dirname(target_exe)
+        today = time.strftime("%Y%m%d")
+
+        # Uninstall command: remove registry key, shortcuts, install dir, and silent clean-up
+        uninstall_ps = (
+            f"powershell.exe -Command "
+            f"\"$appDir = '{install_dir}'; "
+            f"$lnkDir = [Environment]::GetFolderPath('Desktop'); "
+            f"$lnk = Join-Path $lnkDir 'UltrON.lnk'; "
+            f"if (Test-Path $lnk) {{ Remove-Item $lnk }}; "
+            f"$smDir = Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs\\UltrON.lnk'; "
+            f"if (Test-Path $smDir) {{ Remove-Item $smDir }}; "
+            f"Remove-Item 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\UltrON' -Recurse -Force; "
+            f"Start-Sleep -Milliseconds 500; "
+            f"Remove-Item $appDir -Recurse -Force; "
+            f"$null = [System.Windows.Forms.MessageBox]::Show('UltrON has been uninstalled.', 'UltrON Uninstaller', 'OK', 'Information')\""
+        )
+
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, uninstall_key)
+        winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "UltrON")
+        winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, version.lstrip("v"))
+        winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Sunshine Technologies")
+        winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, target_exe)
+        winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, install_dir)
+        winreg.SetValueEx(key, "InstallDate", 0, winreg.REG_SZ, today)
+        winreg.SetValueEx(key, "EstimatedSize", 0, winreg.REG_DWORD, max(est_size, 1))
+        winreg.SetValueEx(key, "URLInfoAbout", 0, winreg.REG_SZ, "https://sunshinetechno.com")
+        winreg.SetValueEx(key, "HelpLink", 0, winreg.REG_SZ, "mailto:tst@sunshinetechno.com")
+        winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, version.lstrip("v"))
+        winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ, uninstall_ps)
+        winreg.SetValueEx(key, "QuietUninstallString", 0, winreg.REG_SZ, uninstall_ps)
+        winreg.CloseKey(key)
+        print("[OK] Registered in Settings → Apps (Add/Remove Programs)")
+    except Exception as e:
+        print(f"[WARNING] Could not register in Add/Remove Programs: {e}")
 
 
 def main():
@@ -257,9 +322,19 @@ def main():
     desktop = get_desktop_path()
     shortcut_path = desktop / f"{APP_NAME}.lnk"
     print(f"Creating Desktop shortcut at: {shortcut_path}")
-    create_desktop_shortcut(str(target_exe), str(shortcut_path))
+    create_shortcut(str(target_exe), str(shortcut_path), "UltrON Industrial Monitoring Platform")
 
-    # 5. Launch the application
+    # 5. Create Start Menu Shortcut (shows in Start → All Apps)
+    start_menu = get_start_menu_path()
+    start_menu_shortcut = start_menu / f"{APP_NAME}.lnk"
+    print(f"Creating Start Menu shortcut at: {start_menu_shortcut}")
+    create_shortcut(str(target_exe), str(start_menu_shortcut), "UltrON Industrial Monitoring Platform")
+
+    # 6. Register in Add/Remove Programs
+    print("Registering application with Windows...")
+    register_add_remove_programs(str(target_exe), version)
+
+    # 7. Launch the application
     print(f"\n[OK] Installation complete! Launching {APP_NAME}...")
     try:
         subprocess.Popen([str(target_exe)], cwd=str(install_dir))

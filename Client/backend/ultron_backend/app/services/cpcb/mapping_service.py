@@ -11,7 +11,7 @@ DEFAULT_MAPPINGS = [
     ("SO2", "SO2", "ppb", 0.00262),
     ("NO", "NO", "ppb", 0.00123),
     ("NO2", "NO2", "ppb", 0.00188),
-    ("NOX", "NOx", "ppb", 0.001),
+    ("NOX", "NOx", "ppb", 0.00188),
     ("OZONE", "Ozone", "ppb", 0.00196),
     ("PM10", "PM10", "ug/m3", 1.0),
     ("PM25", "PM2.5", "ug/m3", 1.0),

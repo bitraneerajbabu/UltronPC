@@ -360,11 +360,14 @@ async def _device_poll_loop(device_id: int, interval: int):
             await _poll_device(device, active_params)
             consecutive_errors = 0  # reset on success
 
+        except asyncio.CancelledError:
+            log.info(f"Device poll loop cancelled: device_id={device_id}")
+            break
         except Exception as e:
             err_str = str(e)
             consecutive_errors += 1
             # Transient errors (stale DB pool during startup/restart) back off briefly
-            if "no active connection" in err_str or "CancelledError" in err_str:
+            if "no active connection" in err_str:
                 backoff = min(5 * consecutive_errors, 30)
                 log.warning(f"Device loop transient error device={device_id} (retry #{consecutive_errors}, backoff {backoff}s): {err_str.splitlines()[0]}")
                 await asyncio.sleep(backoff)

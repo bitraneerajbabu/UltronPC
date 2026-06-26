@@ -87,7 +87,7 @@ async def export_station_file(db: AsyncSession, config: CPCBStationConfig) -> di
             ))
 
         if lines:
-            mode = "a" if os.path.exists(file_path) else "w"
+            mode = "w"
             with open(file_path, mode, encoding="utf-8") as f:
                 f.writelines(lines)
             total_written += len(lines)

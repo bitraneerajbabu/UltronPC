@@ -41,30 +41,15 @@ async def create_parameter(
     db.add(param)
     await db.flush()
 
-    # Synchronize station name and other parameter descriptions if description is set
+    # Sync description to all parameters in the same device if description is set
     if param.description:
-        from app.models.device import Device
-        from app.models.station import Station
-        from sqlalchemy import update
-        device_res = await db.execute(select(Device).where(Device.id == param.device_id))
-        device = device_res.scalar_one_or_none()
-        if device and device.station_id:
-            station_res = await db.execute(select(Station).where(Station.id == device.station_id))
-            station = station_res.scalar_one_or_none()
-            if station:
-                station.name = param.description
-                await db.flush()
-            
-            # Sync description of all parameters under this station
-            devices_res = await db.execute(select(Device).where(Device.station_id == device.station_id))
-            station_devices = devices_res.scalars().all()
-            station_device_ids = [d.id for d in station_devices]
-            await db.execute(
-                update(Parameter)
-                .where(Parameter.device_id.in_(station_device_ids))
-                .values(description=param.description)
-            )
-            await db.flush()
+        from sqlalchemy import update as sa_update
+        await db.execute(
+            sa_update(Parameter)
+            .where(Parameter.device_id == param.device_id)
+            .values(description=param.description)
+        )
+        await db.flush()
 
     await db.commit()
     await db.refresh(param)
@@ -118,30 +103,15 @@ async def update_parameter(
         setattr(param, field, val)
     await db.flush()
 
-    # Synchronize station name and other parameter descriptions if description is set
+    # Sync description to all parameters in the same device if description is set
     if param.description:
-        from app.models.device import Device
-        from app.models.station import Station
-        from sqlalchemy import update
-        device_res = await db.execute(select(Device).where(Device.id == param.device_id))
-        device = device_res.scalar_one_or_none()
-        if device and device.station_id:
-            station_res = await db.execute(select(Station).where(Station.id == device.station_id))
-            station = station_res.scalar_one_or_none()
-            if station:
-                station.name = param.description
-                await db.flush()
-            
-            # Sync description of all parameters under this station
-            devices_res = await db.execute(select(Device).where(Device.station_id == device.station_id))
-            station_devices = devices_res.scalars().all()
-            station_device_ids = [d.id for d in station_devices]
-            await db.execute(
-                update(Parameter)
-                .where(Parameter.device_id.in_(station_device_ids))
-                .values(description=param.description)
-            )
-            await db.flush()
+        from sqlalchemy import update as sa_update
+        await db.execute(
+            sa_update(Parameter)
+            .where(Parameter.device_id == param.device_id)
+            .values(description=param.description)
+        )
+        await db.flush()
 
     await db.commit()
     await db.refresh(param)
