@@ -55,10 +55,6 @@ jobs:
         run: python -m PyInstaller UltrON.spec --noconfirm
         working-directory: client/backend/ultron_backend
 
-      - name: Zip Release Folder
-        run: Compress-Archive -Path dist/UltrON -DestinationPath dist/UltrON.zip
-        working-directory: client/backend/ultron_backend
-
       - name: Build UltrON_Installer.exe
         run: python -m PyInstaller ../../installer.py --onefile --console --icon=ultron.ico --name=UltrON_Installer --noconfirm
         working-directory: client/backend/ultron_backend
@@ -67,7 +63,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            client/backend/ultron_backend/dist/UltrON.zip
+            client/backend/ultron_backend/dist/UltrON.exe
             client/backend/ultron_backend/dist/UltrON_Installer.exe
           fail_on_unmatched_files: true
           generate_release_notes: true

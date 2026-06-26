@@ -229,12 +229,16 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    exclude_binaries=True,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    exclude_binaries=False,
     name="UltrON",
     debug=False,              # no debug console
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
+    upx_exclude=[],
     console=False,            # NO terminal window — runs silently in background
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -243,15 +247,4 @@ exe = EXE(
     entitlements_file=None,
     icon="ultron.ico",
     version="version_info.txt",
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    name="UltrON",
 )
