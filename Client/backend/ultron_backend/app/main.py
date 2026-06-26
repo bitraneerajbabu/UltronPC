@@ -336,11 +336,28 @@ async def health():
 
 @app.get("/show-window", include_in_schema=False)
 async def show_window():
+    import sys
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            hwnd = ctypes.windll.user32.FindWindowW(None, "UltrON Industrial Monitoring Platform")
+            if hwnd:
+                # SW_RESTORE = 9
+                ctypes.windll.user32.ShowWindow(hwnd, 9)
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+                return {"status": "restored_win32"}
+        except Exception as e:
+            log.error(f"Failed to restore window via ctypes in show_window: {e}")
+
     window = getattr(app.state, "window", None)
     if window:
-        window.show()
-        window.restore()
-        return {"status": "restored"}
+        try:
+            window.show()
+            window.restore()
+            return {"status": "restored"}
+        except Exception as e:
+            log.error(f"Failed to show window: {e}")
+            return {"status": "error", "message": str(e)}
     return {"status": "no_window"}
 
 
