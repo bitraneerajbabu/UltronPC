@@ -9,6 +9,7 @@ venv/
 node_modules/
 dist/
 build/
+_MEI*/
 *.spec
 
 # Local configurations
