@@ -410,6 +410,7 @@ def _wait_for_server(host: str, port: int, timeout: float = 30.0) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 def _run_server() -> None:
     try:
+        log.info("Importing app.main …")
         import uvicorn
         from app.main import app as asgi_app
 
@@ -472,7 +473,7 @@ def main() -> None:
 
     # 3. Wait for server
     log.info("Waiting for API server at %s …", URL)
-    if not _wait_for_server(HOST, PORT, timeout=30):
+    if not _wait_for_server(HOST, PORT, timeout=60):
         log.error("Server did not start within 30 s")
         try:
             import ctypes
