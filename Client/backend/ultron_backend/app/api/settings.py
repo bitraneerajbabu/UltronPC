@@ -332,11 +332,17 @@ async def check_firmware():
         published_at = data.get("published_at", "")
         html_url = data.get("html_url", "")
 
-        # Find UltrON.exe download URL from assets
+        import sys
+        import os
+        current_exe_name = "UltrON.exe"
+        if getattr(sys, "frozen", False):
+            current_exe_name = os.path.basename(sys.executable)
+
+        # Find the correct executable download URL from assets
         download_url = ""
         asset_size = 0
         for asset in data.get("assets", []):
-            if asset.get("name") == "UltrON.exe":
+            if asset.get("name") == current_exe_name:
                 download_url = asset.get("browser_download_url", "")
                 asset_size = asset.get("size", 0)
                 break
@@ -424,17 +430,21 @@ def _do_firmware_download(custom_url=None):
             with urlopen_with_ssl_fallback(req, timeout=15) as resp:
                 data = _json.loads(resp.read().decode("utf-8"))
 
+            current_exe_name = "UltrON.exe"
+            if getattr(sys, "frozen", False):
+                current_exe_name = os.path.basename(sys.executable)
+
             download_url = ""
             for asset in data.get("assets", []):
-                if asset.get("name") == "UltrON.exe":
+                if asset.get("name") == current_exe_name:
                     download_url = asset["browser_download_url"]
                     break
 
             if not download_url:
-                _fw_download_state = {"state": "error", "percent": 0, "message": "UltrON.exe not found in latest release assets.", "restart_required": False}
+                _fw_download_state = {"state": "error", "percent": 0, "message": f"{current_exe_name} not found in latest release assets.", "restart_required": False}
                 return
             tag_name = data.get("tag_name", "unknown")
-            _fw_download_state["message"] = "Downloading UltrON.exe…"
+            _fw_download_state["message"] = f"Downloading {current_exe_name}…"
 
         _fw_download_state["percent"] = 10
 
@@ -443,7 +453,12 @@ def _do_firmware_download(custom_url=None):
         else:
             install_dir = os.getcwd()
 
-        new_exe_path = os.path.join(install_dir, "UltrON_new.exe")
+        new_exe_name = "UltrON_new.exe"
+        if getattr(sys, "frozen", False):
+            base, ext = os.path.splitext(current_exe_name)
+            new_exe_name = f"{base}_new{ext}"
+
+        new_exe_path = os.path.join(install_dir, new_exe_name)
         flag_path = os.path.join(install_dir, "update_pending.flag")
 
         download_req = urllib.request.Request(download_url, headers={"User-Agent": "UltrON-Updater/1.0"})
