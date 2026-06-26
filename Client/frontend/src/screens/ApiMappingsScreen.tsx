@@ -38,6 +38,7 @@ export const ApiMappingsScreen = () => {
   const [editedMappings, setEditedMappings] = useState({});
   const [historicalDates, setHistoricalDates] = useState({});
   const [generatingHistorical, setGeneratingHistorical] = useState({});
+  const _tempCounter = React.useRef(0);
 
   const [testingPush, setTestingPush] = useState({});
   const [testingDelayPush, setTestingDelayPush] = useState({});
@@ -126,7 +127,9 @@ export const ApiMappingsScreen = () => {
   };
 
   const addServer = (protocol) => {
-    const base = { name: '', protocol, is_active: true, is_cpcb_active: true, led_channel_id: null, led_station_name: '' };
+    _tempCounter.current += 1;
+    const _tempId = `_tmp_${_tempCounter.current}`;
+    const base = { _tempId, name: '', protocol, is_active: true, is_cpcb_active: true, led_channel_id: null, led_station_name: '' };
     if (protocol === 'tspcb') setServers(prev => [...prev, { ...base, live_url: '', delay_url: '' }]);
     else if (protocol === 'cpcb') setServers(prev => [...prev, { ...base, cpcb_file_path: '' }]);
     else setServers(prev => [...prev, { ...base }]);
@@ -157,18 +160,30 @@ export const ApiMappingsScreen = () => {
       const targetServers = filter ? servers.filter(filter) : servers;
       if (targetServers.length === 0) { showToast('No servers to save.', 'warn'); setSaving(false); clearTimeout(tid); return; }
       const savedServers = [];
+      const tempIdToRealId = {}; // Map _tempId -> real DB id after POST
       for (const conf of targetServers) {
         if (!conf.name?.trim()) { showToast(`${label}: Server name required.`, 'warn'); setSaving(false); clearTimeout(tid); return; }
         const method = conf.id ? 'PUT' : 'POST';
         const url = conf.id ? `${API_BASE}/server-config/${conf.id}` : `${API_BASE}/server-config/`;
-        const res = await authFetch(url, { method, body: JSON.stringify(conf), signal: controller.signal });
+        const { _tempId, ...confForApi } = conf; // strip frontend-only field
+        const res = await authFetch(url, { method, body: JSON.stringify(confForApi), signal: controller.signal });
         if (!res.ok) throw new Error(formatError((await res.json().catch(() => ({}))).detail, `${label} save failed (${res.status})`));
-        savedServers.push(await res.json());
+        const savedSrv = await res.json();
+        if (_tempId) tempIdToRealId[_tempId] = savedSrv.id;
+        savedServers.push(savedSrv);
       }
       const payload = mappings.map(param => {
         const paramUpdates = {};
         savedServers.forEach(srv => {
-          paramUpdates[srv.id] = { server_id: srv.id, is_active: false, api_id: '', api_name: '', api_password: '', api_vname: '', api_unit: '', cpcb_station_name: '', cpcb_parameter: '', led_channel_name: '', led_unit: '', ...(editedMappings[param.parameter_id]?.[srv.id] || editedMappings[param.parameter_id]?.[String(srv.id)] || {}) };
+          // Look up edits by real id first, then by _tempId mapping, then by string id
+          const originalServer = targetServers.find(s => s.id === srv.id || (s._tempId && tempIdToRealId[s._tempId] === srv.id));
+          const tempKey = originalServer?._tempId;
+          const mapped =
+            editedMappings[param.parameter_id]?.[srv.id] ||
+            editedMappings[param.parameter_id]?.[String(srv.id)] ||
+            (tempKey && editedMappings[param.parameter_id]?.[tempKey]) ||
+            {};
+          paramUpdates[srv.id] = { server_id: srv.id, is_active: false, api_id: '', api_name: '', api_password: '', api_vname: '', api_unit: '', cpcb_station_name: '', cpcb_parameter: '', led_channel_name: '', led_unit: '', ...mapped };
         });
         return { parameter_id: param.parameter_id, mappings: paramUpdates };
       });
@@ -264,7 +279,8 @@ export const ApiMappingsScreen = () => {
   );
 
   const renderMappingTable = (serverFilter) => {
-    const filteredServers = servers.filter(s => s.id && s.is_active && serverFilter(s));
+    // Show all active servers that match the filter — even unsaved ones (with _tempId) so mappings can be pre-filled
+    const filteredServers = servers.filter(s => (s.id || s._tempId) && s.is_active && serverFilter(s));
     if (filteredServers.length === 0) return null;
 
     return (
@@ -276,11 +292,13 @@ export const ApiMappingsScreen = () => {
           const showCpcbCols = isCpcb || isBoth;
           const showTgpcbCols = srv.protocol === 'tspcb' || isBoth;
           return (
-            <div key={srv.id}>
+            <div key={srv.id ?? srv._tempId}>
               <div style={{ padding: '10px 14px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '12px', fontWeight: '700', color: '#0f766e', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {srv.name}
+                {srv.name || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Unsaved Server</span>}
                 <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: isLed ? '#fff7ed' : isCpcb ? '#fef3c7' : '#f0fdfa', color: isLed ? '#ea580c' : isCpcb ? '#ca8a04' : '#0f766e' }}>{isLed ? 'LED' : isCpcb ? 'CPCB' : isBoth ? 'Both' : 'TGPCB'}</span>
+                {!srv.id && <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: '#fef3c7', color: '#92400e' }}>⚠ Save server first to enable Test Push</span>}
               </div>
+
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
@@ -311,8 +329,9 @@ export const ApiMappingsScreen = () => {
                       <tr><td colSpan={12} style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>No parameters found. Add devices and parameters first.</td></tr>
                     ) : (
                       mappings.map(param => {
-                        const state = editedMappings[param.parameter_id]?.[srv.id] || { is_active: false, api_id: '', api_name: '', api_password: '', api_vname: '', api_unit: '', cpcb_station_name: '', cpcb_parameter: '', led_channel_name: '', led_unit: '' };
-                        const cellChg = (f, v) => handleMappingChange(param.parameter_id, srv.id, f, v);
+                        const srvKey = srv.id ?? srv._tempId;
+                        const state = editedMappings[param.parameter_id]?.[srvKey] || editedMappings[param.parameter_id]?.[String(srvKey)] || { is_active: false, api_id: '', api_name: '', api_password: '', api_vname: '', api_unit: '', cpcb_station_name: '', cpcb_parameter: '', led_channel_name: '', led_unit: '' };
+                        const cellChg = (f, v) => handleMappingChange(param.parameter_id, srvKey, f, v);
                         const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '5px 6px', border: '1px solid transparent', borderBottom: '1px solid #e2e8f0', borderRadius: '4px', background: 'transparent', fontSize: '12px', color: '#334155', outline: 'none', fontFamily: T.fontMono };
                         return (
                           <tr key={param.parameter_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
