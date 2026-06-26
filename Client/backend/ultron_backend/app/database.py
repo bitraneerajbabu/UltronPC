@@ -25,6 +25,17 @@ if settings.DB_TYPE == "postgresql":
 engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 
 
+if settings.DB_TYPE == "sqlite":
+    @event.listens_for(engine.sync_engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA synchronous=NORMAL;")
+        cursor.execute("PRAGMA busy_timeout=10000;")  # 10 seconds timeout
+        cursor.close()
+
+
+
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

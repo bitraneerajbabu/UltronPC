@@ -444,6 +444,19 @@ def main() -> None:
     # Check if server is already running
     if _port_open(HOST, PORT):
         log.info("UltrON is already running in the background. Restoring window...")
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                hwnd = ctypes.windll.user32.FindWindowW(None, "UltrON Industrial Monitoring Platform")
+                if hwnd:
+                    log.info("Found window handle %s via Win32. Showing and restoring...", hwnd)
+                    # SW_RESTORE = 9
+                    ctypes.windll.user32.ShowWindow(hwnd, 9)
+                    ctypes.windll.user32.SetForegroundWindow(hwnd)
+                    sys.exit(0)
+            except Exception as win_err:
+                log.error("Failed to restore window via Win32: %s", win_err)
+
         try:
             import urllib.request
             req = urllib.request.Request(f"{URL}/show-window", method="GET")
