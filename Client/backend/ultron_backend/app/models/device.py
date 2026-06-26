@@ -21,6 +21,7 @@ class DeviceProtocol(str, enum.Enum):
     modbus_tcp = "modbus_tcp"
     modbus_rtu = "modbus_rtu"
     tcp_custom = "tcp_custom"
+    iseo_tcp = "iseo_tcp"
     csv = "csv"
     opc_ua = "opc_ua"
 
