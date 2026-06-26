@@ -74,41 +74,16 @@ os.chdir(APP_DIR)
 # STEP 1.5 — Auto-Updater (Applies downloaded firmware)
 # ─────────────────────────────────────────────────────────────────────────────
 def _apply_pending_update():
-    if not getattr(sys, "frozen", False):
-        return
-
-    install_dir = APP_DIR
-    flag_path = os.path.join(install_dir, "update_pending.flag")
-    new_exe = os.path.join(install_dir, "UltrON_new.exe")
-    current_exe = sys.executable
-    old_exe = os.path.join(install_dir, "UltrON_old.exe")
-
-    # Clean up previous old exe if exists
-    if os.path.exists(old_exe):
-        try:
-            os.remove(old_exe)
-        except Exception:
-            pass
-
-    if os.path.exists(flag_path) and os.path.exists(new_exe):
-        try:
-            import subprocess
-            # Rename current exe to old_exe (Windows allows renaming running exes)
-            os.rename(current_exe, old_exe)
-            # Rename downloaded exe to current exe name
-            os.rename(new_exe, current_exe)
-            # Remove flag
-            os.remove(flag_path)
-            # Relaunch newly replaced exe
-            subprocess.Popen([current_exe] + sys.argv[1:])
-            sys.exit(0)
-        except Exception as e:
-            with open(os.path.join(install_dir, "ultron_update_error.log"), "w") as f:
-                f.write(f"Update failed: {e}\n")
-            try:
-                os.remove(flag_path)
-            except Exception:
-                pass
+    # Disabled for KTPP2 — clean up any stale updater artifacts
+    if getattr(sys, "frozen", False):
+        install_dir = APP_DIR
+        for fname in ("update_pending.flag", "UltrON_new.exe", "UltrON_old.exe", "ultron_update_error.log"):
+            p = os.path.join(install_dir, fname)
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
 
 _apply_pending_update()
 
@@ -140,138 +115,12 @@ def _version_tuple(v: str):
 
 def _check_and_download_update():
     """
-    Run in a daemon thread.  Checks GitHub for a newer release; if found,
-    downloads UltrON.exe as UltrON_new.exe and writes update_pending.flag.
-    The swap is applied on next launch by _apply_pending_update().
+    Auto-updater disabled for KTPP2 — UltrON.exe from releases would overwrite KTPP2.exe.
     """
-    if not getattr(sys, "frozen", False):
-        return  # only run when packaged
-
-    install_dir = APP_DIR
-    flag_path   = os.path.join(install_dir, "update_pending.flag")
-    new_exe     = os.path.join(install_dir, "UltrON_new.exe")
-    partial_exe = os.path.join(install_dir, "UltrON_new.exe.part")
-
-    # Don't download again if a pending update already exists
-    if os.path.exists(flag_path) and os.path.exists(new_exe):
-        return
-
-    try:
-        import urllib.request
-        import json as _json
-        import ssl as _ssl_mod
-        from urllib.error import URLError
-
-        def _urlopen_verified(url_req, timeout):
-            """Open URL with verified SSL — fails hard on certificate errors."""
-            from app.core.ssl_utils import get_verified_ssl_context
-            ctx = get_verified_ssl_context()
-            return urllib.request.urlopen(url_req, timeout=timeout, context=ctx)
-
-        req = urllib.request.Request(
-            GITHUB_API_LATEST,
-            headers={"User-Agent": "UltrON-Updater/1.0",
-                     "Accept": "application/vnd.github.v3+json"},
-        )
-        with _urlopen_verified(req, timeout=15) as resp:
-            data = _json.loads(resp.read().decode("utf-8"))
-
-        latest_tag = data.get("tag_name", "")
-        assets     = data.get("assets", [])
-
-        # Find the UltrON.exe asset
-        exe_url = None
-        for asset in assets:
-            if asset.get("name", "").lower() == "ultron.exe":
-                exe_url = asset.get("browser_download_url")
-                break
-
-        if not exe_url:
-            return  # no asset found
-
-        # Compare versions — import APP_VERSION from config
-        try:
-            from app.config import settings
-            current_ver = settings.APP_VERSION
-        except Exception:
-            current_ver = "0.0.0"
-
-        if _version_tuple(latest_tag) <= _version_tuple(current_ver):
-            return  # already up-to-date
-
-        # Download new EXE to a .part file first
-        import logging as _logging
-        import hashlib
-        _log_update = _logging.getLogger("ultron.updater")
-        _log_update.info("Update available: %s → %s — downloading…", current_ver, latest_tag)
-
-        dl_req = urllib.request.Request(
-            exe_url,
-            headers={"User-Agent": "UltrON-Updater/1.0"},
-        )
-        sha256 = hashlib.sha256()
-        with _urlopen_verified(dl_req, timeout=120) as dl_resp, \
-             open(partial_exe, "wb") as f:
-            while True:
-                chunk = dl_resp.read(65536)
-                if not chunk:
-                    break
-                f.write(chunk)
-                sha256.update(chunk)
-
-        downloaded_hash = sha256.hexdigest()
-
-        # Verify checksum if checksums.json exists in the release
-        checksums_url = None
-        for asset in assets:
-            if asset.get("name", "").lower() == "checksums.json":
-                checksums_url = asset.get("browser_download_url")
-                break
-
-        if checksums_url:
-            try:
-                ck_req = urllib.request.Request(
-                    checksums_url,
-                    headers={"User-Agent": "UltrON-Updater/1.0"},
-                )
-                with _urlopen_verified(ck_req, timeout=15) as ck_resp:
-                    checksums = _json.loads(ck_resp.read().decode("utf-8"))
-                expected_hash = checksums.get("UltrON.exe", "")
-                if expected_hash and downloaded_hash != expected_hash:
-                    _log_update.error(
-                        "Checksum mismatch! Expected %s, got %s — rejecting update.",
-                        expected_hash, downloaded_hash,
-                    )
-                    os.remove(partial_exe)
-                    return
-                _log_update.info("Checksum verified [OK]")
-            except Exception as ck_err:
-                _log_update.warning("Checksum verification skipped (%s)", ck_err)
-
-        # Move .part → final
-        if os.path.exists(new_exe):
-            os.remove(new_exe)
-        os.rename(partial_exe, new_exe)
-
-        # Write the flag — _apply_pending_update() reads this on next launch
-        with open(flag_path, "w") as f:
-            f.write(latest_tag)
-
-        _log_update.info("Update %s downloaded [OK] — will apply on next launch.", latest_tag)
-
-    except Exception as _e:
-        # Non-fatal — log quietly
-        import logging as _logging
-        _logging.getLogger("ultron.updater").debug("Update check failed: %s", _e)
-        # Clean up partial download if present
-        if os.path.exists(partial_exe):
-            try:
-                os.remove(partial_exe)
-            except Exception:
-                pass
+    pass
 
 
-# Launch update checker as a daemon thread (never blocks startup)
+# Launch update checker thread (no-op for KTPP2, but harmless)
 threading.Thread(target=_check_and_download_update, daemon=True, name="updater").start()
 
 # ─────────────────────────────────────────────────────────────────────────────
