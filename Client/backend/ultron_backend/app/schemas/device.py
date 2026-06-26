@@ -159,6 +159,8 @@ class DeviceUpdate(BaseModel):
     csv_filename_pattern: Optional[str] = None
     csv_delimiter: Optional[str] = None
     csv_timestamp_col: Optional[int] = None
+    request_hex: Optional[str] = None
+    response_delimiter: Optional[str] = None
     parameters: Optional[List[ParameterCreateNested]] = None
 
     @model_validator(mode="before")
@@ -170,7 +172,7 @@ class DeviceUpdate(BaseModel):
                 "firmware_version", "host", "port", "slave_id", "serial_port",
                 "baud_rate", "data_bits", "stop_bits", "csv_path", "csv_folder",
                 "csv_filename_pattern", "csv_delimiter", "csv_timestamp_col",
-                "poll_interval", "timeout", "retry_count"
+                "poll_interval", "timeout", "retry_count", "request_hex"
             ]
             for f in fields:
                 if data.get(f) == "":
