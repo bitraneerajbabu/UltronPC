@@ -32,6 +32,7 @@ async def create_station(payload: StationCreate, db: AsyncSession = Depends(get_
     station = Station(**payload.model_dump())
     db.add(station)
     await db.flush()
+    await db.commit()
     await db.refresh(station)
     return station
 
@@ -54,6 +55,7 @@ async def update_station(station_id: int, payload: StationUpdate, db: AsyncSessi
     for field, val in payload.model_dump(exclude_unset=True).items():
         setattr(station, field, val)
     await db.flush()
+    await db.commit()
     await db.refresh(station)
     return station
 
@@ -65,3 +67,4 @@ async def delete_station(station_id: int, db: AsyncSession = Depends(get_db)):
     if not station:
         raise HTTPException(status_code=404, detail="Station not found")
     await db.delete(station)
+    await db.commit()

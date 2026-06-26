@@ -104,7 +104,7 @@ async def _start_led_http_server(port: int):
         log.info(f"LED board HTTP server starting on port {port} — "
                  f"Card URL: http://<PC-LAN-IP>/api/v1/led?auth=<token>&PCB=...")
         await server.serve()
-    except OSError as e:
+    except (OSError, SystemExit) as e:
         # Port 80 might need admin rights on Windows — log clearly and continue
         log.warning(
             f"LED HTTP server could not bind to port {port}: {e}. "

@@ -5,7 +5,7 @@ Recalculates and regenerates CPCB export records for a given date range.
 
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, delete
+from sqlalchemy import select, and_, delete, func
 from app.models.cpcb import CPCBExportRecord, CPCBStationConfig
 from app.models.telemetry import Averages, AverageType
 from app.models.parameter import Parameter
@@ -63,7 +63,6 @@ async def run_backfill(
             if not param:
                 continue
 
-            from sqlalchemy import func
             avg_result = await db.execute(
                 select(func.avg(Averages.value))
                 .where(
@@ -72,6 +71,7 @@ async def run_backfill(
                         Averages.avg_type == AverageType.avg_1min,
                         Averages.timestamp >= window_start,
                         Averages.timestamp < window_end,
+                        Averages.quality.in_(["U"]),
                     )
                 )
             )

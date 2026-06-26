@@ -611,8 +611,9 @@ async def _poll_remote_commands():
             log.info(f"[CMD] Executing remote command: {action} (id={cmd_id})")
 
             if action == "restart_polling":
-                from app.services.polling_engine import restart_polling
-                await restart_polling()
+                from app.services.polling_engine import stop_polling, start_polling
+                await stop_polling()
+                await start_polling()
 
             elif action == "reboot_system":
                 log.warning("[CMD] reboot_system command received but is DISABLED (removed for safety)")
