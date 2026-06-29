@@ -132,6 +132,39 @@ function App() {
   const [editingDeviceId, setEditingDeviceId] = useState<number|null>(null)
   const [editingDeviceName, setEditingDeviceName] = useState('')
 
+  // CPCB Dashboard State
+  const [cpcbStatus, setCpcbStatus] = useState<any[]>([])
+  const [cpcbSummary, setCpcbSummary] = useState<any[]>([])
+
+  // Quality Dashboard State
+  const [qualitySummary, setQualitySummary] = useState<any[]>([])
+  const [qualityDetail, setQualityDetail] = useState<any[] | null>(null)
+  const [selectedQualitySite, setSelectedQualitySite] = useState<number | null>(null)
+
+  // Alarms State
+  const [alarms, setAlarms] = useState<any[]>([])
+  const [alarmStats, setAlarmStats] = useState<any>(null)
+  const [alarmAcking, setAlarmAcking] = useState<number | null>(null)
+
+  // Notification state
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | 'unsupported'>(
+    'Notification' in window ? Notification.permission : 'unsupported'
+  )
+
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) return
+    const perm = await Notification.requestPermission()
+    setNotifPermission(perm)
+    if (perm === 'granted') {
+      navigator.serviceWorker.ready.then(reg => {
+        reg.showNotification('UltrON Notifications Enabled', {
+          body: 'You will receive plant status alerts here.',
+          icon: '/pwa-192x192.png',
+        })
+      })
+    }
+  }
+
   const adminFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
     const adminKey = sessionStorage.getItem('rajapi_admin_key') || '';
     return fetch(url, {
@@ -311,6 +344,26 @@ function App() {
       adminFetch('/api/v1/sites/locks/summary')
         .then(res => res.ok ? res.json() : [])
         .then(data => Array.isArray(data) && setLocks(data))
+        .catch(err => console.error(err));
+      adminFetch('/api/v1/cpcb/status')
+        .then(res => res.ok ? res.json() : [])
+        .then(data => Array.isArray(data) && setCpcbStatus(data))
+        .catch(err => console.error(err));
+      adminFetch('/api/v1/cpcb/summary')
+        .then(res => res.ok ? res.json() : [])
+        .then(data => Array.isArray(data) && setCpcbSummary(data))
+        .catch(err => console.error(err));
+      adminFetch('/api/v1/quality/')
+        .then(res => res.ok ? res.json() : [])
+        .then(data => Array.isArray(data) && setQualitySummary(data))
+        .catch(err => console.error(err));
+      adminFetch('/api/v1/alarms/')
+        .then(res => res.ok ? res.json() : [])
+        .then(data => Array.isArray(data) && setAlarms(data))
+        .catch(err => console.error(err));
+      adminFetch('/api/v1/alarms/stats')
+        .then(res => res.ok ? res.json() : null)
+        .then(data => data && setAlarmStats(data))
         .catch(err => console.error(err));
     };
     load();
@@ -507,7 +560,7 @@ function App() {
         <div className="flex items-center gap-4">
           <img src="/assets/Ultron_logo.png" alt="UltrON Logo" className="h-8 drop-shadow-md" />
           <nav className="flex items-center gap-1 ml-4">
-            {['dashboard', 'broadcasts', 'commands', 'history', 'locks'].map(tab => (
+            {['dashboard', 'broadcasts', 'cpcb', 'quality', 'alarms', 'commands', 'history', 'locks'].map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
                   activeTab === tab ? 'bg-brand-btn text-white' : 'text-gray-600 hover:text-gray-800 hover:bg-brand-card'
@@ -553,6 +606,16 @@ function App() {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
+          </button>
+          <button
+            onClick={requestNotificationPermission}
+            title={notifPermission === 'granted' ? 'Notifications enabled' : notifPermission === 'denied' ? 'Notifications blocked' : 'Enable notifications'}
+            className="p-2 rounded-full transition-colors relative"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${notifPermission === 'granted' ? 'text-brand-accent' : notifPermission === 'denied' ? 'text-red-400' : 'text-gray-600 hover:text-gray-800'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            {notifPermission === 'granted' && <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full" />}
           </button>
           <button 
             onClick={handleLogout}
@@ -1295,6 +1358,234 @@ function App() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'cpcb' && (
+          <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+            <h2 className="text-xl font-bold text-gray-800 mb-1">CPCB Dashboard</h2>
+            <p className="text-sm text-gray-600 mb-4">CPCB compliance sync status and daily record counts.</p>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+              {cpcbStatus.map(site => (
+                <div key={site.site_id} className="bg-brand-card border border-brand-border rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-bold text-gray-800 text-sm">{site.site_name}</h3>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                      site.last_error ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'
+                    }`}>{site.last_error ? 'Error' : 'OK'}</span>
+                  </div>
+                  <div className="text-2xl font-bold text-brand-accent mb-1">{site.total_records_synced_today.toLocaleString()}</div>
+                  <div className="text-xs text-gray-500">records synced today</div>
+                  {site.last_tgpcb_sync && (
+                    <div className="text-xs text-gray-500 mt-2">
+                      Last sync: {new Date(site.last_tgpcb_sync).toLocaleString()}
+                    </div>
+                  )}
+                  {site.last_error && (
+                    <div className="text-xs text-red-600 mt-2 bg-red-50 rounded p-2" title={site.last_error}>
+                      ⚠ {site.last_error}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {cpcbStatus.length === 0 && (
+                <div className="col-span-full text-center text-gray-500 py-12">
+                  <p>No CPCB data available.</p>
+                </div>
+              )}
+            </div>
+
+            <h3 className="font-bold text-gray-800 mb-3">30-Day Daily Record Counts</h3>
+            <div className="flex flex-col gap-3">
+              {cpcbSummary.map(site => (
+                <div key={site.site_id} className="bg-brand-card border border-brand-border rounded-xl p-4">
+                  <h4 className="font-bold text-gray-800 text-sm mb-3">{site.site_name}</h4>
+                  {site.daily_counts.length === 0 ? (
+                    <p className="text-xs text-gray-500">No data in last 30 days.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {site.daily_counts.map((d: any, i: number) => (
+                        <div key={i} className="flex flex-col items-center bg-brand-bg rounded-lg px-2 py-1 min-w-[48px]">
+                          <span className="text-xs font-mono font-bold text-brand-accent">{d.record_count}</span>
+                          <span className="text-[8px] text-gray-500">{new Date(d.date + 'T00:00:00').toLocaleDateString(undefined, {month:'short', day:'numeric'})}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'quality' && (
+          <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+            <h2 className="text-xl font-bold text-gray-800 mb-1">Data Quality Dashboard</h2>
+            <p className="text-sm text-gray-600 mb-4">U/O/E/N quality breakdown per site (CPCB standard). <span className="text-xs text-gray-500 ml-1">U=Valid, O=Invalid, E=Error, N=None</span></p>
+
+            {selectedQualitySite ? (
+              <>
+                <button onClick={() => { setSelectedQualitySite(null); setQualityDetail(null); }}
+                  className="text-sm text-brand-btn hover:underline mb-4 inline-flex items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                  Back to site summary
+                </button>
+                {qualityDetail === null ? (
+                  <p className="text-gray-500">Loading...</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {qualityDetail.map(p => (
+                      <div key={p.parameter_id} className="bg-brand-card border border-brand-border rounded-xl p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <span className="font-bold text-gray-800 text-sm">{p.parameter_name}</span>
+                            <span className="text-xs text-gray-500 ml-2 font-mono">{p.tag_name}</span>
+                            {p.unit && <span className="text-xs text-gray-500 ml-1">({p.unit})</span>}
+                          </div>
+                          <span className="text-xs text-gray-500">{p.total_points} points</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            {key:'U', label:'Valid', color:'bg-emerald-100 text-emerald-700'},
+                            {key:'O', label:'Invalid', color:'bg-red-100 text-red-700'},
+                            {key:'E', label:'Error', color:'bg-orange-100 text-orange-700'},
+                            {key:'N', label:'None', color:'bg-gray-100 text-gray-600'},
+                          ].map(({key, label, color}) => (
+                            <div key={key} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${color}`}>
+                              <span className="font-bold">{p.quality[key].count}</span>
+                              <span>{label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {qualitySummary.map(site => (
+                  <div key={site.site_id} onClick={() => {
+                    setSelectedQualitySite(site.site_id);
+                    adminFetch(`/api/v1/quality/${site.site_id}`)
+                      .then(r => r.ok ? r.json() : [])
+                      .then(d => Array.isArray(d) && setQualityDetail(d))
+                      .catch(() => {});
+                  }} className="bg-brand-card border border-brand-border rounded-xl p-4 hover:bg-brand-border/30 cursor-pointer transition-colors">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-bold text-gray-800 text-sm">{site.site_name}</h3>
+                      <span className="text-xs text-gray-500">{site.total_points} total points</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        {key:'U', label:'Valid', color:'bg-emerald-100 text-emerald-700'},
+                        {key:'O', label:'Invalid', color:'bg-red-100 text-red-700'},
+                        {key:'E', label:'Error', color:'bg-orange-100 text-orange-700'},
+                        {key:'N', label:'None', color:'bg-gray-100 text-gray-600'},
+                      ].map(({key, label, color}) => {
+                        const q = site.quality[key];
+                        return (
+                          <div key={key} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${color}`}>
+                            <span className="font-bold">{q.count}</span>
+                            <span>{q.percentage}%</span>
+                            <span className="opacity-70">{label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {qualitySummary.length === 0 && (
+                  <div className="text-center text-gray-500 py-12">
+                    <p>No quality data available.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'alarms' && (
+          <div className="flex-1 flex flex-col p-6 overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800">Alarms</h2>
+                <p className="text-sm text-gray-600">Active and recent alarms across all sites.</p>
+              </div>
+              {alarmStats && (
+                <div className="flex items-center gap-4">
+                  <div className="bg-red-100 text-red-600 px-4 py-2 rounded-xl text-center">
+                    <div className="text-2xl font-bold">{alarmStats.total_active}</div>
+                    <div className="text-xs font-medium">Active</div>
+                  </div>
+                  <div className="bg-brand-border/40 text-gray-600 px-4 py-2 rounded-xl text-center">
+                    <div className="text-2xl font-bold">{alarmStats.total_today}</div>
+                    <div className="text-xs font-medium">Today</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {alarms.length === 0 ? (
+              <div className="text-center text-gray-500 py-20">
+                <p className="text-lg">No alarms yet.</p>
+                <p className="text-sm mt-1">Alarms appear when quality issues are detected.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {alarms.map(a => (
+                  <div key={a.id} className={`bg-brand-card border rounded-xl p-4 transition-colors ${
+                    a.status === 'active' ? 'border-red-700/50' : 'border-brand-border opacity-60'
+                  }`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            a.quality === 'E' ? 'bg-red-100 text-red-600' :
+                            a.quality === 'O' ? 'bg-orange-100 text-orange-600' :
+                            'bg-yellow-100 text-yellow-600'
+                          }`}>Q{a.quality}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            a.status === 'active' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
+                          }`}>{a.status}</span>
+                          {a.site_name && <span className="text-xs text-gray-500 font-medium">{a.site_name}</span>}
+                        </div>
+                        <p className="text-sm text-gray-800">{a.message}</p>
+                        <div className="flex items-center gap-3 mt-1">
+                          {a.parameter_id && <span className="text-[10px] font-mono text-gray-500">Param #{a.parameter_id}</span>}
+                          {a.value != null && <span className="text-[10px] font-mono text-gray-500">Value: {a.value}</span>}
+                          <span className="text-[10px] text-gray-500">{new Date(a.created_at).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {a.status === 'active' && (
+                          <button disabled={alarmAcking === a.id}
+                            onClick={async () => {
+                              setAlarmAcking(a.id);
+                              try {
+                                const res = await adminFetch(`/api/v1/alarms/${a.id}/ack`, {method: 'POST'});
+                                if (res.ok) {
+                                  setAlarms(alarms.map(x => x.id === a.id ? {...x, status: 'acknowledged', acknowledged_at: new Date().toISOString()} : x));
+                                  const sRes = await adminFetch('/api/v1/alarms/stats');
+                                  if (sRes.ok) setAlarmStats(await sRes.json());
+                                }
+                              } finally { setAlarmAcking(null); }
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40 transition-colors"
+                          >{alarmAcking === a.id ? '...' : 'Acknowledge'}</button>
+                        )}
+                        {a.acknowledged_at && (
+                          <span className="text-[10px] text-gray-500">Acked: {new Date(a.acknowledged_at).toLocaleString()}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

@@ -86,3 +86,16 @@ class TelemetryData(Base):
     
     site = relationship("IndustrySite", back_populates="telemetry")
     parameter = relationship("Parameter", back_populates="telemetry")
+
+class Alarm(Base):
+    __tablename__ = "alarms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    site_id = Column(Integer, ForeignKey("industry_sites.id"), index=True)
+    parameter_id = Column(Integer, ForeignKey("parameters.id"), nullable=True)
+    value = Column(Float, nullable=True)
+    quality = Column(String(10))
+    message = Column(Text, nullable=True)
+    status = Column(String(20), default="active")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    acknowledged_at = Column(DateTime, nullable=True)

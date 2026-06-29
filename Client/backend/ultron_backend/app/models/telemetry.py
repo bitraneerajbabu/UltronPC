@@ -13,12 +13,12 @@ import enum
 # ─── Data Quality ─────────────────────────────────────────────────────────────
 class DataQuality(str, enum.Enum):
     good = "U"
-    bad = "U"
-    uncertain = "U"
+    bad = "B"
+    uncertain = "I"
     out_of_range = "O"
     comms_fail = "E"
-    sensor_fail = "E"
-    maintenance = "U"
+    sensor_fail = "F"
+    maintenance = "M"
     negative = "N"
 
 

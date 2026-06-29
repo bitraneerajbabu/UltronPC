@@ -1,8 +1,7 @@
 """UltrON — Reports API (Excel + PDF generation)"""
 
-import os
 import io
-import random
+import math
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -14,12 +13,13 @@ from fastapi.responses import StreamingResponse
 # pyrefly: ignore [missing-import]
 from sqlalchemy.ext.asyncio import AsyncSession
 # pyrefly: ignore [missing-import]
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_, func
 from app.database import get_db
 from app.models.telemetry import HistoricalData, Averages, AverageType, DataQuality
 from app.models.parameter import Parameter
+from app.models.device import Device
 from app.models.station import Station
-from app.config import settings
+from app.core.security import require_admin
 from app.core.logger import get_logger
 
 log = get_logger("ultron.reports")
@@ -260,201 +260,345 @@ async def generate_pdf(
     )
 
 
-@router.get("/windrose")
+@router.get("/windrose", dependencies=[Depends(require_admin)])
 async def get_windrose_data(
     station_id: int = Query(..., description="Station ID"),
     date_from: str = Query(..., description="Start date YYYY-MM-DD"),
     date_to: str = Query(..., description="End date YYYY-MM-DD"),
     parameter_id: Optional[int] = Query(None, description="Optional parameter ID for pollutionrose"),
 ):
-    """Stub endpoint returning sample windrose / pollutionrose data.
+    """Windrose endpoint — returns empty data set.
 
-    The full implementation will compute wind direction and speed distributions
-    from telemetry data stored in HistoricalData / Averages tables.
-
-    Returns radar-chart-friendly data with 16 compass directions and speed bands
-    (or pollutant concentrations for pollutionrose mode).
+    A real windrose requires paired wind-direction + wind-speed parameters
+    grouped by compass direction. Without both, any data returned is
+    misleading. The frontend falls back to sample data when datasets=[].
     """
-    # 16 wind directions (compass)
+    log.info("Windrose endpoint called without paired direction data — returning empty (frontend will fall back to sample)")
     directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
-
-    if parameter_id:
-        # Pollutionrose: return sample pollutant concentrations per direction
-        bands = [
-            {"label": "PM2.5", "data": [round(random.uniform(10, 80), 1) for _ in range(16)]},
-            {"label": "PM10",  "data": [round(random.uniform(20, 150), 1) for _ in range(16)]},
-            {"label": "NO2",   "data": [round(random.uniform(5, 60), 1) for _ in range(16)]},
-            {"label": "SO2",   "data": [round(random.uniform(2, 30), 1) for _ in range(16)]},
-            {"label": "O3",    "data": [round(random.uniform(10, 100), 1) for _ in range(16)]},
-            {"label": "CO",    "data": [round(random.uniform(0.5, 5), 2) for _ in range(16)]},
-        ]
-    else:
-        # Windrose: return wind speed bands per direction
-        bands = [
-            {"label": "0.5–2 m/s", "data": [round(random.uniform(0, 20), 1) for _ in range(16)]},
-            {"label": "2–4 m/s",   "data": [round(random.uniform(0, 30), 1) for _ in range(16)]},
-            {"label": "4–6 m/s",   "data": [round(random.uniform(0, 25), 1) for _ in range(16)]},
-            {"label": "6–8 m/s",   "data": [round(random.uniform(0, 15), 1) for _ in range(16)]},
-            {"label": ">8 m/s",    "data": [round(random.uniform(0, 8), 1) for _ in range(16)]},
-        ]
-
     return {
         "station_id": station_id,
         "date_from": date_from,
         "date_to": date_to,
         "labels": directions,
-        "datasets": bands,
+        "datasets": [],
     }
 
 
-# ── Analytical Report Stubs ───────────────────────────────────────────────────
+# ── Analytical Reports ────────────────────────────────────────────────────────
 
 
-@router.get("/histogram")
+async def _fetch_param_values(
+    db: AsyncSession, param_id: int, station_id: int, start: str, end: str, limit: int = 5000
+) -> list[float]:
+    try:
+        start_dt = datetime.strptime(start[:10], "%Y-%m-%d")
+        end_dt = datetime.strptime(end[:10], "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        return []
+    stmt = select(HistoricalData.value).join(Parameter, HistoricalData.parameter_id == Parameter.id).join(
+        Device, Parameter.device_id == Device.id
+    ).where(
+        Device.station_id == station_id,
+        HistoricalData.parameter_id == param_id,
+        HistoricalData.timestamp >= start_dt,
+        HistoricalData.timestamp <= end_dt,
+        HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range)),
+    ).limit(limit)
+    res = await db.execute(stmt)
+    return [r[0] for r in res.all() if r[0] is not None]
+
+
+@router.get("/histogram", dependencies=[Depends(require_admin)])
 async def get_histogram(
-    station: str = Query(...),
-    parameter: str = Query(...),
+    station: int = Query(...),
+    parameter: int = Query(...),
     start: str = Query(...),
     end: str = Query(...),
+    bins: int = Query(10, ge=2, le=100),
+    db: AsyncSession = Depends(get_db),
 ):
     """Return frequency distribution (histogram bins) for a parameter."""
-    bins = []
-    total = 0
-    for i in range(0, 100, 10):
-        count = random.randint(1, 40)
-        bins.append({"range": f"{i}-{i+10}", "count": count})
-        total += count
-    return {"bins": bins, "total": total}
+    values = await _fetch_param_values(db, parameter, station, start, end)
+    if not values:
+        return {"bins": [], "total": 0}
+
+    min_v, max_v = min(values), max(values)
+    if max_v == min_v:
+        return {"bins": [{"range": f"{min_v}", "count": len(values)}], "total": len(values)}
+
+    bin_w = (max_v - min_v) / bins
+    bin_counts = [0] * bins
+    for v in values:
+        idx = min(int((v - min_v) / bin_w), bins - 1)
+        bin_counts[idx] += 1
+
+    result_bins = [
+        {"range": f"{min_v + i * bin_w:.2f}–{min_v + (i + 1) * bin_w:.2f}", "count": c}
+        for i, c in enumerate(bin_counts)
+    ]
+    return {"bins": result_bins, "total": len(values)}
 
 
-@router.get("/percentile")
+@router.get("/percentile", dependencies=[Depends(require_admin)])
 async def get_percentile(
-    station: str = Query(...),
-    parameter: str = Query(...),
+    station: int = Query(...),
+    parameter: int = Query(...),
     start: str = Query(...),
     end: str = Query(...),
+    db: AsyncSession = Depends(get_db),
 ):
     """Return percentile values (P10–P99) for a parameter."""
+    values = await _fetch_param_values(db, parameter, station, start, end)
+    if not values:
+        return {"p10": None, "p25": None, "p50": None, "p75": None, "p90": None, "p95": None, "p99": None}
+
+    values.sort()
+    n = len(values)
+
+    def percentile(p):
+        k = (p / 100.0) * (n - 1)
+        f = math.floor(k)
+        c = math.ceil(k)
+        if f == c:
+            return round(values[int(k)], 2)
+        d0 = values[f] * (c - k)
+        d1 = values[c] * (k - f)
+        return round(d0 + d1, 2)
+
     return {
-        "p10": round(random.uniform(5, 20), 1),
-        "p25": round(random.uniform(20, 35), 1),
-        "p50": round(random.uniform(35, 50), 1),
-        "p75": round(random.uniform(55, 70), 1),
-        "p90": round(random.uniform(75, 88), 1),
-        "p95": round(random.uniform(88, 95), 1),
-        "p99": round(random.uniform(95, 99), 1),
+        "p10": percentile(10), "p25": percentile(25), "p50": percentile(50),
+        "p75": percentile(75), "p90": percentile(90), "p95": percentile(95), "p99": percentile(99),
     }
 
 
-@router.get("/scatter")
+@router.get("/scatter", dependencies=[Depends(require_admin)])
 async def get_scatter(
-    x_param: str = Query(...),
-    y_param: str = Query(...),
-    station: str = Query(...),
+    x_param: int = Query(...),
+    y_param: int = Query(...),
+    station: int = Query(...),
     start: str = Query(...),
     end: str = Query(...),
+    limit: int = Query(500, le=5000),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Return scatter plot points for two parameters."""
-    points = []
-    for _ in range(80):
-        x = round(random.uniform(0, 100), 1)
-        y = round(x * random.uniform(0.5, 0.9) + random.uniform(0, 15), 1)
-        points.append({"x": x, "y": y})
+    """Return scatter plot points for two time-aligned parameters."""
+    try:
+        start_dt = datetime.strptime(start[:10], "%Y-%m-%d")
+        end_dt = datetime.strptime(end[:10], "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    stmt = select(HistoricalData.timestamp, HistoricalData.value).where(
+        HistoricalData.parameter_id == x_param,
+        HistoricalData.timestamp >= start_dt,
+        HistoricalData.timestamp <= end_dt,
+        HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range)),
+    ).order_by(HistoricalData.timestamp).limit(limit)
+    x_res = await db.execute(stmt)
+    x_data = {r[0].isoformat(): r[1] for r in x_res.all() if r[1] is not None}
+
+    stmt = select(HistoricalData.timestamp, HistoricalData.value).where(
+        HistoricalData.parameter_id == y_param,
+        HistoricalData.timestamp >= start_dt,
+        HistoricalData.timestamp <= end_dt,
+        HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range)),
+    ).order_by(HistoricalData.timestamp).limit(limit)
+    y_res = await db.execute(stmt)
+    y_map = {r[0].isoformat(): r[1] for r in y_res.all() if r[1] is not None}
+
+    common_ts = sorted(set(x_data.keys()) & set(y_map.keys()))
+    points = [{"x": round(x_data[ts], 2), "y": round(y_map[ts], 2)} for ts in common_ts]
     return {"points": points}
 
 
-@router.get("/uptime")
+@router.get("/uptime", dependencies=[Depends(require_admin)])
 async def get_uptime(
-    station: str = Query(...),
+    station: int = Query(...),
     start: str = Query(...),
     end: str = Query(...),
+    db: AsyncSession = Depends(get_db),
 ):
     """Return daily data availability for a station."""
     try:
         start_dt = datetime.strptime(start[:10], "%Y-%m-%d")
         end_dt = datetime.strptime(end[:10], "%Y-%m-%d")
     except ValueError:
-        start_dt = datetime.utcnow() - timedelta(days=7)
-        end_dt = datetime.utcnow()
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    param_ids_res = await db.execute(
+        select(Parameter.id).join(Device).where(Device.station_id == station, Parameter.is_active == True)
+    )
+    param_ids = [r[0] for r in param_ids_res.all()]
+    if not param_ids:
+        return {"days": []}
 
     days = []
     cursor = start_dt
     while cursor <= end_dt:
-        total = 1440
-        valid = random.randint(int(total * 0.82), total)
+        day_start = cursor
+        day_end = cursor + timedelta(days=1)
+        count_res = await db.execute(
+            select(func.count(HistoricalData.id)).where(
+                HistoricalData.parameter_id.in_(param_ids),
+                HistoricalData.timestamp >= day_start,
+                HistoricalData.timestamp <= day_end,
+            )
+        )
+        total_points = count_res.scalar() or 0
+
+        valid_res = await db.execute(
+            select(func.count(HistoricalData.id)).where(
+                HistoricalData.parameter_id.in_(param_ids),
+                HistoricalData.timestamp >= day_start,
+                HistoricalData.timestamp <= day_end,
+                HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range)),
+            )
+        )
+        valid_points = valid_res.scalar() or 0
+
         days.append({
             "date": cursor.strftime("%d-%m-%Y"),
-            "total_points": total,
-            "valid_points": valid,
-            "availability_pct": round((valid / total) * 100, 1),
+            "total_points": total_points,
+            "valid_points": valid_points,
+            "availability_pct": round((valid_points / total_points) * 100, 1) if total_points > 0 else 0,
         })
         cursor += timedelta(days=1)
     return {"days": days}
 
 
-@router.get("/shift")
+@router.get("/shift", dependencies=[Depends(require_admin)])
 async def get_shift(
-    station: str = Query(...),
+    station: int = Query(...),
     start: str = Query(...),
     end: str = Query(...),
+    db: AsyncSession = Depends(get_db),
 ):
     """Return per-shift summary statistics."""
-    shifts = [
-        {
-            "name": "Morning (06-14)",
-            "avg": round(random.uniform(30, 50), 1),
-            "min": round(random.uniform(5, 15), 1),
-            "max": round(random.uniform(60, 80), 1),
-        },
-        {
-            "name": "Evening (14-22)",
-            "avg": round(random.uniform(25, 45), 1),
-            "min": round(random.uniform(5, 15), 1),
-            "max": round(random.uniform(55, 75), 1),
-        },
-        {
-            "name": "Night (22-06)",
-            "avg": round(random.uniform(20, 40), 1),
-            "min": round(random.uniform(3, 12), 1),
-            "max": round(random.uniform(45, 65), 1),
-        },
+    try:
+        start_dt = datetime.strptime(start[:10], "%Y-%m-%d")
+        end_dt = datetime.strptime(end[:10], "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+
+    param_ids_res = await db.execute(
+        select(Parameter.id).join(Device).where(Device.station_id == station, Parameter.is_active == True)
+    )
+    param_ids = [r[0] for r in param_ids_res.all()]
+    if not param_ids:
+        return {"shifts": []}
+
+    shifts_config = [
+        {"name": "Morning (06-14)", "start_h": 6, "end_h": 14},
+        {"name": "Evening (14-22)", "start_h": 14, "end_h": 22},
+        {"name": "Night (22-06)", "start_h": 22, "end_h": 6},
     ]
+
+    shifts = []
+    for sc in shifts_config:
+        if sc["start_h"] < sc["end_h"]:
+            hour_condition = and_(
+                func.extract("hour", HistoricalData.timestamp) >= sc["start_h"],
+                func.extract("hour", HistoricalData.timestamp) < sc["end_h"],
+            )
+        else:
+            hour_condition = or_(
+                func.extract("hour", HistoricalData.timestamp) >= sc["start_h"],
+                func.extract("hour", HistoricalData.timestamp) < sc["end_h"],
+            )
+
+        agg_res = await db.execute(
+            select(
+                func.avg(HistoricalData.value).label("avg"),
+                func.min(HistoricalData.value).label("min"),
+                func.max(HistoricalData.value).label("max"),
+            ).where(
+                HistoricalData.parameter_id.in_(param_ids),
+                HistoricalData.timestamp >= start_dt,
+                HistoricalData.timestamp <= end_dt,
+                HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range)),
+                hour_condition,
+            )
+        )
+        row = agg_res.one()
+        shifts.append({
+            "name": sc["name"],
+            "avg": round(row.avg, 1) if row.avg else 0,
+            "min": round(row.min, 1) if row.min else 0,
+            "max": round(row.max, 1) if row.max else 0,
+        })
     return {"shifts": shifts}
 
 
-@router.get("/fortnight")
+@router.get("/fortnight", dependencies=[Depends(require_admin)])
 async def get_fortnight(
-    station: str = Query(...),
+    station: int = Query(...),
     month: str = Query(...),
     year: str = Query(...),
+    db: AsyncSession = Depends(get_db),
 ):
     """Return 15-day block summaries for a given month."""
+    try:
+        m = int(month)
+        y = int(year)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="month and year must be integers.")
+
+    param_ids_res = await db.execute(
+        select(Parameter.id).join(Device).where(Device.station_id == station, Parameter.is_active == True)
+    )
+    param_ids = [r[0] for r in param_ids_res.all()]
+
     month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    try:
-        m_idx = int(month) - 1
-        m_label = month_names[m_idx] if 0 <= m_idx < 12 else month
-    except ValueError:
-        m_label = month
+    m_label = month_names[m - 1] if 1 <= m <= 12 else str(m)
 
-    blocks = [
-        {
-            "label": f"1-15 {m_label}",
-            "availability_pct": round(random.uniform(85, 99), 1),
-            "parameters": {
-                "PM2.5": round(random.uniform(15, 60), 1),
-                "PM10": round(random.uniform(30, 120), 1),
-                "NO2": round(random.uniform(10, 40), 1),
-            },
-        },
-        {
-            "label": f"16-{m_label[-1]} {m_label}",
-            "availability_pct": round(random.uniform(85, 99), 1),
-            "parameters": {
-                "PM2.5": round(random.uniform(15, 60), 1),
-                "PM10": round(random.uniform(30, 120), 1),
-                "NO2": round(random.uniform(10, 40), 1),
-            },
-        },
-    ]
+    blocks = []
+    for half, day_start in [(1, 1), (2, 16)]:
+        if m == 12:
+            next_m, next_y = 1, y + 1
+        else:
+            next_m, next_y = m + 1, y
+        block_start = datetime(y, m, day_start)
+        if day_start == 16:
+            block_end = datetime(next_y, next_m, 1)
+        else:
+            block_end = datetime(y, m, 15, 23, 59, 59)
+
+        agg = {"avg": None, "availability_pct": 0}
+        if param_ids:
+            agg_res = await db.execute(
+                select(func.avg(HistoricalData.value)).where(
+                    HistoricalData.parameter_id.in_(param_ids),
+                    HistoricalData.timestamp >= block_start,
+                    HistoricalData.timestamp < block_end,
+                    HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range)),
+                )
+            )
+            avg_val = agg_res.scalar()
+            agg["avg"] = round(avg_val, 1) if avg_val else None
+
+            total_res = await db.execute(
+                select(func.count(HistoricalData.id)).where(
+                    HistoricalData.parameter_id.in_(param_ids),
+                    HistoricalData.timestamp >= block_start,
+                    HistoricalData.timestamp < block_end,
+                )
+            )
+            total_pts = total_res.scalar() or 0
+            valid_res = await db.execute(
+                select(func.count(HistoricalData.id)).where(
+                    HistoricalData.parameter_id.in_(param_ids),
+                    HistoricalData.timestamp >= block_start,
+                    HistoricalData.timestamp < block_end,
+                    HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range)),
+                )
+            )
+            valid_pts = valid_res.scalar() or 0
+            agg["availability_pct"] = round((valid_pts / total_pts) * 100, 1) if total_pts > 0 else 0
+
+        blocks.append({
+            "label": f"{'1-15' if half == 1 else '16-' + m_label[-1]} {m_label}",
+            "availability_pct": agg["availability_pct"],
+            "parameters": {"avg_value": agg["avg"]},
+        })
     return {"blocks": blocks}

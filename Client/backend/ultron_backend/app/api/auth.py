@@ -3,6 +3,7 @@ UltrON — Auth API
 Provides login, logout, and current-user endpoints.
 """
 
+import hmac
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
@@ -39,9 +40,14 @@ class SetupOverrideRequest(BaseModel):
 
 
 @router.post("/setup-override")
+@limiter.limit("5/minute")
 async def setup_override(request: Request, payload: SetupOverrideRequest):
     """Validate setup override credentials server-side against ADMIN_PASSWORD."""
-    if (payload.username == "token" or payload.username == settings.ADMIN_USERNAME) and payload.password == settings.ADMIN_PASSWORD:
+    expected_password = settings.ADMIN_PASSWORD.encode("utf-8")
+    provided_password = payload.password.encode("utf-8")
+    password_match = hmac.compare_digest(provided_password, expected_password)
+    username_match = payload.username == "token" or payload.username == settings.ADMIN_USERNAME
+    if username_match and password_match:
         audit.info(f"Setup override successful: username='{payload.username}'")
         return {"success": True}
     audit.warning(f"Failed setup override attempt: username='{payload.username}'")

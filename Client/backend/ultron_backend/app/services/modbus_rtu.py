@@ -167,7 +167,10 @@ class ModbusRTUReader:
                 if raw_val is None:
                     return None, "E"
 
-                value = (raw_val * scale_factor) + offset
+                if data_type in ("bool", "uint16"):
+                    value = raw_val
+                else:
+                    value = (raw_val * scale_factor) + offset
                 return value, "U"
 
             except Exception as e:
@@ -215,7 +218,10 @@ class ModbusRTUReader:
                     if raw_val is None:
                         return None, "E"
 
-                    value = (raw_val * scale_factor) + offset
+                    if data_type in ("bool", "uint16"):
+                        value = raw_val
+                    else:
+                        value = (raw_val * scale_factor) + offset
                     return value, "U"
 
                 except ModbusException as e:

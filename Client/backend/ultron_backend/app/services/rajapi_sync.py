@@ -19,7 +19,7 @@ from app.models.telemetry import LiveData, Broadcast
 from app.models.parameter import Parameter
 from app.models.device import Device
 from app.models.station import Station
-from app.config import settings
+from app.config import settings, RAJAPI_SYNC_URL
 from app.core.logger import get_logger
 from app.services.lock_store import update_from_sync_response
 
@@ -92,11 +92,11 @@ async def push_to_rajapi():
         }
 
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(settings.RAJAPI_SYNC_URL, json=payload)
+            resp = await client.post(RAJAPI_SYNC_URL, json=payload)
             if resp.status_code < 300:
                 log.info(
                     f"[RajAPI] [OK] Synced {len(variables)} parameters "
-                    f"to {settings.RAJAPI_SYNC_URL} (HTTP {resp.status_code})"
+                    f"to {RAJAPI_SYNC_URL} (HTTP {resp.status_code})"
                 )
                 # Parse response for broadcast messages and lock status
                 try:

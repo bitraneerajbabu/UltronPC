@@ -1,1 +1,0 @@
-"""UltrON — app package init"""

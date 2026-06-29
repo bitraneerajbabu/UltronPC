@@ -72,3 +72,36 @@ Ensure `console=False` is set in the `EXE(...)` call so no terminal appears.
 - Build the EXE and test login persistence across restarts
 - Verify console window does not appear on launch
 - Verify the Update button shows versions correctly
+
+---
+
+## GSTACK REVIEW REPORT
+
+### DX Plan Review — Scorecard
+
+| Dimension | Score | Prior | Trend |
+|---|---|---|---|
+| Usable | 5 | — | baseline |
+| Credible | 6 | — | baseline |
+| Findable | 4 | — | baseline |
+| Useful | 7 | — | baseline |
+| Valuable | 5 | — | baseline |
+
+**Overall DX score: 5.4/10** (DX TRIAGE mode)
+
+### Executive Summary
+
+All 3 fixes described in this plan are **already implemented in source code**. The plan is stale — the `SECRET_KEY` stability question (Fix 1) and `console=False` configuration (Fix 3) were resolved in earlier work. Two open questions in this plan reference already-fixed issues.
+
+### Critical Recommendations (blocking adoption)
+
+1. **Retire this plan document.** All changes are shipped. Move to `docs/` as historical record or delete.
+2. **Close the publish loop in the GUI.** `UpdateDialog` shows versions but stops at CLI instructions. A `📦 Publish Now` button that shells `publish_release.py --patch` would turn 2 min of CLI into 5 sec.
+3. **Add release notes to the Update dialog.** Fetch GitHub release body alongside version tag so admin sees what changed.
+4. **Run one-click from the plan dialog.** The 3-step build chain (`npm run build` → `pyinstaller` → `publish_release.py`) needs a single orchestrator.
+
+### Evidence
+
+- Fix 1 implemented: `config.py:165-190` (`_load_or_create_secret_key`)
+- Fix 2 implemented: `client_manager.py:100-401` (`UpdateDialog` + `⬆ Update` button)
+- Fix 3 implemented: `UltrON.spec:256` (`console=False`) + `desktop.py:17-47` (DummyStream patch)

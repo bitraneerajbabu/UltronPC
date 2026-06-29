@@ -89,9 +89,12 @@ def _map_row_to_results(
 
         value: Optional[float] = None
         if raw_val is not None:
-            sf = p.get("scale_factor", 1.0) or 1.0
-            off = p.get("offset", 0.0) or 0.0
-            value = (raw_val * sf) + off
+            if p.get("data_type") in ("bool", "uint16"):
+                value = raw_val
+            else:
+                sf = p.get("scale_factor", 1.0) or 1.0
+                off = p.get("offset", 0.0) or 0.0
+                value = (raw_val * sf) + off
 
         results.append({
             "parameter_id": p["id"],

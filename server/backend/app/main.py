@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import models so they are registered with Base.metadata before create_all
-from app.models.core import IndustrySite, Device, Parameter, TelemetryData, Broadcast, PendingCommand
+from app.models.core import IndustrySite, Device, Parameter, TelemetryData, Broadcast, PendingCommand, Alarm
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -141,6 +141,42 @@ def _run_auto_migrations():
         except Exception as e:
             logger.warning(f"Auto-migration for pending_commands skipped: {e}")
 
+        # Add quality count columns to industry_sites for quick dashboard stats
+        try:
+            existing_cols = {c["name"] for c in inspector.get_columns("industry_sites")}
+            for col_name, col_def in [
+                ("quality_u_count", "INTEGER DEFAULT 0"),
+                ("quality_o_count", "INTEGER DEFAULT 0"),
+                ("quality_e_count", "INTEGER DEFAULT 0"),
+                ("quality_n_count", "INTEGER DEFAULT 0"),
+            ]:
+                if col_name not in existing_cols:
+                    conn.execute(text(f"ALTER TABLE industry_sites ADD COLUMN {col_name} {col_def}"))
+                    conn.commit()
+                    logger.info(f"Auto-migration: added '{col_name}' to industry_sites")
+        except Exception as e:
+            logger.warning(f"Auto-migration for quality count columns skipped: {e}")
+
+        # Create alarms table if not exists
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS alarms (
+                    id SERIAL PRIMARY KEY,
+                    site_id INTEGER REFERENCES industry_sites(id) ON DELETE CASCADE,
+                    parameter_id INTEGER REFERENCES parameters(id) ON DELETE SET NULL,
+                    value FLOAT,
+                    quality VARCHAR(10),
+                    message TEXT,
+                    status VARCHAR(20) DEFAULT 'active',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    acknowledged_at TIMESTAMP
+                )
+            """))
+            conn.commit()
+            logger.info("Auto-migration: ensured 'alarms' table")
+        except Exception as e:
+            logger.warning(f"Auto-migration for alarms table skipped: {e}")
+
 _run_auto_migrations()
 
 # ─── Simple In-Memory Rate Limiter ─────────────────────────────────────────────
@@ -189,25 +225,25 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
 
     # Check admin key
     if key == settings.ADMIN_KEY:
-        return {"success": True, "admin_key": key}
+        return {"success": True}
 
     # Check site-level key
     site = db.query(IndustrySite).filter(IndustrySite.api_key == key).first()
     if site:
         if not site.is_active:
             return JSONResponse({"success": False, "detail": "Site is inactive"}, status_code=403)
-        return {"success": True, "admin_key": key}
+        return {"success": True}
 
     # Check device-level key
     device = db.query(Device).filter(Device.api_key == key).first()
     if device:
-        return {"success": True, "admin_key": key}
+        return {"success": True}
 
     logger.warning(f"Failed login attempt from {request.client.host if request.client else 'unknown'}")
     return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
 
 
-from app.api.endpoints import sync, sites, downloads, tgpcb_sync, broadcasts, commands
+from app.api.endpoints import sync, sites, downloads, tgpcb_sync, broadcasts, commands, quality, alarms, cpcb
 
 app.include_router(sync.router, prefix=f"{settings.API_V1_STR}/sync", tags=["sync"])
 app.include_router(tgpcb_sync.router, prefix=f"{settings.API_V1_STR}/tgpcb", tags=["tgpcb-sync"])
@@ -215,6 +251,9 @@ app.include_router(sites.router, prefix=f"{settings.API_V1_STR}/sites", tags=["s
 app.include_router(downloads.router, prefix=f"{settings.API_V1_STR}/downloads", tags=["downloads"])
 app.include_router(broadcasts.router, prefix=f"{settings.API_V1_STR}/broadcasts", tags=["broadcasts"])
 app.include_router(commands.router, prefix=f"{settings.API_V1_STR}/commands", tags=["commands"])
+app.include_router(quality.router, prefix=f"{settings.API_V1_STR}/quality", tags=["quality"])
+app.include_router(alarms.router, prefix=f"{settings.API_V1_STR}/alarms", tags=["alarms"])
+app.include_router(cpcb.router, prefix=f"{settings.API_V1_STR}/cpcb", tags=["cpcb"])
 
 # Serve frontend build if it exists
 _base = os.path.dirname(__file__)

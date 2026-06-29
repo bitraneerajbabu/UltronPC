@@ -90,6 +90,7 @@ export const DevicesScreen = () => {
       host: globalDevice?.host || DEFAULT_PARAM.host,
       port: globalDevice?.port || DEFAULT_PARAM.port,
       slave_id: globalDevice?.slave_id || DEFAULT_PARAM.slave_id,
+      request_hex: globalDevice?.request_hex || '',
       csv_mode: globalDevice?.csv_folder ? 'daily' : 'fixed',
       csv_path: globalDevice?.csv_path || '',
       csv_folder: globalDevice?.csv_folder || '',
@@ -109,6 +110,7 @@ export const DevicesScreen = () => {
       host: p.host || dev?.host || '',
       port: p.port || dev?.port || '',
       slave_id: p.slave_id || dev?.slave_id || '',
+      request_hex: dev?.request_hex || '',
       input_type: dev?.protocol || 'modbus_tcp',
       csv_mode: dev?.csv_folder ? 'daily' : 'fixed',
       csv_path: dev?.csv_path || '',
@@ -159,8 +161,8 @@ export const DevicesScreen = () => {
         parity: deviceProtocol === 'modbus_rtu' ? (form.parity || 'N') : null,
         stop_bits: deviceProtocol === 'modbus_rtu' ? (form.stop_bits || 1) : null,
         slave_id: form.slave_id || 1,
-        request_hex: (deviceProtocol === 'tcp_custom' || deviceProtocol === 'iseo_tcp') ? (form.request_hex || null) : null,
-        response_delimiter: (deviceProtocol === 'tcp_custom' || deviceProtocol === 'iseo_tcp') ? (form.response_delimiter || 'newline') : 'newline',
+        request_hex: (deviceProtocol === 'tcp_custom' || deviceProtocol === 'udp_custom') ? (form.request_hex || null) : null,
+        response_delimiter: (deviceProtocol === 'tcp_custom' || deviceProtocol === 'udp_custom') ? (form.response_delimiter || 'newline') : 'newline',
         csv_path: deviceProtocol === 'csv' && form.csv_mode === 'fixed' ? form.csv_path : null,
         csv_folder: deviceProtocol === 'csv' && form.csv_mode === 'daily' ? form.csv_folder : null,
         csv_filename_pattern: deviceProtocol === 'csv' && form.csv_mode === 'daily'
@@ -231,7 +233,7 @@ export const DevicesScreen = () => {
                 {parameters.map((p, i) => {
                   const dev = devices.find(d => d.id === p.device_id);
                   const proto = dev?.protocol || '�';
-                  const protoLabel = proto === 'modbus_tcp' ? 'Modbus TCP' : proto === 'modbus_rtu' ? 'Modbus RTU' : proto === 'csv' ? 'CSV / Excel' : proto === 'tcp_custom' ? 'TCP Custom' : proto === 'iseo_tcp' ? 'ISEO TCP' : proto;
+                  const protoLabel = proto === 'modbus_tcp' ? 'Modbus TCP' : proto === 'modbus_rtu' ? 'Modbus RTU' : proto === 'csv' ? 'CSV / Excel' : proto === 'tcp_custom' ? 'TCP Custom' : proto === 'udp_custom' ? 'UDP Custom' : proto;
                   const addr = proto === 'csv'
                     ? (dev?.csv_folder ? dev.csv_folder + '\\' + (dev.csv_filename_pattern || '') : (dev?.csv_path || '�'))
                     : (p.host || dev?.host || '�');
@@ -246,9 +248,9 @@ export const DevicesScreen = () => {
                         <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>{protoLabel}</span>
                       </td>
                       <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{proto !== 'csv' ? addr + ':' + port : addr}</td>
-                      <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{['iseo_tcp', 'tcp_custom'].includes(proto) ? '-' : (p.slave_id || dev?.slave_id || '')}</td>
+                      <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{['tcp_custom', 'udp_custom'].includes(proto) ? '-' : (p.slave_id || dev?.slave_id || '')}</td>
                       <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{p.register_address}</td>
-                      <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>{['iseo_tcp', 'tcp_custom'].includes(proto) ? '-' : getDataTypeLabel(p.data_type, p.byte_order)}</td>
+                      <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>{['tcp_custom', 'udp_custom'].includes(proto) ? '-' : getDataTypeLabel(p.data_type, p.byte_order)}</td>
                       <td style={{ padding: '12px 14px' }}>
                         <span style={{
                           fontSize: '10px', fontWeight: '700', padding: '3px 10px', borderRadius: '99px',
@@ -304,9 +306,9 @@ export const DevicesScreen = () => {
               <div>
                 <label style={s()}>Protocol / Data Source</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {['modbus_tcp', 'modbus_rtu', 'tcp_custom', 'iseo_tcp', 'csv'].map(proto => (
+                  {['modbus_tcp', 'modbus_rtu', 'tcp_custom', 'udp_custom', 'csv'].map(proto => (
                     <button key={proto} onClick={() => setForm(p => ({ ...p, input_type: proto }))} style={btnStyle(form.input_type === proto)}>
-                      {proto === 'modbus_tcp' ? 'TCP' : proto === 'modbus_rtu' ? 'RS485' : proto === 'tcp_custom' ? 'TCP Custom' : proto === 'iseo_tcp' ? 'ISEO TCP' : 'CSV / Excel'}
+                      {proto === 'modbus_tcp' ? 'TCP' : proto === 'modbus_rtu' ? 'RS485' : proto === 'tcp_custom' ? 'TCP Custom' : proto === 'udp_custom' ? 'UDP Custom' : 'CSV / Excel'}
                     </button>
                   ))}
                 </div>
@@ -461,7 +463,7 @@ export const DevicesScreen = () => {
                 </>
               ) : (
                 <>
-                  <div style={{ display: 'grid', gridTemplateColumns: ['iseo_tcp', 'tcp_custom'].includes(form.input_type) ? '1fr 1fr' : '1fr 1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: ['tcp_custom', 'udp_custom'].includes(form.input_type) ? '1fr 1fr' : '1fr 1fr 1fr', gap: '12px' }}>
                     <div>
                       <label style={s()}>IP Address</label>
                       <input type="text" name="host" value={form.host} onChange={handleChange} style={ipt} placeholder="192.168.1.101" />
@@ -470,14 +472,14 @@ export const DevicesScreen = () => {
                       <label style={s()}>Port</label>
                       <input type="text" name="port" value={form.port} onChange={handleChange} style={ipt} placeholder="502" />
                     </div>
-                    {!['iseo_tcp', 'tcp_custom'].includes(form.input_type) && (
+                    {!['tcp_custom', 'udp_custom'].includes(form.input_type) && (
                       <div>
                         <label style={s()}>Slave ID</label>
                         <input type="number" name="slave_id" value={form.slave_id} onChange={handleChange} style={ipt} />
                       </div>
                     )}
                   </div>
-                  {(form.input_type === 'tcp_custom' || form.input_type === 'iseo_tcp') && (
+                  {(form.input_type === 'tcp_custom' || form.input_type === 'udp_custom') && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
                       <div>
                         <label style={s()}>Request Hex Command</label>
@@ -498,7 +500,7 @@ export const DevicesScreen = () => {
               )}
               {form.input_type !== 'csv' && (
                 <>
-                  {!['iseo_tcp', 'tcp_custom'].includes(form.input_type) && (
+                  {!['tcp_custom', 'udp_custom'].includes(form.input_type) && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div>
                         <label style={s()}>Function Code</label>
@@ -520,15 +522,15 @@ export const DevicesScreen = () => {
                       </div>
                     </div>
                   )}
-                  <div style={{ display: 'grid', gridTemplateColumns: ['iseo_tcp', 'tcp_custom'].includes(form.input_type) ? '1fr' : '1fr 1fr', gap: '12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: ['tcp_custom', 'udp_custom'].includes(form.input_type) ? '1fr' : '1fr 1fr', gap: '12px' }}>
                     <div>
-                      <label style={s()}>{['iseo_tcp', 'tcp_custom'].includes(form.input_type) ? 'Field Index' : 'Start Address'}</label>
+                      <label style={s()}>{['tcp_custom', 'udp_custom'].includes(form.input_type) ? 'Field Index' : 'Start Address'}</label>
                       <input type="number" name="register_address" value={form.register_address} onChange={handleChange} style={ipt} />
-                      {['iseo_tcp', 'tcp_custom'].includes(form.input_type) && (
+                      {['tcp_custom', 'udp_custom'].includes(form.input_type) && (
                         <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>ASCII field index (0-based space-delimited position)</div>
                       )}
                     </div>
-                    {!['iseo_tcp', 'tcp_custom'].includes(form.input_type) && (
+                    {!['tcp_custom', 'udp_custom'].includes(form.input_type) && (
                       <div>
                         <label style={s()}>Register Count</label>
                         <input type="number" name="register_count" value={form.register_count} onChange={handleChange} style={ipt} />

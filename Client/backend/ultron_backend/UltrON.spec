@@ -26,6 +26,12 @@ hidden = [
     # Python 3.14 compat — built-in C extensions not auto-detected by PyInstaller
     "select",
     "selectors",
+    # pydantic_settings — BaseSettings moved out of pydantic in v2
+    "pydantic_settings",
+    "pydantic_settings.sources",
+    # bcrypt — password hashing
+    "bcrypt",
+    "bcrypt._bcrypt",
     # uvicorn internals loaded by string at runtime
     "uvicorn.logging",
     "uvicorn.loops",
@@ -168,11 +174,13 @@ if UI_DIST.is_dir():
 else:
     print("WARNING: ui_dist/ not found — run 'npm run build' before packaging!")
 
-# 2. Config files (.env.enc or fallback to .env)
-ENV_ENC_FILE = HERE / ".env.enc"
-if ENV_ENC_FILE.is_file():
-    datas.append((str(ENV_ENC_FILE), "."))
-elif ENV_FILE.is_file():
+# 2. Pre-seeded SQLite DB (stations, devices, parameters for KTPP)
+if DB_FILE.is_file():
+    datas.append((str(DB_FILE), "."))
+
+# 3. Config files (bundle plain .env — .env.enc is generated at runtime on each PC)
+ENV_FILE = HERE / ".env"
+if ENV_FILE.is_file():
     datas.append((str(ENV_FILE), "."))
 
 # 3. fpdf2 ships font & image data inside its package
@@ -196,8 +204,14 @@ datas += collect_data_files("sqlite3")
 
 # ── Binaries ──────────────────────────────────────────────────────────────────
 # PyInstaller usually finds .pyd/.dll files automatically via Analysis.
-# If cryptography fails at runtime, explicitly list its _rust.pyd here.
-binaries = []
+# Python 3.14 moves some C extensions to DLLs/ that PyInstaller misses —
+# explicitly bundle them here.
+import sys
+_BUNDLE_BINARIES = [
+    (os.path.join(sys.base_prefix, "DLLs", "select.pyd"), "."),         # asyncio.selector_events
+    (os.path.join(sys.base_prefix, "DLLs", "_overlapped.pyd"), "."),    # asyncio.windows_events
+]
+binaries = _BUNDLE_BINARIES
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
 a = Analysis(
@@ -233,7 +247,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     exclude_binaries=False,
-    name="UltrON",
+    name="Ultron_ktppv1.0.62",
     debug=False,              # no debug console
     bootloader_ignore_signals=False,
     strip=False,

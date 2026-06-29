@@ -63,8 +63,11 @@ def _extract_value(raw_response: str, method: str, config: dict, param: dict) ->
     """Extract a numeric value from the response string using the configured method."""
     if method == "csv_col":
         col_idx = param.get("register_address", 0)
-        reader = csv.reader(io.StringIO(raw_response))
-        fields = next(reader, [])
+        if "," not in raw_response and " " in raw_response:
+            fields = raw_response.split()
+        else:
+            reader = csv.reader(io.StringIO(raw_response))
+            fields = next(reader, [])
         raw_str = fields[col_idx].strip() if col_idx < len(fields) else None
 
     elif method == "position":
@@ -201,9 +204,12 @@ class TCPCustomReader:
             quality = "U" if raw_val is not None else "E"
             value = None
             if raw_val is not None:
-                sf = p.get("scale_factor", 1.0) or 1.0
-                off = p.get("offset", 0.0) or 0.0
-                value = (raw_val * sf) + off
+                if p.get("data_type") in ("bool", "uint16"):
+                    value = raw_val
+                else:
+                    sf = p.get("scale_factor", 1.0) or 1.0
+                    off = p.get("offset", 0.0) or 0.0
+                    value = (raw_val * sf) + off
 
             results.append({
                 "parameter_id": p["id"],

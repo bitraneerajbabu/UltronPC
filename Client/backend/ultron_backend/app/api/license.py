@@ -35,26 +35,27 @@ def _update_env_enc(updates: dict) -> None:
     write_env_enc_from_dict(existing, enc_file)
 
 
+from app.config import CENTRAL_API_URL, RAJAPI_SYNC_URL
+
 class LicenseVerifyRequest(BaseModel):
-    api_url: str
     api_key: str
     amc_key: str = ""
 
 @router.get("/status")
 async def get_license_status():
     """License check removed — always returns True for direct Master login."""
-    return {"licensed": True}
+    return {"licensed": True, "server_url": CENTRAL_API_URL}
 
 @router.post("/verify")
 async def verify_and_save_license(req: LicenseVerifyRequest):
-    """Tests the provided key against the Central server and saves it if valid."""
-    url = req.api_url.strip()
+    """Tests the provided key against rajapi.com and saves it if valid."""
     key = req.api_key.strip()
     
-    if not url or not key:
-        raise HTTPException(status_code=400, detail="URL and API Key are required.")
+    if not key:
+        raise HTTPException(status_code=400, detail="API Key is required.")
     
-    # Send a dummy payload to test the key
+    # Always use the hardcoded RajAPI server URL — clients cannot change this
+    url = CENTRAL_API_URL
     payload = {"client_id": "setup_test", "points": []}
     
     try:
@@ -64,17 +65,14 @@ async def verify_and_save_license(req: LicenseVerifyRequest):
             if resp.status_code != 200:
                 raise HTTPException(status_code=401, detail=f"Server rejected key (Code {resp.status_code})")
                 
-            # Merge license keys into existing config — don't overwrite other settings
             amc_key = req.amc_key.strip() if req.amc_key else ""
             updates = {
-                "CENTRAL_API_URL": url,
                 "CENTRAL_API_KEY": key,
             }
             if amc_key:
                 updates["AMC_KEY"] = amc_key
             _update_env_enc(updates)
             
-            os.environ["CENTRAL_API_URL"] = url
             os.environ["CENTRAL_API_KEY"] = key
             if amc_key:
                 os.environ["AMC_KEY"] = amc_key

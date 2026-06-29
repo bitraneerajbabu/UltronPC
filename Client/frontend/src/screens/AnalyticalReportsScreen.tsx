@@ -24,7 +24,7 @@ const titleStyle = { fontSize: '16px', fontWeight: '700', color: T.text, marginB
 const gridStyle = { display: 'flex', flexWrap: 'wrap' as const, gap: '12px' };
 const labelStyle = { fontSize: '11px', fontWeight: '600', color: T.textLabel, marginBottom: '4px' };
 const btnRowStyle = { display: 'flex', gap: '10px', marginTop: '16px' };
-const sampleNoteStyle = { fontSize: '11px', color: T.warning, fontWeight: '600', marginTop: '8px' };
+const sampleNoteStyle = { fontSize: '12px', color: '#92400e', backgroundColor: '#fef3c7', fontWeight: '700', marginTop: '8px', padding: '8px 14px', borderRadius: '6px', border: '1px solid #f59e0b' };
 
 function genMockHistogram() {
   const ranges = ['0-10', '10-20', '20-30', '30-40', '40-50', '50-60', '60-70', '70-80', '80-90', '90-100'];
@@ -112,6 +112,8 @@ export const AnalyticalReportsScreen = () => {
   const [stationId, setStationId] = useState('');
   const [deviceId, setDeviceId] = useState('');
   const [usingSampleData, setUsingSampleData] = useState(false);
+  const usingSampleDataRef = useRef(usingSampleData);
+  usingSampleDataRef.current = usingSampleData;
   const [generating, setGenerating] = useState<string | null>(null);
 
   const filteredDevices = useMemo(() => devices.filter(d => d.station_id === Number(stationId)), [devices, stationId]);
@@ -192,6 +194,28 @@ export const AnalyticalReportsScreen = () => {
     if (ref.current) { ref.current.destroy(); ref.current = null; }
   };
 
+  const mockWatermark = {
+    id: 'mockWatermark',
+    beforeDraw(chart: any) {
+      if (!usingSampleDataRef.current) return;
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.font = 'bold 40px sans-serif';
+      ctx.fillStyle = 'rgba(220,38,38,0.07)';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const cx = chart.width / 2;
+      const cy = chart.height / 2;
+      ctx.translate(cx, cy);
+      ctx.rotate(-0.4);
+      ctx.fillText('SIMULATED', 0, 0);
+      ctx.restore();
+    }
+  };
+
+  const mc = (base: string, isMock: boolean) =>
+    isMock ? base.replace('0.6', '0.12').replace('0.15', '0.04') : base;
+
   const buildHistogramChart = (bins, total) => {
     destroyChart(histChartInstance);
     if (!histChartRef.current) return;
@@ -206,8 +230,8 @@ export const AnalyticalReportsScreen = () => {
         datasets: [{
           label: 'Frequency',
           data,
-          backgroundColor: 'rgba(15,118,110,0.6)',
-          borderColor: '#0f766e',
+          backgroundColor: mc('rgba(15,118,110,0.6)', usingSampleDataRef.current),
+          borderColor: usingSampleDataRef.current ? 'rgba(15,118,110,0.3)' : '#0f766e',
           borderWidth: 1,
         }],
       },
@@ -226,6 +250,7 @@ export const AnalyticalReportsScreen = () => {
           y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' }, beginAtZero: true },
         },
       },
+      plugins: [mockWatermark],
     });
   };
 
@@ -242,8 +267,8 @@ export const AnalyticalReportsScreen = () => {
         datasets: [{
           label: 'Value',
           data: values,
-          backgroundColor: 'rgba(56,189,248,0.6)',
-          borderColor: '#38bdf8',
+          backgroundColor: mc('rgba(56,189,248,0.6)', usingSampleDataRef.current),
+          borderColor: usingSampleDataRef.current ? 'rgba(56,189,248,0.3)' : '#38bdf8',
           borderWidth: 1,
         }],
       },
@@ -255,6 +280,7 @@ export const AnalyticalReportsScreen = () => {
           y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' }, beginAtZero: true },
         },
       },
+      plugins: [mockWatermark],
     });
   };
 
@@ -265,10 +291,10 @@ export const AnalyticalReportsScreen = () => {
     const datasets: any[] = [{
       label: 'Data Points',
       data: points,
-      backgroundColor: 'rgba(15,118,110,0.6)',
-      borderColor: '#0f766e',
-      pointRadius: 4,
-      pointHoverRadius: 6,
+          backgroundColor: mc('rgba(15,118,110,0.6)', usingSampleDataRef.current),
+          borderColor: usingSampleDataRef.current ? 'rgba(15,118,110,0.3)' : '#0f766e',
+      pointRadius: usingSampleDataRef.current ? 3 : 4,
+      pointHoverRadius: usingSampleDataRef.current ? 4 : 6,
     }];
     if (showTrend) {
       const trendLine = computeLinearRegression(points);
@@ -296,6 +322,7 @@ export const AnalyticalReportsScreen = () => {
           y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
         },
       },
+      plugins: [mockWatermark],
     });
   };
 
@@ -312,9 +339,11 @@ export const AnalyticalReportsScreen = () => {
         datasets: [{
           label: 'Availability %',
           data: avail,
-          backgroundColor: avail.map(v => v >= 95 ? 'rgba(16,185,129,0.6)' : v >= 85 ? 'rgba(245,158,11,0.6)' : 'rgba(239,68,68,0.6)'),
-          borderColor: avail.map(v => v >= 95 ? '#10b981' : v >= 85 ? '#f59e0b' : '#ef4444'),
-          borderWidth: 1,
+          backgroundColor: usingSampleDataRef.current
+            ? avail.map(v => v >= 95 ? 'rgba(16,185,129,0.12)' : v >= 85 ? 'rgba(245,158,11,0.12)' : 'rgba(239,68,68,0.12)')
+            : avail.map(v => v >= 95 ? 'rgba(16,185,129,0.6)' : v >= 85 ? 'rgba(245,158,11,0.6)' : 'rgba(239,68,68,0.6)'),
+          borderColor: usingSampleDataRef.current ? 'rgba(148,163,184,0.3)' : undefined,
+          borderWidth: usingSampleDataRef.current ? 0 : 1,
         }],
       },
       options: {
@@ -327,6 +356,7 @@ export const AnalyticalReportsScreen = () => {
           y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' }, min: 0, max: 100 },
         },
       },
+      plugins: [mockWatermark],
     });
   };
 
@@ -343,9 +373,12 @@ export const AnalyticalReportsScreen = () => {
       data: {
         labels,
         datasets: [
-          { label: 'Average', data: avgs, backgroundColor: 'rgba(15,118,110,0.6)', borderColor: '#0f766e', borderWidth: 1 },
-          { label: 'Min', data: mins, backgroundColor: 'rgba(56,189,248,0.6)', borderColor: '#38bdf8', borderWidth: 1 },
-          { label: 'Max', data: maxs, backgroundColor: 'rgba(239,68,68,0.6)', borderColor: '#ef4444', borderWidth: 1 },
+          { label: 'Average', data: avgs,           backgroundColor: mc('rgba(15,118,110,0.6)', 
+usingSampleDataRef.current),
+          borderColor: usingSampleDataRef.current ? 
+'rgba(15,118,110,0.3)' : '#0f766e', borderWidth: 1 },
+          { label: 'Min', data: mins, backgroundColor: mc('rgba(56,189,248,0.6)', usingSampleDataRef.current), borderColor: usingSampleDataRef.current ? 'rgba(56,189,248,0.3)' : '#38bdf8', borderWidth: 1 },
+          { label: 'Max', data: maxs, backgroundColor: mc('rgba(239,68,68,0.6)', usingSampleDataRef.current), borderColor: usingSampleDataRef.current ? 'rgba(239,68,68,0.3)' : '#ef4444', borderWidth: 1 },
         ],
       },
       options: {
@@ -356,6 +389,7 @@ export const AnalyticalReportsScreen = () => {
           y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' }, beginAtZero: true },
         },
       },
+      plugins: [mockWatermark],
     });
   };
 
@@ -372,8 +406,8 @@ export const AnalyticalReportsScreen = () => {
         datasets: [{
           label: 'Data Availability %',
           data: avail,
-          backgroundColor: 'rgba(15,118,110,0.6)',
-          borderColor: '#0f766e',
+          backgroundColor: mc('rgba(15,118,110,0.6)', usingSampleDataRef.current),
+          borderColor: usingSampleDataRef.current ? 'rgba(15,118,110,0.3)' : '#0f766e',
           borderWidth: 1,
         }],
       },
@@ -385,6 +419,7 @@ export const AnalyticalReportsScreen = () => {
           y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' }, min: 0, max: 100 },
         },
       },
+      plugins: [mockWatermark],
     });
   };
 
@@ -395,6 +430,11 @@ export const AnalyticalReportsScreen = () => {
       const qs = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&');
       const url = `${API_BASE}/reports/${endpoint}?${qs}`;
       const res = await authFetch(url);
+      if (res.status === 401 || res.status === 403) {
+        sessionStorage.removeItem('ultron_token');
+        window.location.href = '/#/login';
+        return null;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return data;
@@ -495,7 +535,7 @@ export const AnalyticalReportsScreen = () => {
     </div>
   );
 
-  const sampleNote = usingSampleData ? <div style={sampleNoteStyle}>Using sample data</div> : null;
+  const sampleNote = usingSampleDataRef.current ? <div style={sampleNoteStyle}>⚠ Sample Data — API endpoint returned an error. Values shown are simulated, not actual readings.</div> : null;
 
   // ── Render Histogram ──
   const renderHistogram = () => (
@@ -563,7 +603,7 @@ export const AnalyticalReportsScreen = () => {
     const p = percResult;
     return (
       <div style={secStyle}>
-        <div style={titleStyle}>Percentile Report</div>
+        <div style={titleStyle}>Percentile Report — Statistical Distribution</div>
         {renderStationSelector(
           <>
             <div>

@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 
-from app.config import settings
+from app.config import settings, APP_DIR
 from app.database import init_db, AsyncSessionLocal
 
 from app.websocket_manager import ws_manager
@@ -125,6 +125,20 @@ async def lifespan(app: FastAPI):
 
     # 1. Create storage dirs
     settings.ensure_dirs()
+
+    # 1.5 Copy pre-seeded DB from bundle on first run
+    try:
+        import sys
+        if getattr(sys, "frozen", False):
+            import shutil
+            from pathlib import Path
+            bundle_db = Path(sys._MEIPASS) / "ultron.db"
+            app_db = APP_DIR / "ultron.db"
+            if bundle_db.is_file() and not app_db.is_file():
+                shutil.copy2(str(bundle_db), str(app_db))
+                log.info(f"Copied pre-seeded database from bundle to {app_db}")
+    except Exception as e:
+        log.warning(f"Could not copy bundled database: {e}")
 
     # 2. Init DB tables
     await init_db()
@@ -236,8 +250,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allow_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
 # ─── Rate Limiting (slowapi) ─────────────────────────────────────────────────
@@ -279,20 +293,34 @@ async def get_app_version():
 @app.websocket("/ws/live")
 async def websocket_live(
     websocket: WebSocket,
+    token: str = Query(default=""),
     station_ids: str = Query(default=""),
 ):
     """
     WebSocket endpoint for live dashboard data.
 
-    Connect: ws://localhost:8000/ws/live?station_ids=1,2,3
+    Connect: ws://localhost:8000/ws/live?token=JWT_TOKEN&station_ids=1,2,3
     Messages received:
       - {"type": "live_data", "device_id": ..., "data": [...], "ts": "..."}
       - {"type": "alarm", "alarm_id": ..., "severity": ..., ...}
       - {"type": "heartbeat", "ts": ..., "clients": ...}
     """
+    if not token:
+        await websocket.close(code=4001, reason="Missing auth token")
+        return
+    try:
+        from app.core.security import decode_token
+        payload = decode_token(token)
+        if not payload.get("sub"):
+            await websocket.close(code=4001, reason="Invalid token")
+            return
+    except Exception:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+
     sids = [int(x) for x in station_ids.split(",") if x.strip().isdigit()] if station_ids else []
     await ws_manager.connect(websocket, sids)
-    log.info(f"WS client connected. Subscribed stations: {sids or 'all'}")
+    log.info(f"WS client connected (user={payload.get('sub')}). Subscribed stations: {sids or 'all'}")
 
     try:
         # Send welcome message

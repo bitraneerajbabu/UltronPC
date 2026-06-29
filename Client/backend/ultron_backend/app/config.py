@@ -34,21 +34,25 @@ ENV_ENC_FILE = APP_DIR / ".env.enc"
 if IS_FROZEN:
     BUNDLE_DIR = Path(sys._MEIPASS).resolve()
     BUNDLE_ENV_ENC = BUNDLE_DIR / ".env.enc"
+    BUNDLE_ENV = BUNDLE_DIR / ".env"
     
     # If no config files exist next to the executable, copy the bundled one as default
-    if not ENV_ENC_FILE.is_file() and not ENV_FILE.is_file() and BUNDLE_ENV_ENC.is_file():
-        try:
-            import shutil
-            shutil.copy2(str(BUNDLE_ENV_ENC), str(ENV_ENC_FILE))
-            print(f"[UltrON] Copied default template configuration to {ENV_ENC_FILE.name}", file=sys.stderr)
-        except Exception as copy_err:
-            print(f"[UltrON] Failed to copy template configuration: {copy_err}", file=sys.stderr)
+    if not ENV_ENC_FILE.is_file() and not ENV_FILE.is_file():
+        for src, dst in [(BUNDLE_ENV, ENV_FILE), (BUNDLE_ENV_ENC, ENV_ENC_FILE)]:
+            if src.is_file() and not dst.is_file():
+                try:
+                    import shutil
+                    shutil.copy2(str(src), str(dst))
+                    print(f"[UltrON] Copied default template configuration to {dst.name}", file=sys.stderr)
+                except Exception as copy_err:
+                    print(f"[UltrON] Failed to copy template configuration: {copy_err}", file=sys.stderr)
 
 
-def _recover_config(is_frozen: bool, env_file: Path, env_enc_file: Path, app_dir: Path, bundled_env_enc: Path | None) -> None:
+def _recover_config(is_frozen: bool, env_file: Path, env_enc_file: Path, app_dir: Path, bundled_env_enc: Path | None, bundled_env: Path | None = None) -> None:
     """Attempt to recover configuration when .env.enc is missing or corrupted.
 
-    Tries bundled copy (frozen mode), then plain .env, then .env.bak.
+    Tries bundled copy (frozen mode), then plain .env, then .env.bak,
+    then bundled plain .env.
     If a plain config is found, it re-encrypts to .env.enc for next boot.
     """
     recovered = False
@@ -88,6 +92,26 @@ def _recover_config(is_frozen: bool, env_file: Path, env_enc_file: Path, app_dir
                     break
                 except Exception as fb_err:
                     print(f"[UltrON] Fallback {fallback.name} failed: {fb_err}", file=sys.stderr)
+    # 3. Frozen fallback: try bundled plain .env (portable across machines)
+    if not recovered and is_frozen and bundled_env is not None and bundled_env.is_file():
+        try:
+            import shutil
+            shutil.copy2(str(bundled_env), str(env_file))
+            print(f"[UltrON] Copied bundled .env to APP_DIR.", file=sys.stderr)
+            config_dict = dotenv.dotenv_values(str(env_file))
+            for k, v in config_dict.items():
+                if v is not None:
+                    os.environ[k] = v
+            try:
+                from app.core.config_crypt import encrypt_file, secure_delete_file
+                encrypt_file(str(env_file), str(env_enc_file))
+                secure_delete_file(str(env_file))
+                print(f"[UltrON] Re-encrypted config from bundled .env -> .env.enc", file=sys.stderr)
+            except Exception as enc_err:
+                print(f"[UltrON] Could not re-encrypt bundled .env: {enc_err}", file=sys.stderr)
+            recovered = True
+        except Exception as fb_err:
+            print(f"[UltrON] Bundled .env fallback failed: {fb_err}", file=sys.stderr)
     if not recovered:
         print("[UltrON] WARNING: No valid configuration found. Using defaults.", file=sys.stderr)
 
@@ -129,10 +153,10 @@ elif ENV_ENC_FILE.is_file():
                 os.environ[k] = v
     except Exception as e:
         print(f"[UltrON] Error loading/decrypting .env.enc: {e}", file=sys.stderr)
-        _recover_config(IS_FROZEN, ENV_FILE, ENV_ENC_FILE, APP_DIR, BUNDLE_ENV_ENC if IS_FROZEN else None)
+        _recover_config(IS_FROZEN, ENV_FILE, ENV_ENC_FILE, APP_DIR, BUNDLE_ENV_ENC if IS_FROZEN else None, BUNDLE_ENV if IS_FROZEN else None)
 else:
     # No .env.enc — try plain .env or .env.bak, then re-encrypt
-    _recover_config(IS_FROZEN, ENV_FILE, ENV_ENC_FILE, APP_DIR, BUNDLE_ENV_ENC if IS_FROZEN else None)
+    _recover_config(IS_FROZEN, ENV_FILE, ENV_ENC_FILE, APP_DIR, BUNDLE_ENV_ENC if IS_FROZEN else None, BUNDLE_ENV if IS_FROZEN else None)
 
 
 
@@ -169,7 +193,7 @@ class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.61"
+    APP_VERSION: str = "1.0.62"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -223,7 +247,6 @@ class Settings(BaseSettings):
 
     # ─── RajAPI Central Sync (background, invisible to user) ────
     RAJAPI_API_KEY: str = ""                  # Site API key from rajapi.com — set per client
-    RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/tgpcb/"
     RAJAPI_SYNC_ENABLED: bool = True
 
     RAJAPI_STATION_ID: str = "default_station"
@@ -298,3 +321,10 @@ class Settings(BaseSettings):
 
 # Singleton instance — import this everywhere
 settings = Settings()
+
+# ─── Immutable RajAPI Server URL ──────────────────────────────
+# Hardcoded — cannot be overridden by .env. All UltrON clients
+# past, present, and future connect here.
+RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/tgpcb/"
+RAJAPI_COMMANDS_URL: str = "https://rajapi.com/api/v1/commands/pending"
+CENTRAL_API_URL: str = "https://rajapi.com/api/v1/sync/"

@@ -37,7 +37,7 @@ Download `UltrON.exe` directly from the same link and place it anywhere.
 
 **Login Defaults:**
 - Username: `Master`
-- Password: `Ultron123.0`
+- Password: `<set during installation>`
 
 ---
 
@@ -47,7 +47,7 @@ On first run, if no AMC token is configured:
 
 1. The app shows **"Access Denied — AMC Token is expired or not configured"**
 2. Click the logo 3 times to reveal the override form
-3. Enter credentials: Username `token`, Password `Ultron123.0`
+3. Enter credentials: Username `token`, Password `<set by admin>`
 4. In the setup screen, paste the AMC Token from rajapi.com
 5. Click **Test & Activate**
 

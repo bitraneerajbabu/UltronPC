@@ -35,15 +35,22 @@ def get_fernet_key() -> bytes:
     Derives a Fernet key from the machine-local secret.key file.
     Each installation gets a unique encryption key, so the bundled
     .env.enc cannot be decrypted with the public source alone.
-    Falls back to the legacy derivation only if no secret.key exists
-    (first-run / fresh install scenario).
+    Raises if no secret.key exists — never falls back to a hardcoded key.
     """
     file_key = _get_secret_key_from_file()
-    if file_key:
-        password = file_key.encode("utf-8")
+    if not file_key:
+        raise RuntimeError(
+            "No secret.key found. Generate one with: "
+            "python -c \"import secrets; "
+            "open('secret.key','w').write(secrets.token_urlsafe(64))\""
+        )
+    password = file_key.encode("utf-8")
+    salt_path = Path(__file__).parent.parent.parent / "secret.salt"
+    if salt_path.is_file():
+        salt = base64.urlsafe_b64decode(salt_path.read_text(encoding="utf-8").strip())
     else:
-        password = b"UltrON_Obfuscation_Key_2026_#SunshineTech"
-    salt = b"UltrON_Fixed_Salt_2026_#SunshineTech"
+        salt = os.urandom(16)
+        salt_path.write_text(base64.urlsafe_b64encode(salt).decode("utf-8"), encoding="utf-8")
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,

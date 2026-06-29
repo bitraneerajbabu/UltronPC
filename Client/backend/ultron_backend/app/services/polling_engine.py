@@ -22,7 +22,7 @@ from app.models.telemetry import LiveData, HistoricalData, AverageType, DataQual
 from app.services.modbus_tcp import ModbusTCPReader
 from app.services.modbus_rtu import ModbusRTUReader
 from app.services.tcp_custom import TCPCustomReader
-from app.services.iseo_tcp import IseoTCPReader
+from app.services.udp_custom import UDPCustomReader
 from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher, SmartWatcher, DailySmartWatcher
 from app.services.data_quality import dq_engine
 from app.services.alarm_engine import alarm_engine
@@ -40,7 +40,7 @@ _VALID_QUALITIES = {q.value for q in DataQuality}
 _tcp_readers:    Dict[int, ModbusTCPReader] = {}
 _rtu_readers:    Dict[str, ModbusRTUReader] = {}   # key = serial_port
 _tcp_custom:     Dict[int, TCPCustomReader] = {}
-_iseo_tcp:       Dict[int, IseoTCPReader] = {}
+_udp_custom:     Dict[int, UDPCustomReader] = {}
 _csv_watchers:   Dict[int, CSVWatcher] = {}
 
 
@@ -78,16 +78,16 @@ def _get_tcp_custom(device: Device) -> TCPCustomReader:
     return _tcp_custom[device.id]
 
 
-def _get_iseo_tcp(device: Device) -> IseoTCPReader:
-    if device.id not in _iseo_tcp:
-        _iseo_tcp[device.id] = IseoTCPReader(
+def _get_udp_custom(device: Device) -> UDPCustomReader:
+    if device.id not in _udp_custom:
+        _udp_custom[device.id] = UDPCustomReader(
             host=device.host or "",
-            port=device.port or 8001,
+            port=device.port or 4001,
             timeout=device.timeout or 5,
             request_hex=device.request_hex,
-            response_delimiter=device.response_delimiter or "etx",
+            response_delimiter=device.response_delimiter or "newline",
         )
-    return _iseo_tcp[device.id]
+    return _udp_custom[device.id]
 
 
 def _get_csv_watcher(device: Device) -> Optional[CSVWatcher]:
@@ -118,7 +118,7 @@ def _cleanup_reader(device_id: int, protocol: str, device: Device = None):
     """Remove stale reader instances from pool so fresh connections are made."""
     _tcp_readers.pop(device_id, None)
     _tcp_custom.pop(device_id, None)
-    _iseo_tcp.pop(device_id, None)
+    _udp_custom.pop(device_id, None)
     # RS485 RTU: shared by port key — also evict if the device's port is known
     if device and device.serial_port:
         old_reader = _rtu_readers.pop(device.serial_port, None)
@@ -183,8 +183,8 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             reader = _get_tcp_custom(device)
             readings = await reader.poll_parameters(param_dicts)
 
-        elif protocol == "iseo_tcp":
-            reader = _get_iseo_tcp(device)
+        elif protocol == "udp_custom":
+            reader = _get_udp_custom(device)
             readings = await reader.poll_parameters(param_dicts)
 
         elif protocol == "csv":
@@ -404,9 +404,9 @@ async def _central_sync_worker():
     """Background task to push telemetry data to RajAPI.com"""
     log.info("Central Sync Worker started")
     
-    # These would ideally be configured in the UI, but we can load from env for now
+    from app.config import CENTRAL_API_URL
     import os
-    central_url = os.environ.get("CENTRAL_API_URL", "https://rajapi.com/api/v1/sync/")
+    central_url = CENTRAL_API_URL
 
     while _running:
         api_key = os.environ.get("CENTRAL_API_KEY", "")
@@ -452,7 +452,7 @@ async def _central_sync_worker():
                                 from app.config import APP_DIR
                                 from app.core.config_crypt import write_env_enc_from_dict
                                 enc_file = str(APP_DIR / ".env.enc")
-                                write_env_enc_from_dict({"CENTRAL_API_URL": central_url, "CENTRAL_API_KEY": ""}, enc_file)
+                                write_env_enc_from_dict({"CENTRAL_API_KEY": ""}, enc_file)
                         else:
                             log.debug("Successfully synced telemetry to RajAPI")
                             
@@ -519,7 +519,7 @@ async def reload_device(device_id: int):
     # Clear cached readers so fresh connections are made with new config
     _tcp_readers.pop(device_id, None)
     _tcp_custom.pop(device_id, None)
-    _iseo_tcp.pop(device_id, None)
+    _udp_custom.pop(device_id, None)
     _csv_watchers.pop(device_id, None)
 
     async with AsyncSessionLocal() as db:

@@ -1,5 +1,6 @@
 """UltrON — Parameters API"""
 
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -9,6 +10,9 @@ from app.models.parameter import Parameter
 from app.schemas.parameter import ParameterCreate, ParameterUpdate, ParameterOut
 from app.services import polling_engine
 from app.core.security import get_current_user, require_admin
+from app.core.logger import get_logger
+
+log = get_logger("ultron.api.parameters")
 
 router = APIRouter(
     prefix="/parameters",
@@ -235,29 +239,6 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
             else:
                 value, quality = None, "E"
                 
-        elif protocol == "iseo_tcp":
-            from app.services.iseo_tcp import IseoTCPReader
-            reader = IseoTCPReader(
-                host=target_host or "",
-                port=target_port or 4001,
-                timeout=min(device.timeout or 5, 5),
-                request_hex=device.request_hex,
-                response_delimiter=device.response_delimiter or "etx"
-            )
-            param_dict = {
-                "id": param.id,
-                "register_address": param.register_address,
-                "scale_factor": param.scale_factor,
-                "offset": param.offset,
-            }
-            res = await reader.poll_parameters([param_dict])
-            await reader.close()
-            if res and len(res) > 0:
-                value = res[0]["value"]
-                quality = res[0]["quality"]
-            else:
-                value, quality = None, "E"
-                
         elif protocol == "csv":
             from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher
             if device.csv_folder:
@@ -315,7 +296,8 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
                 "message": f"Failed to read from analyser: quality check returned '{quality}'",
             }
             
-    except Exception as e:
+    except (asyncio.TimeoutError, ConnectionError, OSError, ValueError) as e:
+        log.error(f"Test read error param={param_id}: {e}", exc_info=True)
         return {
             "success": False,
             "message": f"Error communicating with analyser: {str(e)}",

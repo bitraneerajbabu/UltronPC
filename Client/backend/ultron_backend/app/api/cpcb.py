@@ -339,13 +339,19 @@ async def trigger_backfill(
 
 @router.get("/download/{station_name}")
 async def download_file(station_name: str, db: AsyncSession = Depends(get_db)):
+    import re
+    if not re.match(r"^[a-zA-Z0-9_-]+$", station_name):
+        raise HTTPException(status_code=400, detail="Invalid station name")
     result = await db.execute(
         select(CPCBStationConfig).where(CPCBStationConfig.station_name == station_name)
     )
     config = result.scalar_one_or_none()
     if not config:
         raise HTTPException(status_code=404, detail="Station config not found")
-    file_path = os.path.join(config.export_path, f"{station_name}.txt")
+    safe_path = os.path.normpath(config.export_path)
+    if not safe_path.startswith(os.path.normpath(config.export_path)):
+        raise HTTPException(status_code=400, detail="Invalid export path")
+    file_path = os.path.join(safe_path, f"{station_name}.txt")
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Export file not found. Run export first.")
     from fastapi.responses import FileResponse

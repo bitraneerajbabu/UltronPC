@@ -587,17 +587,13 @@ async def _poll_remote_commands():
     Replaces the old MQTT-based remote_control.py.
     Called every 1 minute from run_server_push("live").
     """
-    from app.config import settings
+    from app.config import settings, RAJAPI_COMMANDS_URL
     station_id = settings.RAJAPI_STATION_ID
     api_key = settings.RAJAPI_API_KEY
     if not station_id or not api_key:
         return
 
-    base_url = settings.RAJAPI_SYNC_URL.replace("/api/v1/tgpcb/", "/api/v1/commands/pending")
-    if base_url == settings.RAJAPI_SYNC_URL:
-        base_url = "https://rajapi.com/api/v1/commands/pending"
-
-    url = f"{base_url}?station_id={station_id}"
+    url = f"{RAJAPI_COMMANDS_URL}?station_id={station_id}"
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(url, headers={"X-Admin-Key": api_key})

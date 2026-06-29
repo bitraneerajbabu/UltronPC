@@ -63,6 +63,7 @@ export const WindroseScreen = () => {
   const [chartData, setChartData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [apiAvailable, setApiAvailable] = useState<boolean | null>(null);
+  const [windDataEmpty, setWindDataEmpty] = useState(false);
 
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstanceRef = useRef<ChartJS | null>(null);
@@ -86,8 +87,10 @@ export const WindroseScreen = () => {
 
   const checkApi = async () => {
     try {
+      const token = sessionStorage.getItem('ultron_token');
+      if (!token) { setApiAvailable(false); return; }
       const res = await fetch(`${API_BASE}/reports/windrose?station_id=${Number(stationId) || 1}&date_from=${dateFrom}&date_to=${dateTo}`, {
-        headers: { 'Authorization': `Bearer ${sessionStorage.getItem('ultron_token')}` },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       setApiAvailable(res.ok);
     } catch {
@@ -136,11 +139,25 @@ export const WindroseScreen = () => {
       if (apiAvailable) {
         const pParam = chartMode === 'pollutionrose' && selectedParamId ? `&parameter_id=${selectedParamId}` : '';
         const res = await authFetch(`${API_BASE}/reports/windrose?station_id=${Number(stationId) || 1}&date_from=${dateFrom}&date_to=${dateTo}${pParam}`);
+        if (res.status === 401 || res.status === 403) {
+          sessionStorage.removeItem('ultron_token');
+          window.location.href = '/#/login';
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
+          const datasets = data.datasets || [];
+          if (!datasets.length) {
+            setWindDataEmpty(true);
+            setChartData(null);
+            showToast('Wind direction parameter not configured for this station.', 'warn');
+            setLoading(false);
+            return;
+          }
+          setWindDataEmpty(false);
           const formatted: any = {
             labels: data.labels || WIND_DIRECTIONS,
-            datasets: (data.datasets || []).map((ds: any, i: number) => ({
+            datasets: datasets.map((ds: any, i: number) => ({
               label: ds.label,
               data: ds.data,
               backgroundColor: `rgba(15,118,110,${0.15 + i * 0.2})`,
@@ -156,11 +173,13 @@ export const WindroseScreen = () => {
         }
       }
 
+      setWindDataEmpty(false);
       const mock = chartMode === 'windrose' ? generateMockWindrose() : generateMockPollutionrose();
       setChartData(mock);
       renderChart(mock);
       showToast('Sample windrose data (API endpoint not yet available).', 'info');
     } catch {
+      setWindDataEmpty(false);
       const mock = chartMode === 'windrose' ? generateMockWindrose() : generateMockPollutionrose();
       setChartData(mock);
       renderChart(mock);
@@ -170,6 +189,7 @@ export const WindroseScreen = () => {
   };
 
   useEffect(() => {
+    setWindDataEmpty(false);
     if (chartData) {
       renderChart(chartData);
     }
@@ -180,6 +200,7 @@ export const WindroseScreen = () => {
     setDateTo(dlDate(0));
     setSelectedParamId('');
     setChartData(null);
+    setWindDataEmpty(false);
     if (chartInstanceRef.current) { chartInstanceRef.current.destroy(); chartInstanceRef.current = null; }
     showToast('Filters reset.');
   };
@@ -244,11 +265,19 @@ export const WindroseScreen = () => {
       <div className="card">
         <div className="section-title">
           {chartMode === 'windrose' ? 'Windrose' : 'Pollutionrose'} Chart
-          {apiAvailable === false && (
-            <span style={{ fontSize: '11px', fontWeight: 400, color: T.textLabel, marginLeft: '12px' }}>
-              (API endpoint coming soon — showing sample data)
+          {windDataEmpty && chartMode === 'windrose' ? (
+            <span style={{ fontSize: '11px', fontWeight: 400, color: '#d97706', marginLeft: '12px' }}>
+              ⚠ No wind direction data — configure a wind speed + direction parameter pair
             </span>
-          )}
+          ) : windDataEmpty ? (
+            <span style={{ fontSize: '11px', fontWeight: 400, color: '#d97706', marginLeft: '12px' }}>
+              ⚠ No pollutant data — configure a parameter to enable pollutionrose
+            </span>
+          ) : chartData && !apiAvailable ? (
+            <span style={{ fontSize: '11px', fontWeight: 400, color: T.textLabel, marginLeft: '12px' }}>
+              (Showing sample data)
+            </span>
+          ) : null}
         </div>
         {chartData ? (
           <div style={{ maxWidth: '600px', margin: '0 auto' }}>
@@ -256,7 +285,9 @@ export const WindroseScreen = () => {
           </div>
         ) : (
           <div className="table-empty">
-            Select filters and click "Generate Chart" to display {chartMode === 'windrose' ? 'windrose' : 'pollutionrose'} data.
+            {windDataEmpty
+              ? 'No windrose data — this station has no wind direction parameter configured.'
+              : `Select filters and click "Generate Chart" to display ${chartMode === 'windrose' ? 'windrose' : 'pollutionrose'} data.`}
           </div>
         )}
       </div>

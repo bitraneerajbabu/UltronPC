@@ -393,8 +393,8 @@ async def test_device_connection(device_id: int, db: AsyncSession = Depends(get_
             "latency_ms": elapsed_ms,
         }
 
-    except Exception as e:
-        log.error(f"Connection test error device={device_id}: {e}")
+    except (asyncio.TimeoutError, ConnectionError, OSError, ValueError) as e:
+        log.error(f"Connection test error device={device_id}: {e}", exc_info=True)
         return {
             "success": False,
             "message": f"Connection test error: {str(e)}",

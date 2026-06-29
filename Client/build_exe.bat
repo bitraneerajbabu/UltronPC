@@ -38,17 +38,13 @@ venv\Scripts\python.exe -m pip install -r requirements.txt
 venv\Scripts\python.exe -m pip install pyinstaller pywebview --upgrade
 if errorlevel 1 goto pip_failed
 
-REM 6. Encrypt config
-if not exist ".env" goto check_enc
-echo.
-echo [STEP 4] Encrypting config file .env to .env.enc...
-venv\Scripts\python.exe run.py --encrypt-env
-goto build_exe
+REM 6. Decrypt config if it was previously encrypted
+if exist ".env.enc" (
+    echo.
+    echo [STEP 4] Decrypting config file .env.enc to .env for packaging...
+    venv\Scripts\python.exe run.py --decrypt-env
+)
 
-:check_enc
-if exist ".env.enc" goto build_exe
-echo.
-echo [WARNING] No .env or .env.enc file found next to backend!
 
 :build_exe
 REM 7. Build executable via PyInstaller
@@ -98,4 +94,3 @@ echo [ERROR] Bootstrapper Installer compilation failed!
 goto end
 
 :end
-pause
