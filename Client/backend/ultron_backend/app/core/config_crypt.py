@@ -12,9 +12,10 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet
 
 def _get_secret_key_from_file() -> str:
-    """Read SECRET_KEY directly from secret.key file to avoid circular import."""
+    """Read SECRET_KEY directly from secret.key file, or generate a new one if missing."""
     from pathlib import Path
     import sys
+    import secrets
     IS_FROZEN = getattr(sys, "frozen", False)
     if IS_FROZEN:
         app_dir = Path(sys.executable).parent.resolve()
@@ -26,6 +27,10 @@ def _get_secret_key_from_file() -> str:
             key = key_file.read_text(encoding="utf-8").strip()
             if key:
                 return key
+        # Generate and save a new secure unique secret.key file
+        key = secrets.token_urlsafe(64)
+        key_file.write_text(key, encoding="utf-8")
+        return key
     except Exception:
         pass
     return ""
