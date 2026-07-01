@@ -101,8 +101,6 @@ export const ReportsScreen = () => {
   const { stations, devices, parameters, API_BASE, showToast, parseUtcDate, authFetch } = useContext(AppContext);
 
   const [stationId, setStationId] = useState('');
-  const [deviceId, setDeviceId] = useState('');
-
   const [normalInterval, setNormalInterval] = useState('1');
   const [normalFromDate, setNormalFromDate] = useState(dlDate(-1));
   const [normalFromTime, setNormalFromTime] = useState('00:00');
@@ -110,6 +108,8 @@ export const ReportsScreen = () => {
   const [normalToTime, setNormalToTime] = useState('23:59');
   const [normalHeaders, setNormalHeaders] = useState([]);
   const [normalRows, setNormalRows] = useState([]);
+
+  const [selectedParamIds, setSelectedParamIds] = useState<string[]>([]);
 
   const [avgInterval, setAvgInterval] = useState('avg_1hr');
   const [avgFromDate, setAvgFromDate] = useState(dlDate(-1));
@@ -119,22 +119,48 @@ export const ReportsScreen = () => {
   const [avgHeaders, setAvgHeaders] = useState([]);
   const [avgRows, setAvgRows] = useState([]);
 
+  // Merge actual stations with unique parameter descriptions to support custom virtual stations
+  const allStations = useMemo(() => {
+    const list = stations.map(s => ({ id: String(s.id), name: s.name }));
+    parameters.forEach(p => {
+      if (p.description && p.description.trim()) {
+        const desc = p.description.trim();
+        if (!list.some(s => s.name === desc)) {
+          list.push({ id: desc, name: desc });
+        }
+      }
+    });
+    return list;
+  }, [stations, parameters]);
+
   useEffect(() => {
-    if (stations.length && !stationId) setStationId(stations[0].id);
-  }, [stations, stationId]);
+    if (allStations.length && !stationId) setStationId(allStations[0].id);
+  }, [allStations, stationId]);
 
-  const filteredDevices = useMemo(() => devices.filter(d => d.station_id === Number(stationId)), [devices, stationId]);
+  const filteredParams = useMemo(() => {
+    return parameters.filter(p => {
+      if (!stationId) return true;
+      if (p.description === stationId) return true;
+      const dev = devices.find(d => String(d.id) === String(p.device_id));
+      if (!dev) return false;
+      const st = stations.find(s => String(s.id) === String(dev.station_id));
+      if (st && st.name === stationId) return true;
+      if (String(dev.station_id) === stationId) return true;
+      return false;
+    });
+  }, [parameters, stationId, stations, devices]);
 
   useEffect(() => {
-    if (filteredDevices.length) setDeviceId(filteredDevices[0].id);
-    else setDeviceId('');
-  }, [filteredDevices]);
+    setSelectedParamIds(filteredParams.map(p => String(p.id)));
+  }, [filteredParams]);
 
-  const filteredParams = useMemo(() => parameters.filter(p => p.device_id === Number(deviceId)), [parameters, deviceId]);
+  const toggleParam = (id: string) => {
+    setSelectedParamIds(prev => prev.includes(id) ? prev.filter(pid => pid !== id) : [...prev, id]);
+  };
 
   const fetchData = async (isNormal: boolean) => {
-    if (!filteredParams.length) { showToast('No mapped parameters for selected device.', 'warn'); return null; }
-    const paramIds = filteredParams.map(p => p.id).join(',');
+    if (!selectedParamIds.length) { showToast('No parameters selected.', 'warn'); return null; }
+    const paramIds = selectedParamIds.join(',');
     const fromD = isNormal ? normalFromDate : avgFromDate;
     const fromT = isNormal ? normalFromTime : avgFromTime;
     const toD = isNormal ? normalToDate : avgToDate;
@@ -206,15 +232,16 @@ export const ReportsScreen = () => {
   };
 
   const handleExport = async (isNormal: boolean, format: 'pdf' | 'csv') => {
-    if (!filteredParams.length) return showToast('No mapped parameters.', 'warn');
-    const paramIds = filteredParams.map(p => p.id).join(',');
+    if (!selectedParamIds.length) return showToast('No parameters selected.', 'warn');
+    const paramIds = selectedParamIds.join(',');
     const fromD = isNormal ? normalFromDate : avgFromDate;
     const fromT = isNormal ? normalFromTime : avgFromTime;
     const toD = isNormal ? normalToDate : avgToDate;
     const toT = isNormal ? normalToTime : avgToTime;
     const startIso = `${fromD}T${fromT}:00Z`;
     const endIso = `${toD}T${toT}:59Z`;
-    const stName = stations.find(s => s.id === Number(stationId))?.name || 'UltrON Station';
+    const resolvedSt = stations.find(s => String(s.id) === stationId || s.name === stationId);
+    const stName = resolvedSt?.name || stationId || 'UltrON Station';
     const stepMin = isNormal ? Number(normalInterval) : 0;
 
     // Estimate rows and warn if > 15 days or > 21600 rows
@@ -276,14 +303,30 @@ export const ReportsScreen = () => {
           <div>
             <div style={labelStyle}>Station</div>
             <select style={SEL} value={stationId} onChange={e => setStationId(e.target.value)}>
-              {stations.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+              {allStations.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
             </select>
           </div>
+
           <div>
-            <div style={labelStyle}>Device</div>
-            <select style={SEL} value={deviceId} onChange={e => setDeviceId(e.target.value)}>
-              {filteredDevices.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
+            <div style={labelStyle}>Parameter</div>
+            <div style={{ ...INP, height: 'auto', minHeight: '38px', maxHeight: '180px', overflowY: 'auto', padding: '4px 8px', width: '220px' }}>
+              {filteredParams.length === 0 ? (
+                <div style={{ color: T.textFaint, fontSize: '12px', padding: '4px 0' }}>No parameters</div>
+              ) : (
+                <>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', fontSize: '12px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={selectedParamIds.length === filteredParams.length} onChange={e => setSelectedParamIds(e.target.checked ? filteredParams.map(p => String(p.id)) : [])} />
+                    <span style={{ fontWeight: '600' }}>Select All</span>
+                  </label>
+                  {filteredParams.map(p => (
+                    <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', fontSize: '12px', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={selectedParamIds.includes(String(p.id))} onChange={() => toggleParam(String(p.id))} />
+                      <span>{p.id}: {p.tag_name}</span>
+                    </label>
+                  ))}
+                </>
+              )}
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
             <button style={{ ...BTN.ghost, padding: '7px 18px' }} onClick={() => handlePreview(true)}>Refresh Preview</button>

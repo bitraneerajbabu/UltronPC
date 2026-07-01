@@ -6,6 +6,7 @@ Uses cryptography Fernet (AES-128 in CBC mode with HMAC-SHA256).
 
 import base64
 import os
+from pathlib import Path
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet

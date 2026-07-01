@@ -108,11 +108,11 @@ class ModbusRTUReader:
         target_sbits = stop_bits if stop_bits else self.stop_bits
 
         has_override = (
-            serial_port is not None
-            or baud_rate is not None
-            or data_bits is not None
-            or parity is not None
-            or stop_bits is not None
+            (serial_port is not None and serial_port != self.port)
+            or (baud_rate is not None and baud_rate != self.baudrate)
+            or (data_bits is not None and data_bits != self.data_bits)
+            or (parity is not None and parity != self.parity)
+            or (stop_bits is not None and stop_bits != self.stop_bits)
         )
 
         if has_override:
@@ -167,7 +167,7 @@ class ModbusRTUReader:
                 if raw_val is None:
                     return None, "E"
 
-                if data_type in ("bool", "uint16"):
+                if data_type == "bool":
                     value = raw_val
                 else:
                     value = (raw_val * scale_factor) + offset
@@ -218,7 +218,7 @@ class ModbusRTUReader:
                     if raw_val is None:
                         return None, "E"
 
-                    if data_type in ("bool", "uint16"):
+                    if data_type == "bool":
                         value = raw_val
                     else:
                         value = (raw_val * scale_factor) + offset
@@ -257,9 +257,13 @@ class ModbusRTUReader:
             )
             sf = p.get("scale_factor", 1.0) or 1.0
             off = p.get("offset", 0.0) or 0.0
+            dt = p.get("data_type", "float32")
             raw_value = None
             if value is not None and sf not in (0, 0.0):
-                raw_value = (value - off) / sf
+                if dt == "bool":
+                    raw_value = value
+                else:
+                    raw_value = (value - off) / sf
 
             results.append({
                 "parameter_id": p["id"],

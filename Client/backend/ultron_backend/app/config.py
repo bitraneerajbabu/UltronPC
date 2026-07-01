@@ -193,7 +193,7 @@ class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.62"
+    APP_VERSION: str = "1.0.65"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -294,6 +294,7 @@ class Settings(BaseSettings):
         env_file = None if os.path.exists(str(APP_DIR / ".env.enc")) else str(APP_DIR / ".env")
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"
 
     def model_post_init(self, __context):
         if not self.ADMIN_PASSWORD:

@@ -79,6 +79,7 @@ export const PROTO = {
   modbus_tcp: { label: 'Modbus TCP', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', glow: 'rgba(56,189,248,0.25)', icon: '' },
   modbus_rtu: { label: 'Modbus RTU', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', glow: 'rgba(167,139,250,0.25)', icon: '' },
   tcp_custom: { label: 'TCP Custom', color: '#34d399', bg: 'rgba(52,211,153,0.12)', glow: 'rgba(52,211,153,0.25)', icon: '' },
+  udp_custom: { label: 'UDP Custom', color: '#f472b6', bg: 'rgba(244,114,182,0.12)', glow: 'rgba(244,114,182,0.25)', icon: '' },
   csv:        { label: 'CSV Watch',  color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  glow: 'rgba(251,191,36,0.25)',  icon: '' },
 };
 

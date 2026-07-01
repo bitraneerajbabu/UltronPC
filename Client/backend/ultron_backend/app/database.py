@@ -69,7 +69,7 @@ async def init_db():
     Create all tables, and ensure schema migrations are applied.
     """
     # Import all models so SQLAlchemy sees them
-    from app.models import station, device, parameter, telemetry, user, server_config, cpcb, calibration  # noqa: F401
+    from app.models import station, device, parameter, telemetry, user, server_config, cpcb, calibration, plant_settings  # noqa: F401
     from sqlalchemy import text
 
     log.info("Initialising database tables …")
@@ -276,16 +276,83 @@ async def init_db():
         except Exception as mig_err:
             log.warning(f"cpcb_station_config migration skipped: {mig_err}")
 
-        # 2.11 One-time fix: reset all scale_factor to 1.0 and offset to 0.0
-        # Removes incorrect scaling that was saved by earlier bugs (e.g. scale_factor=~1031)
+        # 2.11 Migrate plant_settings from JSON file to DB table
         try:
-            result = await conn.execute(text(
-                "UPDATE parameters SET scale_factor = 1.0, "
-                "\"offset\" = 0.0 "
-                "WHERE scale_factor != 1.0 OR \"offset\" != 0.0"
-            ))
-            log.info("Reset all scale_factor/offset to defaults — auto-fix applied")
-        except Exception as fix_err:
-            log.warning(f"scale_factor reset skipped: {fix_err}")
+            from app.config import APP_DIR
+            plant_json = APP_DIR / "plant_settings.json"
+            if plant_json.exists():
+                existing_plant = await conn.run_sync(get_columns, "plant_settings")
+                if existing_plant:
+                    count = await conn.execute(text("SELECT COUNT(*) FROM plant_settings"))
+                    if count.scalar() == 0:
+                        import json
+                        try:
+                            with open(plant_json, "r", encoding="utf-8") as f:
+                                data = json.load(f)
+                            await conn.execute(
+                                text("INSERT INTO plant_settings (plant_name, plant_address, plant_logo) VALUES (:name, :addr, :logo)"),
+                                {"name": data.get("plantName", "UltrON Industrial Plant"),
+                                 "addr": data.get("plantAddress", "Industrial Zone, Block A"),
+                                 "logo": data.get("plantLogo", "")},
+                            )
+                            log.info("Migrated plant_settings from JSON file to DB")
+                        except Exception:
+                            log.warning("plant_settings.json found but could not be parsed")
+        except Exception as mig_err:
+            log.warning(f"plant_settings migration skipped: {mig_err}")
+
+        # 2.13 Database cleanup: delete duplicate 'Global Gateway' devices with no parameters
+        try:
+            r = await conn.execute(text("SELECT id FROM devices WHERE name = 'Global Gateway'"))
+            gg_ids = [row[0] for row in r.fetchall()]
+            if len(gg_ids) > 1:
+                gg_ids_str = ",".join(str(i) for i in gg_ids)
+                r_used = await conn.execute(text(
+                    f"SELECT DISTINCT device_id FROM parameters WHERE device_id IN ({gg_ids_str})"
+                ))
+                used_ids = {row[0] for row in r_used.fetchall()}
+                
+                # Keep at least one Global Gateway even if none are used
+                to_keep = None
+                if used_ids:
+                    to_keep = used_ids
+                else:
+                    to_keep = {gg_ids[0]}
+                
+                unused_ids = [gid for gid in gg_ids if gid not in to_keep]
+                if unused_ids:
+                    unused_ids_str = ",".join(str(i) for i in unused_ids)
+                    await conn.execute(text(
+                        f"DELETE FROM devices WHERE id IN ({unused_ids_str})"
+                    ))
+                    log.info(f"Cleaned up {len(unused_ids)} duplicate Global Gateway devices.")
+        except Exception as clean_err:
+            log.warning(f"Device cleanup failed: {clean_err}")
+
+        # 2.14 Seed default 'Global Gateway' if devices table is completely empty
+        try:
+            count = await conn.execute(text("SELECT COUNT(*) FROM devices"))
+            if count.scalar() == 0:
+                # Find or create a default station first
+                st_count = await conn.execute(text("SELECT COUNT(*) FROM stations"))
+                if st_count.scalar() == 0:
+                    from datetime import datetime
+                    now_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')
+                    await conn.execute(text(
+                        "INSERT INTO stations (name, station_type, status, is_active, created_at, updated_at) "
+                        "VALUES ('Default Station', 'AAQMS', 'offline', 1, :now, :now)"
+                    ), {"now": now_str})
+                st_res = await conn.execute(text("SELECT id FROM stations ORDER BY id LIMIT 1"))
+                station_id = st_res.scalar()
+                
+                from datetime import datetime
+                now_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')
+                await conn.execute(text(
+                    "INSERT INTO devices (name, protocol, is_active, station_id, created_at, updated_at) "
+                    "VALUES ('Global Gateway', 'modbus_tcp', 1, :station_id, :now, :now)"
+                ), {"station_id": station_id, "now": now_str})
+                log.info("Seeded default Global Gateway device.")
+        except Exception as seed_err:
+            log.warning(f"Device seeding failed: {seed_err}")
 
     log.info("Database ready [OK]")

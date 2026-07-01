@@ -78,6 +78,7 @@ class ParameterCreate(ParameterBase):
 
 
 class ParameterUpdate(BaseModel):
+    device_id: Optional[int] = None
     name: Optional[str] = None
     tag_name: Optional[str] = None
     description: Optional[str] = None

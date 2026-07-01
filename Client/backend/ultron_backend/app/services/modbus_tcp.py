@@ -227,7 +227,7 @@ class ModbusTCPReader:
             if raw_val is None:
                 return None, "E"
 
-            if data_type in ("bool", "uint16"):
+            if data_type == "bool":
                 value = raw_val
             else:
                 value = (raw_val * scale_factor) + offset
@@ -269,9 +269,13 @@ class ModbusTCPReader:
             )
             sf = p.get("scale_factor", 1.0) or 1.0
             off = p.get("offset", 0.0) or 0.0
+            dt = p.get("data_type", "float32")
             raw_value = None
             if value is not None and sf not in (0, 0.0):
-                raw_value = (value - off) / sf
+                if dt == "bool":
+                    raw_value = value
+                else:
+                    raw_value = (value - off) / sf
 
             results.append({
                 "parameter_id": p["id"],

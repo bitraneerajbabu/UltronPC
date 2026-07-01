@@ -34,3 +34,12 @@
 - **DB:** PostgreSQL 15 Alpine in Docker, user `ultron_admin`, password `<REDACTED>`, database `ultron_central`
 - **API keys:** Static, stored in DB plaintext. No JWTs.
 - **Login:** Returns `admin_key` in response body (plaintext echo)
+
+## Latest Session (2026-06-30) — Edit Gateway Rule Fixes
+- **APP_VERSION:** `1.0.65` — EXE built at `client/backend/ultron_backend/dist/Ultron_1.0.65.exe` (33.7 MB)
+- **Fixed `handleChange` NaN bug in `DevicesScreen.tsx:129-137`:** Number inputs (`scale_factor`, `offset`, etc.) stored raw string value instead of `Number(value)`. `Number("-")` → `NaN` → React renders blank, losing negative sign. Now converts to number only at save time.
+- **Fixed `description` overwrite (`DevicesScreen.tsx:196-207`):** Removed `description: form.station_name` from parameter save payload — no longer corrupts parameter description with station name.
+- **Numeric fields converted on save (`DevicesScreen.tsx:203-208`):** Added explicit `Number()` conversion for 13 numeric fields in `handleSave` payload, with NaN guard.
+- **Device update numeric fields (`DevicesScreen.tsx:157-175`):** Added `toNum()` helper for device-level fields (`slave_id`, `baud_rate`, etc.) to handle string → number conversion with fallback.
+- Fixed `===` → `==` in AppContext (`:607,614`) for `editParameter`/`deleteParameter`
+- Removed hardcoded `host: '192.168.1.101'`/`port: '502'`/`slave_id: '1'` from DEFAULT_PARAM (`:33`)

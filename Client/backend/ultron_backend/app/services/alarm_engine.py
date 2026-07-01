@@ -139,6 +139,18 @@ class AlarmEngine:
         return count
 
     @classmethod
+    async def load_active_from_db(cls, db: AsyncSession):
+        """Populate _active dict from DB on engine start to prevent duplicate alarms after restart."""
+        result = await db.execute(
+            select(Alarm).where(Alarm.state == AlarmState.active)
+        )
+        alarms = result.scalars().all()
+        async with cls._lock:
+            for alarm in alarms:
+                cls._active[(alarm.parameter_id, alarm.threshold_type)] = alarm.id
+        log.info(f"Loaded {len(alarms)} active alarm(s) into engine tracker")
+
+    @classmethod
     async def get_active_count(cls, db: AsyncSession) -> int:
         result = await db.execute(
             select(Alarm).where(Alarm.state == AlarmState.active)

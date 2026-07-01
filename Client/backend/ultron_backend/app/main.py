@@ -143,6 +143,11 @@ async def lifespan(app: FastAPI):
     # 2. Init DB tables
     await init_db()
 
+    # 2.5 Restore tracked active alarms from DB into in-memory engine
+    from app.services.alarm_engine import alarm_engine
+    async with AsyncSessionLocal() as restore_db:
+        await alarm_engine.load_active_from_db(restore_db)
+
     # 3. Start polling engine
     await polling_engine.start_polling()
 
@@ -183,7 +188,7 @@ async def lifespan(app: FastAPI):
         run_server_push,
         args=["live"],
         trigger="interval",
-        minutes=1,
+        seconds=5,
         id="server_push_live",
         replace_existing=True,
     )
@@ -191,24 +196,24 @@ async def lifespan(app: FastAPI):
         run_server_push,
         args=["delay"],
         trigger="interval",
-        minutes=15,
+        seconds=5,
         id="server_push_delay",
         replace_existing=True,
     )
-    # RajAPI Central Sync — silently push live data every minute (if API key is configured)
+    # RajAPI Central Sync — silently push live data every 5 seconds (if API key is configured)
     scheduler.add_job(
         push_to_rajapi,
         trigger="interval",
-        minutes=1,
+        seconds=5,
         id="rajapi_sync",
         replace_existing=True,
     )
-    # CPCB CAAQM Legacy Export — run every 15 minutes at 0,15,30,45
+    # CPCB CAAQM Legacy Export — run every 5 seconds
     from app.services.cpcb.scheduler_service import run_cpcb_pipeline
     scheduler.add_job(
         run_cpcb_pipeline,
-        trigger="cron",
-        minute="0,15,30,45",
+        trigger="interval",
+        seconds=5,
         id="cpcb_export",
         replace_existing=True,
     )

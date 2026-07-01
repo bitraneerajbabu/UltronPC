@@ -9,7 +9,6 @@ export const TrendsScreen = () => {
   
   // Filter Inputs
   const [stationId, setStationId] = useState('');
-  const [deviceId, setDeviceId] = useState('');
   const [paramId, setParamId] = useState('');
   const [resolution, setResolution] = useState('raw');
   const [startDate, setStartDate] = useState(defaultDate(-1));
@@ -34,30 +33,40 @@ export const TrendsScreen = () => {
     };
   }, []);
 
+  // Merge actual stations with unique parameter descriptions to support custom virtual stations
+  const allStations = useMemo(() => {
+    const list = stations.map(s => ({ id: String(s.id), name: s.name }));
+    parameters.forEach(p => {
+      if (p.description && p.description.trim()) {
+        const desc = p.description.trim();
+        if (!list.some(s => s.name === desc)) {
+          list.push({ id: desc, name: desc });
+        }
+      }
+    });
+    return list;
+  }, [stations, parameters]);
+
   // Set default filter dropdown selections
   useEffect(() => {
-    if (stations.length && !stationId) {
-      setStationId(stations[0].id);
+    if (allStations.length && !stationId) {
+      setStationId(allStations[0].id);
     }
-  }, [stations, stationId]);
+  }, [allStations, stationId]);
 
-  // Filter devices when station changes
-  const filteredDevices = useMemo(() => {
-    return devices.filter(d => d.station_id === Number(stationId));
-  }, [devices, stationId]);
-
-  useEffect(() => {
-    if (filteredDevices.length) {
-      setDeviceId(filteredDevices[0].id);
-    } else {
-      setDeviceId('');
-    }
-  }, [filteredDevices]);
-
-  // Filter parameters when device changes
+  // Filter parameters when station changes
   const filteredParams = useMemo(() => {
-    return parameters.filter(p => p.device_id === Number(deviceId));
-  }, [parameters, deviceId]);
+    return parameters.filter(p => {
+      if (!stationId) return true;
+      if (p.description === stationId) return true;
+      const dev = devices.find(d => String(d.id) === String(p.device_id));
+      if (!dev) return false;
+      const st = stations.find(s => String(s.id) === String(dev.station_id));
+      if (st && st.name === stationId) return true;
+      if (String(dev.station_id) === stationId) return true;
+      return false;
+    });
+  }, [parameters, stationId, stations, devices]);
 
   useEffect(() => {
     if (filteredParams.length) {
@@ -137,6 +146,24 @@ export const TrendsScreen = () => {
         const ctx = chartRef.current.getContext('2d');
         const shortLabels = series.labels.map(lbl => formatShortDate(lbl));
 
+        const paramObj = parameters.find(p => String(p.id) === String(paramId)) || {};
+        const limitLines: { value: number; color: string; label: string }[] = [];
+        if (paramObj.alarm_high_high != null && !isNaN(Number(paramObj.alarm_high_high))) {
+          limitLines.push({ value: Number(paramObj.alarm_high_high), color: '#ef4444', label: 'H/H' });
+        }
+        if (paramObj.alarm_high != null && !isNaN(Number(paramObj.alarm_high))) {
+          limitLines.push({ value: Number(paramObj.alarm_high), color: '#f59e0b', label: 'High' });
+        }
+        if (paramObj.alarm_low != null && !isNaN(Number(paramObj.alarm_low))) {
+          limitLines.push({ value: Number(paramObj.alarm_low), color: '#f59e0b', label: 'Low' });
+        }
+        if (paramObj.alarm_low_low != null && !isNaN(Number(paramObj.alarm_low_low))) {
+          limitLines.push({ value: Number(paramObj.alarm_low_low), color: '#ef4444', label: 'L/L' });
+        }
+
+        const maxLimit = limitLines.length > 0 ? Math.max(...limitLines.map(ll => ll.value)) : undefined;
+        const minLimit = limitLines.length > 0 ? Math.min(...limitLines.map(ll => ll.value)) : undefined;
+
         chartInstanceRef.current = new ChartJS(ctx, {
           type: 'line',
           data: {
@@ -166,9 +193,39 @@ export const TrendsScreen = () => {
             },
             scales: {
               x: { ticks: { color: '#94a3b8', font: { size: 10 }, maxTicksLimit: 15 }, grid: { color: '#f1f5f9' } },
-              y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' } }
+              y: { 
+                ticks: { color: '#94a3b8', font: { size: 11 } }, 
+                grid: { color: '#f1f5f9' },
+                suggestedMax: maxLimit !== undefined ? maxLimit * 1.1 : undefined,
+                suggestedMin: minLimit !== undefined ? Math.min(0, minLimit * 0.9) : 0
+              }
             }
-          }
+          },
+          plugins: [{
+            id: 'limitLines',
+            afterDraw(chart) {
+              const yScale = chart.scales.y;
+              const ctx2 = chart.ctx;
+              limitLines.forEach(ll => {
+                const y = yScale.getPixelForValue(ll.value);
+                if (y < 0 || y > chart.height) return;
+                ctx2.save();
+                ctx2.beginPath();
+                ctx2.setLineDash([5, 4]);
+                ctx2.strokeStyle = ll.color;
+                ctx2.lineWidth = 1.5;
+                ctx2.moveTo(chart.chartArea.left, y);
+                ctx2.lineTo(chart.chartArea.right, y);
+                ctx2.stroke();
+                ctx2.setLineDash([]);
+                ctx2.fillStyle = ll.color;
+                ctx2.font = '10px sans-serif';
+                ctx2.textAlign = 'right';
+                ctx2.fillText(`${ll.label} (${ll.value})`, chart.chartArea.right - 5, y - 4);
+                ctx2.restore();
+              });
+            }
+          }]
         });
       }
 
@@ -271,16 +328,10 @@ export const TrendsScreen = () => {
           <div className="form-group">
             <label className="form-label">Station</label>
             <select className="form-select" value={stationId} onChange={e => setStationId(e.target.value)}>
-              {stations.map(st => <option value={st.id} key={st.id}>{st.name}</option>)}
+              {allStations.map(st => <option value={st.id} key={st.id}>{st.name}</option>)}
             </select>
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Device</label>
-            <select className="form-select" value={deviceId} onChange={e => setDeviceId(e.target.value)}>
-              {filteredDevices.map(d => <option value={d.id} key={d.id}>{d.name}</option>)}
-            </select>
-          </div>
 
           <div className="form-group">
             <label className="form-label">Parameter</label>

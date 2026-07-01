@@ -1,13 +1,15 @@
 """UltrON — Settings API (app-level configuration, user management, DB utilities)"""
 
 from fastapi import APIRouter, Depends, HTTPException
-from app.core.security import get_current_user, require_admin
+from app.core.security import get_current_user, require_admin, hash_password
+from app.models.user import User
+from app.models.plant_settings import PlantSettings
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text, delete
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
-from app.database import get_db, engine, Base
+from app.database import get_db, engine, Base, AsyncSessionLocal
 from app.models.station import Station, StationStatus, StationType
 from app.models.device import Device, DeviceProtocol, DeviceType
 from app.models.parameter import Parameter, RegisterType, DataType, ByteOrder, AlarmSeverity
@@ -111,13 +113,48 @@ async def reset_all_data(db: AsyncSession = Depends(get_db)):
     """
     Drop and recreate all tables — full factory reset.
     WARNING: destroys ALL data including station/device/parameter config.
+    The server auto-restarts after the reset to pick up the fresh DB.
     """
+    import sys, os
     audit.warning("Full database reset initiated via /settings/reset-all")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    log.warning("Full database reset complete — all tables recreated")
-    return {"message": "Full database reset complete. All data removed.", "success": True}
+
+    # Re-seed default admin user (dropped with all other tables)
+    async with AsyncSessionLocal() as seed_db:
+        admin = User(
+            username=settings.ADMIN_USERNAME,
+            hashed_password=hash_password(settings.ADMIN_PASSWORD),
+            role="admin",
+            full_name="System Administrator",
+            is_active=True,
+            created_by="system",
+        )
+        seed_db.add(admin)
+        await seed_db.commit()
+
+    log.warning("Full database reset complete — all tables recreated, admin re-seeded")
+
+    # Auto-restart the server so all background jobs (polling, averages, WS)
+    # start fresh against the recreated tables.  Returns the response first,
+    # then restarts in a background thread after a short delay.
+    try:
+        if getattr(sys, "frozen", False):
+            import threading
+            def _do_restart():
+                import time, subprocess
+                time.sleep(2)
+                try:
+                    subprocess.Popen([sys.executable])
+                except Exception:
+                    pass
+                os._exit(0)
+            threading.Thread(target=_do_restart, daemon=True).start()
+    except Exception:
+        pass
+
+    return {"message": "Factory reset complete. Server restarting...", "success": True}
 
 
 # ─── System Health ────────────────────────────────────────────────────────────
@@ -200,23 +237,22 @@ async def reload_polling():
     }
 
 
-# ─── Plant Settings (Permanent) ───────────────────────────────────────────────
+# ─── Plant Settings (DB-backed) ──────────────────────────────────────────────
 class PlantSettingsSchema(BaseModel):
     plantName: str
     plantAddress: str
     plantLogo: str
 
 @router.get("/plant")
-async def get_plant_settings():
-    import json
-    settings_file = APP_DIR / "plant_settings.json"
-    if settings_file.exists():
-        try:
-            with open(settings_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            log.error(f"Error reading plant settings: {e}")
-    # Default fallback settings
+async def get_plant_settings(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(PlantSettings).limit(1))
+    row = result.scalar_one_or_none()
+    if row:
+        return {
+            "plantName": row.plant_name,
+            "plantAddress": row.plant_address,
+            "plantLogo": row.plant_logo,
+        }
     return {
         "plantName": "UltrON Industrial Plant",
         "plantAddress": "Industrial Zone, Block A",
@@ -224,13 +260,21 @@ async def get_plant_settings():
     }
 
 @router.post("/plant", dependencies=[Depends(require_admin)])
-async def save_plant_settings(payload: PlantSettingsSchema):
-    import json
+async def save_plant_settings(payload: PlantSettingsSchema, db: AsyncSession = Depends(get_db)):
     try:
-        settings_file = APP_DIR / "plant_settings.json"
-        APP_DIR.mkdir(parents=True, exist_ok=True)
-        with open(settings_file, "w", encoding="utf-8") as f:
-            json.dump(payload.model_dump(), f, ensure_ascii=False, indent=2)
+        result = await db.execute(select(PlantSettings).limit(1))
+        row = result.scalar_one_or_none()
+        if row:
+            row.plant_name = payload.plantName
+            row.plant_address = payload.plantAddress
+            row.plant_logo = payload.plantLogo
+        else:
+            db.add(PlantSettings(
+                plant_name=payload.plantName,
+                plant_address=payload.plantAddress,
+                plant_logo=payload.plantLogo,
+            ))
+        await db.flush()
         return {"success": True, "data": payload.model_dump()}
     except Exception as e:
         log.error(f"Error saving plant settings: {e}")

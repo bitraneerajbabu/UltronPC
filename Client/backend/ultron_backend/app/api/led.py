@@ -89,7 +89,6 @@ async def get_led_data(
     # Return as JSON array (no wrapper — exactly what the LED card reads)
     return JSONResponse(content=payload)
 
-
 @router.get(
     "/info",
     summary="LED Endpoint Info",
@@ -98,7 +97,8 @@ async def get_led_data(
 )
 async def get_led_info(db: AsyncSession = Depends(get_db)):
     """Returns a helpful summary of the LED endpoint URL and active channels."""
-    from app.models.server_config import ServerConfig
+    from app.models.server_config import ServerConfig, ServerParameterMapping
+    from sqlalchemy.orm import selectinload
 
     result = await db.execute(
         select(ServerConfig).filter(
@@ -107,19 +107,42 @@ async def get_led_info(db: AsyncSession = Depends(get_db)):
         )
     )
     led_servers = result.scalars().all()
+    server_ids = [s.id for s in led_servers]
+    mappings = []
+    if server_ids:
+        from app.models.parameter import Parameter
+        from app.models.device import Device
+        map_res = await db.execute(
+            select(ServerParameterMapping)
+            .options(
+                selectinload(ServerParameterMapping.parameter)
+                .selectinload(Parameter.device)
+                .selectinload(Device.station)
+            )
+            .filter(
+                ServerParameterMapping.server_id.in_(server_ids),
+                ServerParameterMapping.is_active == True,
+            )
+        )
+        mappings = map_res.scalars().all()
 
     channels = [
         {
-            "name": s.name,
-            "channel_id": s.led_channel_id,
-            "station_name": s.led_station_name,
+            "name": f"{m.led_channel_name or (m.parameter.tag_name if m.parameter else 'Param')}",
+            "channel_id": m.parameter.id if m.parameter else 0,
+            "station_name": (
+                m.parameter.device.station.name
+                if m.parameter and m.parameter.device and m.parameter.device.station
+                else "Station"
+            ),
         }
-        for s in led_servers
+        for m in mappings
     ]
-    pcb_ids = ",".join(str(s.led_channel_id) for s in led_servers if s.led_channel_id)
+
+    pcb_ids = ",".join(str(m.parameter.id) for m in mappings if m.parameter)
 
     return {
-        "endpoint": f"/api/v1/led?auth=username&PCB={pcb_ids or '...'}",
+        "endpoint": f"/api/v1/led/?auth=username&PCB={pcb_ids or '...'}",
         "auth_required": True,
         "active_led_channels": channels,
         "hint": (

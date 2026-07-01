@@ -192,7 +192,10 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
     <div className={`sensor-card ${state.cls}`} onClick={onClick} style={{ 
       display: 'flex', flexDirection: 'column', padding: '20px', 
       borderRadius: '12px', 
-      border: isSelected ? `2.5px solid ${paramTheme.color}` : `1px solid ${isGood ? paramTheme.border : state.dot}`, 
+      borderLeft: `5px solid ${isSelected ? paramTheme.color : (isGood ? paramTheme.border : state.dot)}`,
+      borderTop: '1px solid rgba(235, 225, 205, 0.4)',
+      borderRight: '1px solid rgba(235, 225, 205, 0.4)',
+      borderBottom: '1px solid rgba(235, 225, 205, 0.4)',
       backgroundColor: 'rgba(252, 248, 238, 0.85)', 
       boxShadow: isSelected ? `0 4px 16px ${paramTheme.glow}` : '0 2px 10px rgba(0,0,0,0.02)',
       position: 'relative', cursor: 'pointer', transition: 'all 0.2s ease'
@@ -249,7 +252,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
 
       {/* Footer */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
-        <span style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Raw Feed: {formattedVal} {unit}</span>
+        <span style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Raw Feed: {data?.raw_value != null ? parseFloat(data.raw_value).toFixed(2) : formattedVal} {unit}</span>
         <span style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Received: <span style={{ color: '#475569', fontWeight: '700' }}>{formattedTimestamp}</span></span>
       </div>
     </div>
@@ -390,7 +393,7 @@ export const DashboardScreen = () => {
           });
 
           parameters.forEach(p => {
-            const s = seriesList.find(ser => ser.parameter_id === p.id);
+            const s = seriesList.find(ser => ser.parameter_id == p.id);
             if (s && s.values) {
               datasets[p.tag_name] = s.values.map(v => v !== null ? Number(parseFloat(v).toFixed(2)) : 0);
             } else {
@@ -403,7 +406,7 @@ export const DashboardScreen = () => {
 
         const activeParam = selectedParam || parameters[0]?.tag_name;
         const activeParamObj = parameters.find(p => p.tag_name === activeParam);
-        const activeSeries = activeParamObj ? seriesList.find(s => s.parameter_id === activeParamObj.id) : null;
+        const activeSeries = activeParamObj ? seriesList.find(s => s.parameter_id == activeParamObj.id) : null;
         if (activeSeries && activeSeries.labels && activeSeries.labels.length > 0) {
           const lastLabel = activeSeries.labels[activeSeries.labels.length - 1];
           const parsed = parseUtcDate(lastLabel);
@@ -413,7 +416,6 @@ export const DashboardScreen = () => {
         } else {
           lastTimestampRef.current = '';
         }
-        
         // Render Chart — canvas is guaranteed to be mounted because isTrendsModalOpen is true
         if (chartRef.current && activeParam) {
           if (chartInstanceRef.current) {
@@ -422,11 +424,28 @@ export const DashboardScreen = () => {
           }
 
           const ctx = chartRef.current.getContext('2d');
-          const paramObj = parameters.find(p => p.tag_name === activeParam) || {};
+          const paramObj = activeParamObj || {};
           const unit = paramObj.unit || '';
           
           const activeParamTheme = getParamTheme(activeParam);
           
+          const limitLines: { value: number; color: string; label: string }[] = [];
+          if (paramObj.alarm_high_high != null && !isNaN(Number(paramObj.alarm_high_high))) {
+            limitLines.push({ value: Number(paramObj.alarm_high_high), color: '#ef4444', label: 'H/H' });
+          }
+          if (paramObj.alarm_high != null && !isNaN(Number(paramObj.alarm_high))) {
+            limitLines.push({ value: Number(paramObj.alarm_high), color: '#f59e0b', label: 'High' });
+          }
+          if (paramObj.alarm_low != null && !isNaN(Number(paramObj.alarm_low))) {
+            limitLines.push({ value: Number(paramObj.alarm_low), color: '#f59e0b', label: 'Low' });
+          }
+          if (paramObj.alarm_low_low != null && !isNaN(Number(paramObj.alarm_low_low))) {
+            limitLines.push({ value: Number(paramObj.alarm_low_low), color: '#ef4444', label: 'L/L' });
+          }
+
+          const maxLimit = limitLines.length > 0 ? Math.max(...limitLines.map(ll => ll.value)) : undefined;
+          const minLimit = limitLines.length > 0 ? Math.min(...limitLines.map(ll => ll.value)) : undefined;
+
           chartInstanceRef.current = new ChartJS(ctx, {
             type: 'line',
             data: {
@@ -457,9 +476,39 @@ export const DashboardScreen = () => {
               },
               scales: {
                 x: { ticks: { color: T.textFaint, font: { size: 11 } }, grid: { color: '#f1f5f9' } },
-                y: { ticks: { color: T.textFaint, font: { size: 11 } }, grid: { color: '#f1f5f9' } }
+                y: { 
+                  ticks: { color: T.textFaint, font: { size: 11 } }, 
+                  grid: { color: '#f1f5f9' },
+                  suggestedMax: maxLimit !== undefined ? maxLimit * 1.1 : undefined,
+                  suggestedMin: minLimit !== undefined ? Math.min(0, minLimit * 0.9) : 0
+                }
               }
-            }
+            },
+            plugins: [{
+              id: 'limitLines',
+              afterDraw(chart) {
+                const yScale = chart.scales.y;
+                const ctx2 = chart.ctx;
+                limitLines.forEach(ll => {
+                  const y = yScale.getPixelForValue(ll.value);
+                  if (y < 0 || y > chart.height) return;
+                  ctx2.save();
+                  ctx2.beginPath();
+                  ctx2.setLineDash([5, 4]);
+                  ctx2.strokeStyle = ll.color;
+                  ctx2.lineWidth = 1.5;
+                  ctx2.moveTo(chart.chartArea.left, y);
+                  ctx2.lineTo(chart.chartArea.right, y);
+                  ctx2.stroke();
+                  ctx2.setLineDash([]);
+                  ctx2.fillStyle = ll.color;
+                  ctx2.font = '10px sans-serif';
+                  ctx2.textAlign = 'right';
+                  ctx2.fillText(`${ll.label} (${ll.value})`, chart.chartArea.right - 5, y - 4);
+                  ctx2.restore();
+                });
+              }
+            }]
           });
         }
       } catch (err) {
@@ -622,24 +671,23 @@ export const DashboardScreen = () => {
   };
 
   // Performance memoizations
-  const groupedParametersByStation = useMemo(() => {
+  const groupedBySensor = useMemo(() => {
     const grouped = {};
-    parameters.forEach(p => {
-      const device = devices.find(d => d.id === p.device_id);
-      const stationId = device ? (device.station_id || 'unassigned') : 'unassigned';
-      if (!grouped[stationId]) {
-        grouped[stationId] = [];
+    const assignedParams = parameters.filter(p => devices.some(d => d.id == p.device_id));
+    assignedParams.forEach(p => {
+      const device = devices.find(d => d.id == p.device_id);
+      const station = stations.find(s => s.id == device?.station_id);
+      const key = station?.name || p.description || 'General';
+      if (!grouped[key]) {
+        grouped[key] = [];
       }
-      grouped[stationId].push({
-        ...p,
-        deviceName: device ? device.name : 'Unknown'
-      });
+      grouped[key].push(p);
     });
     return grouped;
-  }, [devices, parameters]);
+  }, [parameters, devices, stations]);
 
   const unassignedParameters = useMemo(() => {
-    return parameters.filter(p => !devices.some(d => d.id === p.device_id));
+    return parameters.filter(p => !devices.some(d => d.id == p.device_id));
   }, [devices, parameters]);
 
   // AMC expiry warning (45 days early)
@@ -671,80 +719,79 @@ export const DashboardScreen = () => {
         <div className="card">
           <div className="section-title">System Summary</div>
           <div className="grid-5">
-            <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(15,118,110,0.18)', background: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)', border: '1px solid rgba(15,118,110,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Stations</div>
-                <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono }}>
-                  {String(kpis.totalStations).padStart(2, '0')}
+            <div className="kpi-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Total Stations</span>
+                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f766e, #14b8a6)', boxShadow: '0 4px 12px rgba(15,118,110,0.25)' }}>
+                  <StationIcon />
                 </div>
+              </div>
+              <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f766e', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+                {String(kpis.totalStations).padStart(2, '0')}
               </div>
             </div>
 
-            <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(16,185,129,0.18)', background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Online Parameters</div>
-                <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono }}>
-                  {String(kpis.onlineDevices).padStart(2, '0')}
+            <div className="kpi-card kpi-green">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Online Parameters</span>
+                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #059669, #10b981)', boxShadow: '0 4px 12px rgba(5,150,105,0.25)' }}>
+                  <OnlineIcon />
                 </div>
+              </div>
+              <div style={{ fontSize: '30px', fontWeight: '800', color: '#059669', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+                {String(kpis.onlineDevices).padStart(2, '0')}
               </div>
             </div>
 
-            <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(239,68,68,0.18)', background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Offline Parameters</div>
-                <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono }}>
-                  {String(kpis.offlineDevices).padStart(2, '0')}
+            <div className="kpi-card kpi-red">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Offline Parameters</span>
+                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #dc2626, #ef4444)', boxShadow: '0 4px 12px rgba(220,38,38,0.25)' }}>
+                  <OfflineIcon />
                 </div>
+              </div>
+              <div style={{ fontSize: '30px', fontWeight: '800', color: '#dc2626', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+                {String(kpis.offlineDevices).padStart(2, '0')}
               </div>
             </div>
 
-            <div className="kpi-card" onClick={() => setShowAlarmsModal(true)} style={{
-              borderRadius: '12px',
-              padding: '16px 20px',
-              boxShadow: kpis.activeAlarms > 0 ? '0 4px 16px rgba(239,68,68,0.25)' : '0 4px 16px rgba(245,158,11,0.18)',
-              background: kpis.activeAlarms > 0 ? 'linear-gradient(135deg, #dc2626 0%, #f87171 100%)' : 'linear-gradient(135deg, #b45309 0%, #f59e0b 100%)',
-              border: kpis.activeAlarms > 0 ? '1px solid rgba(239,68,68,0.35)' : '1px solid rgba(245,158,11,0.35)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              cursor: 'pointer',
-            }}>
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active Alarms</div>
-                <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {String(kpis.activeAlarms).padStart(2, '0')}
+            <div className="kpi-card kpi-amber" onClick={() => setShowAlarmsModal(true)} style={{ cursor: 'pointer' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Active Alarms</span>
+                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #b45309, #f59e0b)', boxShadow: '0 4px 12px rgba(180,83,9,0.25)' }}>
+                  <AlarmIcon />
                 </div>
               </div>
-            </div>
-
-            <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(56,189,248,0.18)', background: 'linear-gradient(135deg, #0369a1 0%, #38bdf8 100%)', border: '1px solid rgba(56,189,248,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ width: '100%' }}>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>PC Network</div>
-                <div style={{ fontSize: '13px', fontWeight: '800', color: '#fff', fontFamily: T.fontMono, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span>{networkInfo?.lan_ip || '---'}</span>
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '4px',
-                    fontSize: '10px', fontWeight: '700', textTransform: 'uppercase',
-                    color: '#fff'
-                  }}>
-                    <span style={{
-                      width: '7px', height: '7px', borderRadius: '50%',
-                      backgroundColor: networkInfo?.internet_connected ? '#86efac' : '#fca5a5',
-                      boxShadow: networkInfo?.internet_connected ? '0 0 6px #86efac' : '0 0 6px #fca5a5',
-                      display: 'inline-block'
-                    }}></span>
-                    {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
-                  </span>
-                </div>
-                {networkInfo?.hostname && (
-                  <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.7)', marginTop: '4px' }}>
-                    {networkInfo.hostname}
-                  </div>
+              <div style={{ fontSize: '30px', fontWeight: '800', color: '#b45309', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {String(kpis.activeAlarms).padStart(2, '0')}
+                {kpis.activeAlarms > 0 && (
+                  <span style={{ width: '7px', height: '7px', background: '#ef4444', borderRadius: '50%', display: 'inline-block', boxShadow: '0 0 8px #ef4444' }}></span>
                 )}
+              </div>
+            </div>
+
+            <div className="kpi-card kpi-blue">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>PC Network</span>
+                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0369a1, #38bdf8)', boxShadow: '0 4px 12px rgba(3,105,161,0.25)' }}>
+                  <NetworkIcon />
+                </div>
+              </div>
+              <div style={{ fontSize: '20px', fontWeight: '700', color: '#0369a1', fontFamily: T.fontMono, lineHeight: '1.15', marginBottom: '4px' }}>
+                {networkInfo?.lan_ip || '---'}
+              </div>
+              <div style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block', backgroundColor: networkInfo?.internet_connected ? '#10b981' : '#ef4444', boxShadow: networkInfo?.internet_connected ? '0 0 6px #10b981' : '0 0 6px #ef4444' }}></span>
+                  {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
+                </span>
+                {networkInfo?.hostname && <span>{networkInfo.hostname}</span>}
               </div>
             </div>
           </div>
         </div>
+
+        {/* No Mapped Parameters Message */}
 
         {/* No Mapped Parameters Message */}
         <div className="card" style={{ padding: '40px 20px', textAlign: 'center', ...GLASS_CARD, boxShadow: T.shadowSm }}>
@@ -810,86 +857,73 @@ export const DashboardScreen = () => {
       <div className="card">
         <div className="section-title">System Summary</div>
         <div className="grid-5">
-          <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(15,118,110,0.18)', background: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)', border: '1px solid rgba(15,118,110,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Stations</div>
-              <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono }}>
-                {String(kpis.totalStations).padStart(2, '0')}
+          <div className="kpi-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Total Stations</span>
+              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f766e, #14b8a6)' }}>
+                <StationIcon />
               </div>
+            </div>
+            <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+              {String(kpis.totalStations).padStart(2, '0')}
             </div>
           </div>
 
-          <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(16,185,129,0.18)', background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Online Parameters</div>
-              <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono }}>
-                {String(kpis.onlineDevices).padStart(2, '0')}
+          <div className="kpi-card kpi-green">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Online Parameters</span>
+              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #059669, #10b981)' }}>
+                <OnlineIcon />
               </div>
+            </div>
+            <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+              {String(kpis.onlineDevices).padStart(2, '0')}
             </div>
           </div>
 
-          <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(239,68,68,0.18)', background: 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Offline Parameters</div>
-              <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono }}>
-                {String(kpis.offlineDevices).padStart(2, '0')}
+          <div className="kpi-card kpi-red">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Offline Parameters</span>
+              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #dc2626, #ef4444)' }}>
+                <OfflineIcon />
               </div>
+            </div>
+            <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+              {String(kpis.offlineDevices).padStart(2, '0')}
             </div>
           </div>
 
-          <div className="kpi-card" onClick={() => setShowAlarmsModal(true)} style={{
-            borderRadius: '12px',
-            padding: '16px 20px',
-            boxShadow: kpis.activeAlarms > 0 ? '0 4px 16px rgba(239,68,68,0.25)' : '0 4px 16px rgba(245,158,11,0.18)',
-            background: kpis.activeAlarms > 0 ? 'linear-gradient(135deg, #dc2626 0%, #f87171 100%)' : 'linear-gradient(135deg, #b45309 0%, #f59e0b 100%)',
-            border: kpis.activeAlarms > 0 ? '1px solid rgba(239,68,68,0.35)' : '1px solid rgba(245,158,11,0.35)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            cursor: 'pointer',
-          }}>
-            <div>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active Alarms</div>
-              <div style={{ fontSize: '26px', fontWeight: '800', color: '#fff', marginTop: '4px', fontFamily: T.fontMono, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {String(kpis.activeAlarms).padStart(2, '0')}
-                {kpis.activeAlarms > 0 && (
-                  <span style={{
-                    width: '8px',
-                    height: '8px',
-                    background: '#fff',
-                    borderRadius: '50%',
-                    display: 'inline-block',
-                    boxShadow: '0 0 8px #fff'
-                  }}></span>
-                )}
+          <div className="kpi-card kpi-amber" onClick={() => setShowAlarmsModal(true)} style={{ cursor: 'pointer' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Active Alarms</span>
+              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #b45309, #f59e0b)' }}>
+                <AlarmIcon />
               </div>
             </div>
-          </div>
-
-          <div className="kpi-card" style={{ borderRadius: '12px', padding: '16px 20px', boxShadow: '0 4px 16px rgba(56,189,248,0.18)', background: 'linear-gradient(135deg, #0369a1 0%, #38bdf8 100%)', border: '1px solid rgba(56,189,248,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ width: '100%' }}>
-              <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>PC Network</div>
-              <div style={{ fontSize: '13px', fontWeight: '800', color: '#fff', fontFamily: T.fontMono, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>{networkInfo?.lan_ip || '---'}</span>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '4px',
-                  fontSize: '10px', fontWeight: '700', textTransform: 'uppercase',
-                  color: '#fff'
-                }}>
-                  <span style={{
-                    width: '7px', height: '7px', borderRadius: '50%',
-                    backgroundColor: networkInfo?.internet_connected ? '#86efac' : '#fca5a5',
-                    boxShadow: networkInfo?.internet_connected ? '0 0 6px #86efac' : '0 0 6px #fca5a5',
-                    display: 'inline-block'
-                  }}></span>
-                  {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
-                </span>
-              </div>
-              {networkInfo?.hostname && (
-                <div style={{ fontSize: '10px', fontWeight: '600', color: 'rgba(255,255,255,0.7)', marginTop: '4px' }}>
-                  {networkInfo.hostname}
-                </div>
+            <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {String(kpis.activeAlarms).padStart(2, '0')}
+              {kpis.activeAlarms > 0 && (
+                <span style={{ width: '7px', height: '7px', background: '#ef4444', borderRadius: '50%', display: 'inline-block', boxShadow: '0 0 8px #ef4444' }}></span>
               )}
+            </div>
+          </div>
+
+          <div className="kpi-card kpi-blue">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>PC Network</span>
+              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0369a1, #38bdf8)' }}>
+                <NetworkIcon />
+              </div>
+            </div>
+            <div style={{ fontSize: '20px', fontWeight: '700', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', marginBottom: '4px' }}>
+              {networkInfo?.lan_ip || '---'}
+            </div>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block', backgroundColor: networkInfo?.internet_connected ? '#10b981' : '#ef4444', boxShadow: networkInfo?.internet_connected ? '0 0 6px #10b981' : '0 0 6px #ef4444' }}></span>
+                {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
+              </span>
+              {networkInfo?.hostname && <span>{networkInfo.hostname}</span>}
             </div>
           </div>
         </div>
@@ -956,113 +990,49 @@ export const DashboardScreen = () => {
         </div>
       )}
 
-      {/* Sensor telemetry Grid grouped by station */}
+      {/* Sensor telemetry Grid grouped by monitored sensor name */}
       <div className="card">
         <div className="section-title">Live Parameters</div>
-        {stations.map(station => {
-          const stationParams = groupedParametersByStation[station.id] || [];
-          if (stationParams.length === 0) return null;
-
-          const stationDevices = devices.filter(d => d.station_id === station.id);
-          const isStationOnline = stationDevices.some(d => d.status === 'online');
-
-          return (
-            <div key={station.id} style={{ marginBottom: '24px' }}>
-              <div style={{
+        {Object.entries(groupedBySensor).map(([sensorName, params]) => (
+          <div key={sensorName} style={{ marginBottom: '24px' }}>
+            <div style={{
+              fontSize: '14px',
+              marginBottom: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              borderBottom: `1px solid ${T.borderSoft}`,
+              paddingBottom: '6px'
+            }}>
+              <span style={{
                 fontSize: '14px',
-                marginBottom: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                borderBottom: `1px solid ${T.borderSoft}`,
-                paddingBottom: '6px'
+                fontWeight: '800',
+                color: T.primary,
+                background: T.primaryBg,
+                padding: '2px 10px',
+                borderRadius: T.rFull,
+                letterSpacing: '0.03em'
               }}>
-                <span style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: isStationOnline ? T.success : T.danger,
-                  boxShadow: isStationOnline ? `0 0 6px ${T.success}` : `0 0 6px ${T.danger}`,
-                  display: 'inline-block'
-                }}></span>
-                <span style={{
-                  fontSize: '14px',
-                  fontWeight: '800',
-                  color: T.primary,
-                  background: T.primaryBg,
-                  padding: '2px 10px',
-                  borderRadius: T.rFull,
-                  letterSpacing: '0.03em'
-                }}>
-                  {station.name}
-                </span>
-              </div>
-              <div className="grid-4">
-                {stationParams.map(p => (
-                  <ParameterCard
-                    key={p.id}
-                    p={p}
-                    data={liveData[p.tag_name]}
-                    currentTime={currentTime}
-                    avgVal={avg15Mins[p.id]}
-                    history={dataPointsRef.current.datasets[p.tag_name] || []}
-                    deviceName={p.deviceName}
-                    isSelected={selectedParam === p.tag_name}
-                    onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }}
-                  />
-                ))}
-              </div>
+                {sensorName}
+              </span>
             </div>
-          );
-        })}
-
-        {/* Fallback for parameters belonging to devices with no station */}
-        {(() => {
-          const unassignedStationParams = groupedParametersByStation['unassigned'] || [];
-          const filteredParams = unassignedStationParams.filter(p => devices.some(d => d.id === p.device_id));
-          if (filteredParams.length === 0) return null;
-
-          return (
-            <div style={{ marginBottom: '24px' }}>
-              <div style={{
-                fontSize: '14px',
-                marginBottom: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                borderBottom: `1px solid ${T.borderSoft}`,
-                paddingBottom: '6px'
-              }}>
-                <span style={{
-                  width: '8px',
-                  height: '8px',
-                  borderRadius: '50%',
-                  backgroundColor: T.danger,
-                  boxShadow: `0 0 6px ${T.danger}`,
-                  display: 'inline-block'
-                }}></span>
-                <span style={{ fontSize: '13px', fontWeight: '800', color: T.textLabel }}>
-                  Unassigned Station
-                </span>
-              </div>
-              <div className="grid-4">
-                {filteredParams.map(p => (
-                  <ParameterCard
-                    key={p.id}
-                    p={p}
-                    data={liveData[p.tag_name]}
-                    currentTime={currentTime}
-                    avgVal={avg15Mins[p.id]}
-                    history={dataPointsRef.current.datasets[p.tag_name] || []}
-                    deviceName={p.deviceName}
-                    isSelected={selectedParam === p.tag_name}
-                    onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }}
-                  />
-                ))}
-              </div>
+            <div className="grid-4">
+              {(params as any[]).map(p => (
+                <ParameterCard
+                  key={p.id}
+                  p={p}
+                  data={liveData[p.tag_name]}
+                  currentTime={currentTime}
+                  avgVal={avg15Mins[p.id]}
+                  history={dataPointsRef.current.datasets[p.tag_name] || []}
+                  deviceName=""
+                  isSelected={selectedParam === p.tag_name}
+                  onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }}
+                />
+              ))}
             </div>
-          );
-        })()}
+          </div>
+        ))}
 
         {/* Fallback for unmapped parameters (no device at all) */}
         {unassignedParameters.length > 0 && (

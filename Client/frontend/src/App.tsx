@@ -1,5 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from './context/AppContext';
+import './App.css';
 
 // Import Screens
 import { DashboardScreen } from './screens/DashboardScreen';
@@ -8,16 +9,11 @@ import { TrendsScreen } from './screens/TrendsScreen';
 import { ReportsScreen } from './screens/ReportsScreen';
 import { LogsScreen } from './screens/LogsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { ApiMappingsScreen } from './screens/ApiMappingsScreen';
 import { UsersScreen } from './screens/UsersScreen';
-import { CPCBSettingsScreen } from './screens/CPCBSettingsScreen';
-import { CPCBMappingScreen } from './screens/CPCBMappingScreen';
-import { CPCBLogsScreen } from './screens/CPCBLogsScreen';
-import { CPCBExportScreen } from './screens/CPCBExportScreen';
 import { CPCB } from './screens/CPCB';
 import { CalibrationScreen } from './screens/CalibrationScreen';
-import { WindroseScreen } from './screens/WindroseScreen';
-import { AnalyticalReportsScreen } from './screens/AnalyticalReportsScreen';
+import { ContactScreen } from './screens/ContactScreen';
+
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 const DashboardIcon = () => (
@@ -93,17 +89,6 @@ const EyeOffIcon = () => (
   </svg>
 );
 
-const MappingsIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <path d="M8 6h13" />
-    <path d="M8 12h13" />
-    <path d="M8 18h13" />
-    <path d="M3 6h.01" />
-    <path d="M3 12h.01" />
-    <path d="M3 18h.01" />
-  </svg>
-);
-
 const CPCBIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -122,26 +107,10 @@ const CalibrationIcon = () => (
   </svg>
 );
 
-const WindroseIcon = () => (
+const ContactIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <circle cx="12" cy="12" r="3" />
-    <path d="M12 2v7" />
-    <path d="M12 15v7" />
-    <path d="M2 12h7" />
-    <path d="M15 12h7" />
-    <path d="M5.64 5.64l4.95 4.95" />
-    <path d="M13.41 13.41l4.95 4.95" />
-    <path d="M18.36 5.64l-4.95 4.95" />
-    <path d="M10.59 13.41l-4.95 4.95" />
-  </svg>
-);
-
-const AnalyticalReportsIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <rect x="4" y="14" width="3" height="6" />
-    <rect x="10.5" y="8" width="3" height="12" />
-    <rect x="17" y="4" width="3" height="16" />
-    <line x1="2" y1="20" x2="22" y2="20" />
+    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+    <polyline points="22,6 12,13 2,6" />
   </svg>
 );
 
@@ -149,20 +118,14 @@ const AnalyticalReportsIcon = () => (
 const ALL_NAV = [
   { key: 'dashboardScreen', label: 'Dashboard Overview', Icon: DashboardIcon, roles: ['admin', 'client'] },
   { key: 'devicesScreen', label: 'Devices & Config', Icon: DevicesIcon, roles: ['admin'] },
-  { key: 'apiMappingsScreen', label: 'API Mappings', Icon: MappingsIcon, roles: ['admin'] },
   { key: 'trendsScreen', label: 'Trends Analysis', Icon: TrendsIcon, roles: ['admin', 'client'] },
   { key: 'reportsScreen', label: 'Reports Generator', Icon: ReportsIcon, roles: ['admin', 'client'] },
   { key: 'logsScreen', label: 'System Logs', Icon: LogsIcon, roles: ['admin'] },
   { key: 'settingsScreen', label: 'System Settings', Icon: SettingsIcon, roles: ['admin'] },
   { key: 'usersScreen', label: 'User Management', Icon: UsersIcon, roles: ['admin'] },
-  { key: 'cpcbSettingsScreen', label: 'CPCB Config', Icon: CPCBIcon, roles: ['admin'] },
-  { key: 'cpcbMappingScreen', label: 'CPCB Mappings', Icon: CPCBIcon, roles: ['admin'] },
-  { key: 'cpcbExportScreen', label: 'CPCB Export', Icon: CPCBIcon, roles: ['admin'] },
-  { key: 'cpcbLogsScreen', label: 'CPCB Logs', Icon: CPCBIcon, roles: ['admin'] },
-  { key: 'cpcbScreen', label: 'CPCB', Icon: CPCBIcon, roles: ['admin'] },
+  { key: 'cpcbScreen', label: 'Server Management', Icon: CPCBIcon, roles: ['admin'] },
   { key: 'calibrationScreen', label: 'Calibration', Icon: CalibrationIcon, roles: ['admin'] },
-  { key: 'windroseScreen', label: 'Windrose', Icon: WindroseIcon, roles: ['admin'] },
-  { key: 'analyticalReportsScreen', label: 'Analytical Reports', Icon: AnalyticalReportsIcon, roles: ['admin'] },
+  { key: 'contactScreen', label: 'Contact', Icon: ContactIcon, roles: ['admin', 'client'] },
 ];
 
 
@@ -293,7 +256,7 @@ function App() {
   // Ensure active screen is accessible by this role
   useEffect(() => {
     if (currentUserRole === 'client') {
-      const allowedScreens = ['dashboardScreen', 'trendsScreen', 'reportsScreen', 'calibrationScreen', 'windroseScreen', 'analyticalReportsScreen'];
+      const allowedScreens = ['dashboardScreen', 'trendsScreen', 'reportsScreen', 'calibrationScreen', 'contactScreen'];
       if (!allowedScreens.includes(activeScreen)) {
         setActiveScreen('dashboardScreen');
       }
@@ -404,92 +367,45 @@ function App() {
     switch (activeScreen) {
       case 'dashboardScreen': return <DashboardScreen />;
       case 'devicesScreen': return currentUserRole === 'admin' ? <DevicesScreen /> : <DashboardScreen />;
-      case 'apiMappingsScreen': return currentUserRole === 'admin' ? <ApiMappingsScreen /> : <DashboardScreen />;
       case 'trendsScreen': return <TrendsScreen />;
       case 'reportsScreen': return <ReportsScreen />;
       case 'logsScreen': return currentUserRole === 'admin' ? <LogsScreen /> : <DashboardScreen />;
       case 'settingsScreen': return currentUserRole === 'admin' ? <SettingsScreen /> : <DashboardScreen />;
       case 'usersScreen': return currentUserRole === 'admin' ? <UsersScreen /> : <DashboardScreen />;
-      case 'cpcbSettingsScreen': return currentUserRole === 'admin' ? <CPCBSettingsScreen /> : <DashboardScreen />;
-      case 'cpcbMappingScreen': return currentUserRole === 'admin' ? <CPCBMappingScreen /> : <DashboardScreen />;
-      case 'cpcbExportScreen': return currentUserRole === 'admin' ? <CPCBExportScreen /> : <DashboardScreen />;
-      case 'cpcbLogsScreen': return currentUserRole === 'admin' ? <CPCBLogsScreen /> : <DashboardScreen />;
       case 'cpcbScreen': return currentUserRole === 'admin' ? <CPCB /> : <DashboardScreen />;
       case 'calibrationScreen': return currentUserRole === 'admin' ? <CalibrationScreen /> : <DashboardScreen />;
-      case 'windroseScreen': return currentUserRole === 'admin' ? <WindroseScreen /> : <DashboardScreen />;
-      case 'analyticalReportsScreen': return <AnalyticalReportsScreen />;
+      case 'contactScreen': return <ContactScreen />;
       default: return <DashboardScreen />;
     }
   };
 
   return (
     <div className="app-shell">
-      {/* Sidebar Nav — Full Height */}
-      <aside className="sidebar" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
-        {/* Logo Section */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '24px 16px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.3)',
-          marginBottom: '16px',
-        }}>
-          <button
-            onClick={handleLogoClick}
-            disabled={refreshing}
-            title="Click to refresh dashboard values"
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: refreshing ? 'not-allowed' : 'pointer',
-              padding: 0,
-              display: 'block',
-              transition: 'transform 0.2s ease',
-              outline: 'none'
-            }}
-            onMouseEnter={e => {
-              if (!refreshing) {
-                e.currentTarget.style.transform = 'scale(1.05)';
-              }
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'scale(1)';
-            }}
-          >
-            <img
-              src="/assets/sunshine_logo.png"
-              alt="Sunshine logo"
-              style={{
-                width: '160px',
-                height: 'auto',
-                display: 'block',
-                filter: 'drop-shadow(0 2px 8px rgba(15,118,110,0.15))'
-              }}
-            />
+      {/* Navigation Rail */}
+      <aside className="sidebar nav-rail">
+        <div className="nav-rail-logo">
+          <button onClick={handleLogoClick} disabled={refreshing} title="Click to refresh dashboard values"
+            style={{ background: 'none', border: 'none', cursor: refreshing ? 'not-allowed' : 'pointer', padding: 0, display: 'flex', outline: 'none' }}>
+            <img src="/assets/Ultron_logo.png" alt="UltrON" className="nav-rail-logo-img" />
           </button>
         </div>
 
-        {/* Welcome Section */}
-        <div style={{ margin: '0 16px 24px 16px', padding: '16px 20px', background: 'linear-gradient(135deg, #0f766e 0%, #0d9488 100%)', borderRadius: '12px', color: '#fff', position: 'relative', boxShadow: '0 8px 20px rgba(15, 118, 110, 0.15)' }}>
-          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', background: '#34d399', borderTopLeftRadius: '12px', borderBottomLeftRadius: '12px' }}></div>
-          <div style={{ fontSize: '16px', fontWeight: '800', letterSpacing: '-0.02em', display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '13px', fontWeight: '500', opacity: 0.9 }}>Welcome,</span>
-            {currentUser}!
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '0 16px', flex: 1, overflowY: 'auto' }}>
+        <div className="nav-rail-items">
           {visibleNav.map(({ key, label, Icon }) => (
             <button
               key={key}
-              className={`nav-button ${activeScreen === key ? 'active' : ''}`}
+              className={`nav-rail-btn ${activeScreen === key ? 'active' : ''}`}
               onClick={() => setActiveScreen(key)}
+              title={label}
             >
-              <Icon /> {label}
+              <Icon />
+              <span className="nav-rail-label">{label}</span>
             </button>
           ))}
+        </div>
+
+        <div className="nav-rail-footer">
+          <div className="nav-rail-user">{currentUser}</div>
         </div>
       </aside>
 
@@ -567,7 +483,7 @@ function App() {
               onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; }}
               onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
             >
-              <img src="/assets/Ultron_logo.png" alt="UltrON logo" style={{ display: 'block', height: '32px', width: 'auto' }} />
+              <img src="/assets/sunshine_logo.png" alt="Sunshine" style={{ display: 'block', height: '32px', width: 'auto' }} />
             </button>
           </div>
         </header>

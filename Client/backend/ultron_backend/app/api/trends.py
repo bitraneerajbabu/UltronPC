@@ -8,12 +8,12 @@ from typing import List, Optional
 from app.database import get_db
 from app.models.telemetry import HistoricalData, Averages, AverageType, DataQuality
 from app.models.parameter import Parameter
-from app.core.security import require_admin
+from app.core.security import get_current_user
 
-router = APIRouter(prefix="/trends", tags=["Trends"])
+router = APIRouter(prefix="/trends", tags=["Trends"], dependencies=[Depends(get_current_user)])
 
 
-@router.get("/chart-data", dependencies=[Depends(require_admin)])
+@router.get("/chart-data")
 async def get_chart_data(
     parameter_ids: str = Query(..., description="Comma-separated parameter IDs"),
     start: Optional[datetime] = None,
@@ -86,7 +86,7 @@ async def get_chart_data(
     }
 
 
-@router.get("/statistics", dependencies=[Depends(require_admin)])
+@router.get("/statistics")
 async def get_statistics(
     parameter_id: int,
     start: Optional[datetime] = None,

@@ -2,11 +2,10 @@ import React, { createContext, useState, useEffect, useCallback, useRef } from '
 
 export const AppContext = createContext(null);
 
-// When served by FastAPI (python run.py), use same-origin relative URLs.
-// When running via `npm run dev` (Vite dev server on :5173), proxy handles /api → :8000.
-const _isDevServer = window.location.port === '5173';
-const API_BASE = _isDevServer ? 'http://localhost:8000/api/v1' : '/api/v1';
-const WS_BASE  = _isDevServer ? 'ws://localhost:8000/ws/live'  : `ws://${window.location.host}/ws/live`;
+// When running via `npm run dev` (Vite dev server on :5173) or production, proxy/server handles routing.
+// Using relative/same-origin URLs makes it dynamically compatible with any local port (8000, 8765, etc.).
+const API_BASE = '/api/v1';
+const WS_BASE  = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/live`;
 
 
 export const AppProvider = ({ children }) => {
@@ -172,10 +171,11 @@ export const AppProvider = ({ children }) => {
         setLiveData(prev => {
           const newLiveData = { ...prev };
           telemetryData.forEach(p => {
-            const param = activeParams.find(paramObj => paramObj.id === p.parameter_id);
+            const param = activeParams.find(paramObj => paramObj.id == p.parameter_id);
             if (param) {
               newLiveData[param.tag_name] = {
                 value: p.value,
+                raw_value: p.raw_value,
                 unit: param.unit || '',
                 status: (p.quality === 'good' || p.quality === 'out_of_range' || p.quality === 'uncertain' || p.quality === 'U' || p.quality === 'O' || p.quality === 'N') ? 'online' : 'offline',
                 timestamp: formatTimestamp(parseUtcDate(p.timestamp))
@@ -230,15 +230,31 @@ export const AppProvider = ({ children }) => {
       }
 
       // Stations, devices
-      const stationsData = stationsRes.ok ? await stationsRes.json() : [];
-      setStations(stationsData || []);
+      if (stationsRes.ok) {
+        const stationsData = await stationsRes.json();
+        setStations(stationsData || []);
+      } else {
+        const errText = await extractApiError(stationsRes, 'Failed to load stations.');
+        showToast(`Stations: ${errText}`, 'error');
+      }
 
-      const devicesData = devicesRes.ok ? await devicesRes.json() : [];
-      setDevices(devicesData || []);
+      if (devicesRes.ok) {
+        const devicesData = await devicesRes.json();
+        setDevices(devicesData || []);
+      } else {
+        const errText = await extractApiError(devicesRes, 'Failed to load devices.');
+        showToast(`Devices: ${errText}`, 'error');
+      }
 
       // Parameters — must resolve before telemetry fetch (needs param IDs)
-      const parametersData = parametersRes.ok ? await parametersRes.json() : [];
-      setParameters(parametersData || []);
+      let parametersData = [];
+      if (parametersRes.ok) {
+        parametersData = await parametersRes.json();
+        setParameters(parametersData || []);
+      } else {
+        const errText = await extractApiError(parametersRes, 'Failed to load parameters.');
+        showToast(`Parameters: ${errText}`, 'error');
+      }
 
       // Logs
       if (logsRes.ok) {
@@ -252,6 +268,9 @@ export const AppProvider = ({ children }) => {
           status: l.level === 'WARNING' ? 'WARN' : l.level === 'INFO' ? 'INFO' : l.level === 'ERROR' ? 'ERROR' : 'SUCCESS'
         }));
         setLogs(formattedLogs);
+      } else {
+        const errText = await extractApiError(logsRes, 'Failed to load logs.');
+        showToast(`Logs: ${errText}`, 'error');
       }
 
       // Telemetry + KPIs — depends on parametersData so runs after above, but
@@ -294,7 +313,8 @@ export const AppProvider = ({ children }) => {
     }
 
     wsIsClosing.current = false;
-    const ws = new WebSocket(WS_BASE);
+    const token = localStorage.getItem('ultron_token');
+    const ws = new WebSocket(`${WS_BASE}?token=${encodeURIComponent(token || '')}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -317,6 +337,7 @@ export const AppProvider = ({ children }) => {
               }
               next[pt.tag_name] = {
                 value: pt.value,
+                raw_value: pt.raw_value,
                 unit: pt.unit,
                 status: isOnline ? 'online' : 'offline',
                 timestamp: ts
@@ -424,7 +445,10 @@ export const AppProvider = ({ children }) => {
       }
 
       const data = await res.json();
-      // Persist token + role
+      if (!data.access_token) {
+        showToast('Login failed: no access token received.', 'error');
+        return false;
+      }
       localStorage.setItem('ultron_token', data.access_token);
       localStorage.setItem('ultron_user', data.username);
       localStorage.setItem('ultron_role', data.role);
@@ -561,15 +585,14 @@ export const AppProvider = ({ children }) => {
     if (!res.ok) { showToast(await extractApiError(res, 'Failed to create device.'), 'error'); return false; }
     const newDevice = await res.json();
     setDevices(prev => [...prev, newDevice]);
-    showToast('Device added successfully.');
-    loadAllData(); return true;
+    showToast('Device added successfully.'); return newDevice;
   };
 
   const editDevice = async (id, payload) => {
     const res = await authFetch(`${API_BASE}/devices/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
     if (!res.ok) { showToast(await extractApiError(res, 'Failed to update device.'), 'error'); return false; }
     const updated = await res.json();
-    setDevices(prev => prev.map(d => d.id === id ? updated : d));
+    setDevices(prev => prev.map(d => d.id == id ? updated : d));
     showToast('Device updated successfully.');
     loadAllData(); return true;
   };
@@ -577,7 +600,7 @@ export const AppProvider = ({ children }) => {
   const deleteDevice = async (id) => {
     const res = await authFetch(`${API_BASE}/devices/${id}`, { method: 'DELETE' });
     if (!res.ok) { showToast(await extractApiError(res, 'Failed to delete device.'), 'error'); return false; }
-    setDevices(prev => prev.filter(d => d.id !== id));
+    setDevices(prev => prev.filter(d => d.id != id));
     showToast('Device deleted.'); loadAllData(); return true;
   };
 
@@ -595,14 +618,14 @@ export const AppProvider = ({ children }) => {
     const res = await authFetch(`${API_BASE}/parameters/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
     if (!res.ok) { showToast(await extractApiError(res, 'Failed to update parameter.'), 'error'); return false; }
     const updated = await res.json();
-    setParameters(prev => prev.map(p => p.id === id ? updated : p));
+      setParameters(prev => prev.map(p => p.id == id ? updated : p));
     showToast('Parameter updated.'); loadAllData(); return true;
   };
 
   const deleteParameter = async (id) => {
     const res = await authFetch(`${API_BASE}/parameters/${id}`, { method: 'DELETE' });
     if (!res.ok) { showToast(await extractApiError(res, 'Failed to delete parameter.'), 'error'); return false; }
-    setParameters(prev => prev.filter(p => p.id !== id));
+      setParameters(prev => prev.filter(p => p.id != id));
     showToast('Parameter mapping deleted.'); loadAllData(); return true;
   };
 

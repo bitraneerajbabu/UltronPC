@@ -53,6 +53,7 @@ async def export_station_file(db: AsyncSession, config: CPCBStationConfig) -> di
     parameters = [row[0] for row in params_result.all()]
 
     total_written = 0
+    all_records = []
     for param in parameters:
         records_result = await db.execute(
             select(CPCBExportRecord)
@@ -73,9 +74,19 @@ async def export_station_file(db: AsyncSession, config: CPCBStationConfig) -> di
             records = records[excess:]
             await db.flush()
 
-        lines = []
-        for rec in records:
-            lines.append(build_cpcb_line(
+        all_records.extend(records)
+
+    if all_records:
+        # Sort all accumulated records chronologically, then by parameter
+        all_records.sort(key=lambda r: (r.date_from, r.parameter))
+        
+        headers = [
+            "1,2,3,4,5,6,7,8,\n",
+            "Station name, Parameter, Date from, Date to, Value,calibrationflag,maint flag,Remark,\n"
+        ]
+        
+        lines = [
+            build_cpcb_line(
                 rec.station_name,
                 rec.parameter,
                 rec.date_from,
@@ -84,13 +95,13 @@ async def export_station_file(db: AsyncSession, config: CPCBStationConfig) -> di
                 rec.calibration_flag,
                 rec.maintenance_flag,
                 rec.remark,
-            ))
-
-        if lines:
-            mode = "w"
-            with open(file_path, mode, encoding="utf-8") as f:
-                f.writelines(lines)
-            total_written += len(lines)
+            )
+            for rec in all_records
+        ]
+        
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.writelines(headers + lines)
+        total_written = len(lines)
 
     return {"file": file_path, "records_written": total_written, "parameters": len(parameters)}
 

@@ -103,6 +103,9 @@ async def generate_excel(
     params, readings = await _fetch_report_data(db, ids, start, end, avg_type, step_minutes)
     param_map = {p.id: p for p in params}
 
+    # TEMP DEBUG: tzinfo check
+    print(f"[DEBUG generate_excel] start.tzinfo={start.tzinfo}, end.tzinfo={end.tzinfo}, readings[0].timestamp.tzinfo={readings[0].timestamp.tzinfo if readings else 'no readings'}", flush=True)
+
     wb = openpyxl.Workbook()
     # Remove default sheet — we'll add per-day sheets
     wb.remove(wb.active)
@@ -202,6 +205,9 @@ async def generate_pdf(
     ids = [int(x) for x in parameter_ids.split(",") if x.strip().isdigit()]
     params, readings = await _fetch_report_data(db, ids, start, end, avg_type, step_minutes)
     param_map = {p.id: p for p in params}
+
+    # TEMP DEBUG: tzinfo check
+    print(f"[DEBUG generate_pdf] start.tzinfo={start.tzinfo}, end.tzinfo={end.tzinfo}, readings[0].timestamp.tzinfo={readings[0].timestamp.tzinfo if readings else 'no readings'}", flush=True)
 
     pdf = FPDF()
     pdf.add_page()

@@ -247,7 +247,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     exclude_binaries=False,
-    name="Ultron_ktppv1.0.62",
+    name="Ultron_1.0.65",
     debug=False,              # no debug console
     bootloader_ignore_signals=False,
     strip=False,

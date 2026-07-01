@@ -86,7 +86,7 @@ async def compute_15min_averages_for_station(
 
         cal_flag = 1 if station_config.calibration_mode else 0
         maint_flag = 1 if station_config.maintenance_mode else 0
-        remark = "Calibration" if cal_flag else ("Maintenance" if maint_flag else "Normal")
+        remark = "Calibration" if cal_flag else ("Maintenance" if maint_flag else "")
 
         db.add(CPCBExportRecord(
             station_name=station_config.station_name,

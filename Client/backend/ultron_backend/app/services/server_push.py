@@ -35,23 +35,13 @@ log = get_logger("ultron.server_push")
 # TGPCB — JSON HTTP Push
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _build_tgpcb_payloads(db, server_id: int) -> list:
+async def _build_tgpcb_payloads(db, server_id: int, mode: str = "live") -> list:
     """
     Build TGPCB-style JSON payload list.
     Groups parameters by (api_id, api_name, api_password) → one payload per group.
-
-    Payload format (sent as HTTP POST JSON):
-    {
-      "DeviceID": "<api_id>",
-      "FunctionName": 53,
-      "Datetime": "YYYY-MM-DD HH:MM:SS",
-      "Name": "<api_name>",
-      "Password": "<api_password>",
-      "additionalInfo": { "Longitude": "...", "Lattitude": "...", "SoftwareNameVersion": "Logon" },
-      "Variables": [
-        { "Variablename": "<api_vname>", "Value": <float>, "Unit": "<unit>", "Flags": "" }
-      ]
-    }
+    
+    If mode == "delay", fetches the latest 15-minute average value and sets
+    the payload timestamp to that average's timestamp.
     """
     stmt = (
         select(ServerParameterMapping)
@@ -81,10 +71,26 @@ async def _build_tgpcb_payloads(db, server_id: int) -> list:
         except (ValueError, TypeError):
             device_id_val = api_id
 
+        # Determine payload Datetime based on averages if in delay mode
+        payload_time = datetime.now()
+        if mode == "delay" and maps:
+            # Query the latest 15-minute average timestamp across mapped parameters in this group
+            param_ids = [m.parameter_id for m in maps]
+            time_stmt = (
+                select(Averages.timestamp)
+                .where(Averages.parameter_id.in_(param_ids), Averages.avg_type == AverageType.avg_15min)
+                .order_by(Averages.timestamp.desc())
+                .limit(1)
+            )
+            time_res = await db.execute(time_stmt)
+            latest_time = time_res.scalar_one_or_none()
+            if latest_time:
+                payload_time = latest_time
+
         payload = {
             "DeviceID": device_id_val,
             "FunctionName": 53,
-            "Datetime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Datetime": payload_time.strftime("%Y-%m-%d %H:%M:%S"),
             "Name": api_name or "",
             "Password": api_password or "",
             "additionalInfo": {
@@ -96,18 +102,32 @@ async def _build_tgpcb_payloads(db, server_id: int) -> list:
         }
 
         for m in maps:
-            # LiveData holds exactly one row per parameter (delete-then-insert in polling engine)
-            ld_res = await db.execute(
-                select(LiveData).where(LiveData.parameter_id == m.parameter_id)
-            )
-            ld = ld_res.scalars().first()
-            if ld and ld.value is not None:
-                try:
-                    val = round(float(ld.value), 2)
-                except (ValueError, TypeError):
-                    val = ld.value
+            val = ""
+            if mode == "delay":
+                # Get the latest 15-minute average for this parameter
+                avg_res = await db.execute(
+                    select(Averages)
+                    .where(Averages.parameter_id == m.parameter_id, Averages.avg_type == AverageType.avg_15min)
+                    .order_by(Averages.timestamp.desc())
+                    .limit(1)
+                )
+                avg = avg_res.scalars().first()
+                if avg and avg.value is not None:
+                    try:
+                        val = round(float(avg.value), 2)
+                    except (ValueError, TypeError):
+                        val = avg.value
             else:
-                val = ""
+                # LiveData holds exactly one row per parameter
+                ld_res = await db.execute(
+                    select(LiveData).where(LiveData.parameter_id == m.parameter_id)
+                )
+                ld = ld_res.scalars().first()
+                if ld and ld.value is not None:
+                    try:
+                        val = round(float(ld.value), 2)
+                    except (ValueError, TypeError):
+                        val = ld.value
 
             param = m.parameter
             payload["Variables"].append({
@@ -134,7 +154,7 @@ async def _push_tgpcb(config: ServerConfig, db, mode: str):
         return
 
     try:
-        payloads = await _build_tgpcb_payloads(db, config.id)
+        payloads = await _build_tgpcb_payloads(db, config.id, mode)
         if not payloads:
             log.debug(f"[TGPCB/{mode.upper()}] No active mappings for '{config.name}' — skipping.")
             return
@@ -272,7 +292,9 @@ async def _push_cpcb(config: ServerConfig, db):
     # Fetch all active mappings for this server
     stmt = (
         select(ServerParameterMapping)
-        .options(selectinload(ServerParameterMapping.parameter))
+        .options(
+            selectinload(ServerParameterMapping.parameter).selectinload(Parameter.device).selectinload(Device.station)
+        )
         .filter(ServerParameterMapping.server_id == config.id)
         .filter(ServerParameterMapping.is_active == True)
     )
@@ -411,7 +433,9 @@ async def generate_historical_cpcb_file(db, config: ServerConfig, date_str: str)
     # Fetch all active mappings
     stmt = (
         select(ServerParameterMapping)
-        .options(selectinload(ServerParameterMapping.parameter))
+        .options(
+            selectinload(ServerParameterMapping.parameter).selectinload(Parameter.device).selectinload(Device.station)
+        )
         .filter(ServerParameterMapping.server_id == config.id)
         .filter(ServerParameterMapping.is_active == True)
     )
@@ -660,7 +684,7 @@ async def run_server_push(mode: str = "live"):
             )
             servers = conf_result.scalars().all()
             for config in servers:
-                payloads = await _build_tgpcb_payloads(db, config.id)
+                payloads = await _build_tgpcb_payloads(db, config.id, "live")
                 for payload in payloads:
                     db.add(PendingUpload(
                         server_config_id=config.id,

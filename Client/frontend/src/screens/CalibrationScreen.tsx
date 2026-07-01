@@ -166,7 +166,7 @@ export const CalibrationScreen = () => {
       showToast(`Job ${decision}d successfully.`);
       setApproveComment('');
       fetchJobs();
-      if (viewingJob && viewingJob.id === jobId) {
+      if (viewingJob && viewingJob.id == jobId) {
         setViewingJob((prev: any) => prev ? { ...prev, status: decision === 'approve' ? 'approved' : 'rejected' } : null);
       }
     } catch {
@@ -337,8 +337,8 @@ export const CalibrationScreen = () => {
                     jobs.map((job: any) => (
                       <tr key={job.id}>
                         <td><strong>{job.job_name}</strong></td>
-                        <td>{stations.find(s => s.id === job.station_id)?.name || `Station #${job.station_id}`}</td>
-                        <td>{parameters.find(p => p.id === job.parameter_id)?.name || `Param #${job.parameter_id}`}</td>
+                        <td>{stations.find(s => s.id == job.station_id)?.name || `Station #${job.station_id}`}</td>
+                        <td>{parameters.find(p => p.id == job.parameter_id)?.name || `Param #${job.parameter_id}`}</td>
                         <td><span className="badge-info">{job.calibration_type}</span></td>
                         <td>{job.sequence || '—'}</td>
                         <td>
@@ -477,8 +477,8 @@ export const CalibrationScreen = () => {
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: '24px', marginTop: '12px', fontSize: '13px', color: T.textMuted }}>
-                  <span>Station: <strong>{stations.find(s => s.id === viewingJob.station_id)?.name || `#${viewingJob.station_id}`}</strong></span>
-                  <span>Parameter: <strong>{parameters.find(p => p.id === viewingJob.parameter_id)?.name || `#${viewingJob.parameter_id}`}</strong></span>
+                  <span>Station: <strong>{stations.find(s => s.id == viewingJob.station_id)?.name || `#${viewingJob.station_id}`}</strong></span>
+                  <span>Parameter: <strong>{parameters.find(p => p.id == viewingJob.parameter_id)?.name || `#${viewingJob.parameter_id}`}</strong></span>
                   <span>Type: <strong>{viewingJob.calibration_type}</strong></span>
                   <span>Created: <strong>{fmtDt(viewingJob.created_at)}</strong></span>
                 </div>

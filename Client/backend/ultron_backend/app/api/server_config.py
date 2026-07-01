@@ -78,7 +78,7 @@ async def get_mappings(db: AsyncSession = Depends(get_db)):
             parameter_id=p.id,
             parameter_name=p.tag_name,
             station_name=station_name,
-            channel_no=p.id,
+            channel_no=p.display_order,
             mappings=mappings_dict
         ))
     return response
