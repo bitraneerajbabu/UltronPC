@@ -32,6 +32,8 @@ class ParameterCreateNested(BaseModel):
     alarm_deadband: float = 0.0
     display_order: int = 0
     is_active: bool = True
+    parse_method: Optional[str] = "csv_col"
+    parse_config: Optional[str] = None
 
     # Connection overrides
     host: Optional[str] = None
@@ -95,7 +97,7 @@ class DeviceBase(BaseModel):
     csv_timestamp_col: Optional[int] = None
     request_hex: Optional[str] = None
     response_delimiter: Optional[str] = "newline"
-    poll_interval: int = 60
+    poll_interval: int = 5
     timeout: int = 5
     retry_count: int = 3
     is_active: bool = True
@@ -118,7 +120,7 @@ class DeviceBase(BaseModel):
                 "baud_rate": 9600,
                 "data_bits": 8,
                 "stop_bits": 1,
-                "poll_interval": 60,
+                "poll_interval": 5,
                 "timeout": 5,
                 "retry_count": 3
             }

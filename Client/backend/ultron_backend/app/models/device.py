@@ -64,7 +64,7 @@ class Device(Base):
     response_delimiter = Column(String(20), default="newline")  # "newline", "etx", "length"
 
     # Polling
-    poll_interval = Column(Integer, default=60)    # seconds
+    poll_interval = Column(Integer, default=5)    # seconds
     timeout = Column(Integer, default=5)            # seconds
     retry_count = Column(Integer, default=3)
 

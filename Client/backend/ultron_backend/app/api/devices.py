@@ -105,6 +105,11 @@ async def create_device(payload: DeviceCreate, background_tasks: BackgroundTasks
         p_dict["device_id"] = device.id
         if not p_dict.get("tag_name"):
             p_dict["tag_name"] = generate_tag_name(p_dict["name"])
+        if p_dict.get("display_order", 0) == 0:
+            from sqlalchemy import func as sa_func
+            max_res = await db.execute(sa_func.max(Parameter.display_order).select())
+            max_ord = max_res.scalar() or 0
+            p_dict["display_order"] = max_ord + 1
         param = Parameter(**p_dict)
         db.add(param)
 
@@ -370,7 +375,7 @@ async def test_device_connection(device_id: int, db: AsyncSession = Depends(get_
                     device.csv_folder,
                     device.csv_filename_pattern or "{YYYYMMDD}.csv",
                     device.csv_delimiter or ",",
-                    device.poll_interval or 60,
+                    device.poll_interval or 5,
                     device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
                 )
                 csv_path = watcher.resolve_path()
@@ -381,6 +386,22 @@ async def test_device_connection(device_id: int, db: AsyncSession = Depends(get_
             exists = os.path.exists(csv_path)
             if not exists:
                 return {"success": False, "message": f"File not found: {csv_path}", "latency_ms": None}
+
+        elif protocol == "udp_custom":
+            from app.services.udp_custom import UDPCustomReader
+            reader = UDPCustomReader(
+                host=target_host or "",
+                port=target_port or 4001,
+                timeout=min(device.timeout or 5, 5),
+                request_hex=device.request_hex,
+            )
+            resp = await reader.send_request()
+            if resp is None:
+                return {
+                    "success": False,
+                    "message": f"UDP no response — {target_host or ''}:{target_port or 4001} (timeout)",
+                    "latency_ms": None,
+                }
 
         else:
             return {"success": False, "message": f"Protocol '{protocol}' not supported for connection test", "latency_ms": None}

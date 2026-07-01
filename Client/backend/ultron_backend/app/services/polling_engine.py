@@ -100,7 +100,7 @@ def _get_csv_watcher(device: Device) -> Optional[CSVWatcher]:
                 device.csv_folder,
                 device.csv_filename_pattern or "{YYYYMMDD}.csv",
                 device.csv_delimiter or ",",
-                device.poll_interval or 60,
+                device.poll_interval or 5,
                 device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
             )
         else:
@@ -108,7 +108,7 @@ def _get_csv_watcher(device: Device) -> Optional[CSVWatcher]:
             _csv_watchers[device.id] = SmartWatcher(
                 device.csv_path,
                 device.csv_delimiter or ",",
-                device.poll_interval or 60,
+                device.poll_interval or 5,
                 device.csv_timestamp_col,
             )
     return _csv_watchers[device.id]

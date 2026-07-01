@@ -41,7 +41,13 @@ async def create_parameter(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
-    param = Parameter(**payload.model_dump())
+    data = payload.model_dump()
+    if data.get("display_order", 0) == 0:
+        from sqlalchemy import func as sa_func
+        max_res = await db.execute(sa_func.max(Parameter.display_order).select())
+        max_ord = max_res.scalar() or 0
+        data["display_order"] = max_ord + 1
+    param = Parameter(**data)
     db.add(param)
     await db.flush()
 
@@ -103,9 +109,24 @@ async def update_parameter(
     param = result.scalar_one_or_none()
     if not param:
         raise HTTPException(status_code=404, detail="Parameter not found")
-    for field, val in payload.model_dump(exclude_unset=True).items():
+    update_data = payload.model_dump(exclude_unset=True)
+    old_device_id = param.device_id
+    for field, val in update_data.items():
         setattr(param, field, val)
     await db.flush()
+
+    # Recalculate LiveData value if scale_factor or offset changed
+    if "scale_factor" in update_data or "offset" in update_data:
+        from app.models.telemetry import LiveData
+        ld_result = await db.execute(
+            select(LiveData).where(LiveData.parameter_id == param_id)
+        )
+        live = ld_result.scalar_one_or_none()
+        if live and live.raw_value is not None:
+            sf = param.scale_factor or 1.0
+            off = param.offset or 0.0
+            live.value = (live.raw_value * sf) + off
+            await db.flush()
 
     # Sync description to all parameters in the same device if description is set
     if param.description:
@@ -119,6 +140,8 @@ async def update_parameter(
 
     await db.commit()
     await db.refresh(param)
+    if "device_id" in update_data and old_device_id != param.device_id:
+        background_tasks.add_task(polling_engine.reload_device, old_device_id)
     background_tasks.add_task(polling_engine.reload_device, param.device_id)
     return param
 
@@ -197,16 +220,27 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
             await reader.close()
             
         elif protocol == "modbus_rtu":
-            from app.services.modbus_rtu import ModbusRTUReader
-            reader = ModbusRTUReader(
-                port=target_serial_port or "COM1",
-                baudrate=target_baud_rate or 9600,
-                data_bits=target_data_bits or 8,
-                parity=target_parity or "N",
-                stop_bits=target_stop_bits or 1,
-                timeout=min(device.timeout or 3, 5),
-            )
-            value, quality = await reader.read_parameter(
+            # RS485/RTU: reuse the polling engine's shared reader for this port.
+            # Windows serial ports are exclusive — opening a second connection
+            # causes PermissionError (Access Denied) → quality 'E'.
+            from app.services import polling_engine as _pe
+            port_key = target_serial_port or device.serial_port or "COM1"
+            shared_reader = _pe._rtu_readers.get(port_key)
+            if shared_reader is None:
+                # Port not yet opened by the polling engine — create a temporary one
+                from app.services.modbus_rtu import ModbusRTUReader
+                shared_reader = ModbusRTUReader(
+                    port=port_key,
+                    baudrate=target_baud_rate or 9600,
+                    data_bits=target_data_bits or 8,
+                    parity=target_parity or "N",
+                    stop_bits=target_stop_bits or 1,
+                    timeout=min(device.timeout or 3, 5),
+                )
+                _owned_reader = True
+            else:
+                _owned_reader = False
+            value, quality = await shared_reader.read_parameter(
                 slave_id=target_slave_id or 1,
                 register_address=param.register_address,
                 register_count=param.register_count,
@@ -216,7 +250,8 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
                 scale_factor=param.scale_factor,
                 offset=param.offset,
             )
-            await reader.close()
+            if _owned_reader:
+                await shared_reader.close()
             
         elif protocol == "tcp_custom":
             from app.services.tcp_custom import TCPCustomReader
@@ -246,14 +281,14 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
                     device.csv_folder,
                     device.csv_filename_pattern or "{YYYYMMDD}.csv",
                     device.csv_delimiter or ",",
-                    device.poll_interval or 60,
+                    device.poll_interval or 5,
                     device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
                 )
             else:
                 watcher = CSVWatcher(
                     device.csv_path or "",
                     device.csv_delimiter or ",",
-                    device.poll_interval or 60,
+                    device.poll_interval or 5,
                     device.csv_timestamp_col,
                 )
             param_dict = {
@@ -268,6 +303,29 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
                 quality = res[0]["quality"]
             else:
                 value, quality = None, "E"
+
+        elif protocol == "udp_custom":
+            from app.services.udp_custom import UDPCustomReader
+            reader = UDPCustomReader(
+                host=target_host or "",
+                port=target_port or 4001,
+                timeout=min(device.timeout or 5, 5),
+                request_hex=device.request_hex,
+            )
+            param_dict = {
+                "id": param.id,
+                "register_address": param.register_address,
+                "parse_method": param.parse_method or "csv_col",
+                "parse_config": param.parse_config,
+                "scale_factor": param.scale_factor,
+                "offset": param.offset,
+            }
+            res = await reader.poll_parameters([param_dict])
+            if res and len(res) > 0:
+                value = res[0]["value"]
+                quality = res[0]["quality"]
+            else:
+                value, quality = None, "E"
                 
         else:
             return {
@@ -277,7 +335,10 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
             
         raw_value = None
         if value is not None and param.scale_factor not in (0, 0.0):
-            raw_value = (value - param.offset) / param.scale_factor
+            if param.data_type == "bool":
+                raw_value = value
+            else:
+                raw_value = (value - param.offset) / param.scale_factor
             raw_value = round(raw_value, 4)
             value = round(value, 2)
             
