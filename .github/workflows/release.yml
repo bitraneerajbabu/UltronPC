@@ -47,12 +47,18 @@ jobs:
 
       - name: Create Config File from Template
         run: |
+          python -c "import secrets; open('secret.key','w').write(secrets.token_urlsafe(64))"
           Copy-Item .env.template .env
           python run.py --encrypt-env
         working-directory: client/backend/ultron_backend
 
       - name: Build UltrON.exe
         run: python -m PyInstaller UltrON.spec --noconfirm
+        working-directory: client/backend/ultron_backend
+
+      - name: Rename Output Exe
+        run: |
+          Copy-Item dist/Ultron_*.exe dist/UltrON.exe
         working-directory: client/backend/ultron_backend
 
       - name: Build UltrON_Installer.exe
