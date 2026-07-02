@@ -21,7 +21,9 @@ def _slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
 
 
-def _find_site(db: Session, station_id: str):
+def _find_site(db: Session, station_id: Optional[str]):
+    if not station_id:
+        return None
     site = db.query(IndustrySite).filter(IndustrySite.api_key == station_id).first()
     if site:
         return site
@@ -63,7 +65,7 @@ def send_command(site_id: int, payload: CommandRequest, request: Request, db: Se
 
 @router.get("/pending")
 def get_pending_commands(
-    station_id: Optional[str] = Query(default=None),
+    station_id: Optional[str] = Query(default=None),  # legacy fallback — prefer X-Station-Id header
     x_station_id: Optional[str] = Header(default=None, alias="X-Station-Id"),
     x_admin_key: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
@@ -91,7 +93,14 @@ def get_pending_commands(
     }
 
 @router.post("/{command_id}/ack")
-def ack_command(command_id: int, station_id: Optional[str] = Query(default=None), x_station_id: Optional[str] = Header(default=None, alias="X-Station-Id"), fail: Optional[bool] = Query(False), x_admin_key: Optional[str] = Header(default=None), db: Session = Depends(get_db)):
+def ack_command(
+    command_id: int,
+    station_id: Optional[str] = Query(default=None),  # legacy fallback — prefer X-Station-Id header
+    x_station_id: Optional[str] = Header(default=None, alias="X-Station-Id"),
+    fail: Optional[bool] = Query(False),
+    x_admin_key: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+):
     cmd = db.query(PendingCommand).filter(PendingCommand.id == command_id).first()
     if not cmd:
         raise HTTPException(status_code=404, detail="Command not found")
