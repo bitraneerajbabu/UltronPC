@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # Set ADMIN_KEY in server .env — must match what's in client_manager.py
     ADMIN_KEY: str = os.environ.get("ADMIN_KEY", "")
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
 
