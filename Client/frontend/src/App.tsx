@@ -386,7 +386,7 @@ function App() {
         <div className="nav-rail-logo">
           <button onClick={handleLogoClick} disabled={refreshing} title="Click to refresh dashboard values"
             style={{ background: 'none', border: 'none', cursor: refreshing ? 'not-allowed' : 'pointer', padding: 0, display: 'flex', outline: 'none' }}>
-            <img src="/assets/Ultron_logo.png" alt="UltrON" className="nav-rail-logo-img" />
+            <img src="/assets/Ultron_logo.png?t=1" alt="UltrON" className="nav-rail-logo-img" />
           </button>
         </div>
 
@@ -414,7 +414,8 @@ function App() {
 
         {/* Top Header Bar */}
         <header className="top-bar">
-          <div className="top-left" style={{ display: 'flex', alignItems: 'center' }}>
+          <div className="top-left" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <img src="/assets/Ultron_logo.png?t=1" alt="UltrON" style={{ height: '42px', width: 'auto', display: 'block' }} />
             {/* System Live Clock */}
             <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f766e', background: 'rgba(15,118,110,0.06)', padding: '6px 14px', borderRadius: '6px', border: '1px solid rgba(15,118,110,0.15)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
               {timeStr}
@@ -483,7 +484,7 @@ function App() {
               onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; }}
               onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
             >
-              <img src="/assets/sunshine_logo.png" alt="Sunshine" style={{ display: 'block', height: '32px', width: 'auto' }} />
+              <img src="/assets/sunshine_logo.png" alt="Sunshine" style={{ display: 'block', height: '40px', width: 'auto' }} />
             </button>
           </div>
         </header>

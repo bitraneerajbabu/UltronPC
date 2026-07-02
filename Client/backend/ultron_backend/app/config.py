@@ -35,6 +35,9 @@ if IS_FROZEN:
     BUNDLE_DIR = Path(sys._MEIPASS).resolve()
     BUNDLE_ENV_ENC = BUNDLE_DIR / ".env.enc"
     BUNDLE_ENV = BUNDLE_DIR / ".env"
+    BUNDLE_ENV_TEMPLATE = BUNDLE_DIR / ".env.template"
+    BUNDLE_DB = BUNDLE_DIR / "ultron.db"
+    DB_FILE = APP_DIR / "ultron.db"
     
     # If no config files exist next to the executable, copy the bundled one as default
     if not ENV_ENC_FILE.is_file() and not ENV_FILE.is_file():
@@ -46,6 +49,23 @@ if IS_FROZEN:
                     print(f"[UltrON] Copied default template configuration to {dst.name}", file=sys.stderr)
                 except Exception as copy_err:
                     print(f"[UltrON] Failed to copy template configuration: {copy_err}", file=sys.stderr)
+        # Fallback: use .env.template if no .env was bundled (keeps secrets out of build)
+        if not ENV_FILE.is_file() and BUNDLE_ENV_TEMPLATE.is_file():
+            try:
+                import shutil
+                shutil.copy2(str(BUNDLE_ENV_TEMPLATE), str(ENV_FILE))
+                print(f"[UltrON] Copied .env.template as default configuration (set RAJAPI_API_KEY before use)", file=sys.stderr)
+            except Exception as copy_err:
+                print(f"[UltrON] Failed to copy .env.template: {copy_err}", file=sys.stderr)
+    
+    # Copy bundled DB template to APP_DIR on first run (fresh install)
+    if not DB_FILE.is_file() and BUNDLE_DB.is_file():
+        try:
+            import shutil
+            shutil.copy2(str(BUNDLE_DB), str(DB_FILE))
+            print(f"[UltrON] Extracted bundled database to {DB_FILE.name}", file=sys.stderr)
+        except Exception as copy_err:
+            print(f"[UltrON] Failed to extract bundled database: {copy_err}", file=sys.stderr)
 
 
 def _recover_config(is_frozen: bool, env_file: Path, env_enc_file: Path, app_dir: Path, bundled_env_enc: Path | None, bundled_env: Path | None = None) -> None:
@@ -92,26 +112,32 @@ def _recover_config(is_frozen: bool, env_file: Path, env_enc_file: Path, app_dir
                     break
                 except Exception as fb_err:
                     print(f"[UltrON] Fallback {fallback.name} failed: {fb_err}", file=sys.stderr)
-    # 3. Frozen fallback: try bundled plain .env (portable across machines)
-    if not recovered and is_frozen and bundled_env is not None and bundled_env.is_file():
-        try:
-            import shutil
-            shutil.copy2(str(bundled_env), str(env_file))
-            print(f"[UltrON] Copied bundled .env to APP_DIR.", file=sys.stderr)
-            config_dict = dotenv.dotenv_values(str(env_file))
-            for k, v in config_dict.items():
-                if v is not None:
-                    os.environ[k] = v
-            try:
-                from app.core.config_crypt import encrypt_file, secure_delete_file
-                encrypt_file(str(env_file), str(env_enc_file))
-                secure_delete_file(str(env_file))
-                print(f"[UltrON] Re-encrypted config from bundled .env -> .env.enc", file=sys.stderr)
-            except Exception as enc_err:
-                print(f"[UltrON] Could not re-encrypt bundled .env: {enc_err}", file=sys.stderr)
-            recovered = True
-        except Exception as fb_err:
-            print(f"[UltrON] Bundled .env fallback failed: {fb_err}", file=sys.stderr)
+    # 3. Frozen fallback: try bundled plain .env or .env.template (portable across machines)
+    if not recovered and is_frozen:
+        bundled_sources = [bundled_env]
+        if bundled_env and bundled_env.parent:
+            bundled_sources.append(bundled_env.parent / ".env.template")
+        for bundled_cfg in bundled_sources:
+            if bundled_cfg is not None and bundled_cfg.is_file():
+                try:
+                    import shutil
+                    shutil.copy2(str(bundled_cfg), str(env_file))
+                    print(f"[UltrON] Copied bundled {bundled_cfg.name} to APP_DIR.", file=sys.stderr)
+                    config_dict = dotenv.dotenv_values(str(env_file))
+                    for k, v in config_dict.items():
+                        if v is not None:
+                            os.environ[k] = v
+                    try:
+                        from app.core.config_crypt import encrypt_file, secure_delete_file
+                        encrypt_file(str(env_file), str(env_enc_file))
+                        secure_delete_file(str(env_file))
+                        print(f"[UltrON] Re-encrypted config from bundled {bundled_cfg.name} -> .env.enc", file=sys.stderr)
+                    except Exception as enc_err:
+                        print(f"[UltrON] Could not re-encrypt: {enc_err}", file=sys.stderr)
+                    recovered = True
+                    break
+                except Exception as fb_err:
+                    print(f"[UltrON] Bundled {bundled_cfg.name} fallback failed: {fb_err}", file=sys.stderr)
     if not recovered:
         print("[UltrON] WARNING: No valid configuration found. Using defaults.", file=sys.stderr)
 

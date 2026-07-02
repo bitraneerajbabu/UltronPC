@@ -71,6 +71,14 @@ export const SettingsScreen = () => {
     } catch { showToast('Failed to start download.', 'error'); }
   };
 
+  const cancelFirmwareDownload = async () => {
+    try {
+      await authFetch(`${API_BASE}/settings/firmware/cancel`, { method: 'POST' });
+      showToast('Download cancelled.');
+      setFwProgress(null);
+    } catch { showToast('Failed to cancel.', 'error'); }
+  };
+
   const startUrlDownload = async () => {
     if (!customUrl.trim()) { showToast('Paste a download URL first.', 'warn'); return; }
     try {
@@ -96,12 +104,15 @@ export const SettingsScreen = () => {
           } else if (st.state === 'error') {
             showToast(`Download failed: ${st.message}`, 'error');
             clearInterval(iv);
+          } else if (st.state === 'cancelled' || st.state === 'idle') {
+            clearInterval(iv);
+            setFwProgress(null);
           }
         }
       } catch {}
     }, 1000);
     return () => clearInterval(iv);
-  }, [fwProgress?.state === 'downloading']);
+  }, [fwProgress?.state]);
 
   useEffect(() => { loadInfo(); }, []);
 
@@ -169,7 +180,18 @@ export const SettingsScreen = () => {
       const res = await authFetch(`${API_BASE}/settings/restart-app`, { method: 'POST' });
       if (!res.ok) throw new Error();
       showToast('Restarting UltrON…', 'info');
-      setTimeout(() => window.location.reload(), 3000);
+      // Poll health endpoint until server comes back
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const h = await fetch(`${API_BASE}/settings/health`, {
+            headers: { 'Authorization': localStorage.getItem('ultron_token') ? `Bearer ${localStorage.getItem('ultron_token')}` : '' }
+          });
+          if (h.ok) { showToast('Server restarted.'); loadInfo(); setActionLoading(''); return; }
+        } catch {}
+      }
+      showToast('Server did not restart in time. Reload manually.', 'error');
+      setActionLoading('');
     } catch {
       showToast('Restart only supported in desktop mode.', 'error');
       setActionLoading('');
@@ -192,10 +214,27 @@ export const SettingsScreen = () => {
     setActionLoading('resetAll');
     try {
       await authFetch(`${API_BASE}/settings/reset-all`, { method: 'POST' });
-      showToast('Factory reset complete.');
-      loadAllData(); loadInfo();
-    } catch { showToast('Failed.', 'error'); }
-    finally { setActionLoading(''); }
+      showToast('Factory reset complete. Server restarting...');
+    } catch {
+      showToast('Factory reset triggered. Waiting for server...', 'error');
+    }
+    // Server is restarting — poll health endpoint until it comes back
+    for (let i = 0; i < 30; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const h = await fetch(`${API_BASE}/settings/health`, {
+          headers: { 'Authorization': localStorage.getItem('ultron_token') ? `Bearer ${localStorage.getItem('ultron_token')}` : '' }
+        });
+        if (h.ok) {
+          showToast('Server restarted — reloading data.');
+          loadAllData(); loadInfo();
+          setActionLoading('');
+          return;
+        }
+      } catch {}
+    }
+    showToast('Server is taking longer than expected. Reload page manually.', 'error');
+    setActionLoading('');
   };
 
   const handleResetFrontend = () => {
@@ -290,15 +329,18 @@ export const SettingsScreen = () => {
             <button style={BTN.primary} onClick={startFirmwareDownload}>Download Latest</button>
           )}
           {fwProgress?.state === 'downloading' && (
-            <div style={{ flex: 1, marginRight: '10px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: T.textMuted, marginBottom: '4px' }}>
-                <span>{fwProgress.message}</span>
-                <span>{fwProgress.percent}%</span>
+            <>
+              <div style={{ flex: 1, marginRight: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: T.textMuted, marginBottom: '4px' }}>
+                  <span>{fwProgress.message}</span>
+                  <span>{fwProgress.percent}%</span>
+                </div>
+                <div style={{ width: '100%', height: '6px', background: T.primaryBg, borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: `${fwProgress.percent}%`, height: '100%', background: T.primary, borderRadius: '3px', transition: 'width 0.3s' }} />
+                </div>
               </div>
-              <div style={{ width: '100%', height: '6px', background: T.primaryBg, borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{ width: `${fwProgress.percent}%`, height: '100%', background: T.primary, borderRadius: '3px', transition: 'width 0.3s' }} />
-              </div>
-            </div>
+              <button style={BTN.ghost} onClick={cancelFirmwareDownload}>Cancel</button>
+            </>
           )}
           {fwProgress?.state === 'done' && (
             <div style={{ fontSize: '12px', fontWeight: '600', color: '#10b981', marginRight: '10px' }}>{fwProgress.message}</div>
@@ -346,60 +388,7 @@ export const SettingsScreen = () => {
             </div>
           </div>
 
-          <div style={sectionTitleS}>Database & Retention</div>
 
-          <div>
-            <div style={labelS}>Data Retention (Days)</div>
-            <input type="number" name="retentionDays" style={INP} value={formData.retentionDays} onChange={handleChange} min="7" />
-          </div>
-          <div>
-            <div style={labelS}>System Timezone</div>
-            <select name="timezone" style={SEL} value={formData.timezone} onChange={handleChange}>
-              <option value="UTC">UTC</option>
-              <option value="Asia/Kolkata">IST (Asia/Kolkata)</option>
-              <option value="America/New_York">EST</option>
-              <option value="Europe/London">GMT</option>
-            </select>
-          </div>
-
-          <div style={sectionTitleS}>Polling & Heartbeat</div>
-
-          <div>
-            <div style={labelS}>Poll Interval (sec)</div>
-            <input type="number" name="pollingInterval" style={INP} value={formData.pollingInterval} onChange={handleChange} min="5" />
-          </div>
-          <div>
-            <div style={labelS}>Alarm Check (sec)</div>
-            <input type="number" name="alarmCheckInterval" style={INP} value={formData.alarmCheckInterval} onChange={handleChange} min="5" />
-          </div>
-
-          <div style={sectionTitleS}>Email Alert Engine</div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <input type="checkbox" name="emailEnabled" checked={formData.emailEnabled} onChange={handleChange} style={{ width: '16px', height: '16px' }} />
-            <span style={{ fontSize: '12px', fontWeight: '600', color: T.text }}>Enable Email Alerts</span>
-          </div>
-
-          {formData.emailEnabled && (
-            <>
-              <div>
-                <div style={labelS}>SMTP Host</div>
-                <input name="smtpHost" style={INP} value={formData.smtpHost} onChange={handleChange} />
-              </div>
-              <div>
-                <div style={labelS}>SMTP Port</div>
-                <input type="number" name="smtpPort" style={INP} value={formData.smtpPort} onChange={handleChange} />
-              </div>
-              <div>
-                <div style={labelS}>SMTP User</div>
-                <input name="smtpUser" style={INP} value={formData.smtpUser} onChange={handleChange} />
-              </div>
-              <div style={{ gridColumn: 'span 2' }}>
-                <div style={labelS}>Alert Recipients (comma separated)</div>
-                <input name="alertRecipients" style={INP} value={formData.alertRecipients} onChange={handleChange} />
-              </div>
-            </>
-          )}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', flexWrap: 'wrap', gap: '10px' }}>

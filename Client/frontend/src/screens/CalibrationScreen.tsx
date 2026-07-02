@@ -318,7 +318,7 @@ export const CalibrationScreen = () => {
                 <thead>
                   <tr>
                     <th>Job Name</th>
-                    <th>Station</th>
+                    <th>Station name (Device & Config)</th>
                     <th>Parameter</th>
                     <th>Type</th>
                     <th>Sequence</th>
@@ -380,7 +380,7 @@ export const CalibrationScreen = () => {
           <div className="section-title">Start New Calibration</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '18px', maxWidth: '640px' }}>
             <div className="form-group">
-              <label className="form-label">Station</label>
+              <label className="form-label">Station name (Device & Config)</label>
               <select className="form-select" value={startStationId} onChange={e => setStartStationId(e.target.value)}>
                 {stations.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
               </select>

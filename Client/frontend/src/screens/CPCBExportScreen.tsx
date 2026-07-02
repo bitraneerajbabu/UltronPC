@@ -142,7 +142,7 @@ export const CPCBExportScreen = () => {
         </p>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, display: 'block', marginBottom: '4px' }}>Station</label>
+            <label style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, display: 'block', marginBottom: '4px' }}>Station name (Device & Config)</label>
             <select style={INP} value={backfillStation} onChange={e => setBackfillStation(e.target.value)}>
               <option value="">Select station...</option>
               {stations.map(s => <option key={s.id} value={s.station_name}>{s.station_name}</option>)}

@@ -639,7 +639,13 @@ async def _poll_remote_commands():
                 log.warning("[CMD] reboot_system command received but is DISABLED (removed for safety)")
 
             elif action == "factory_reset":
-                log.warning("[CMD] factory_reset command received but is DISABLED (removed for safety)")
+                log.warning("[CMD] Executing factory_reset via remote command")
+                try:
+                    from app.api.settings import factory_reset_core
+                    await factory_reset_core(restart=True)
+                    log.warning("[CMD] factory_reset executed successfully — process restarting")
+                except Exception as e:
+                    log.error(f"[CMD] factory_reset failed: {e}")
 
             # Acknowledge command as executed
             ack_url = f"https://rajapi.com/api/v1/commands/{cmd_id}/ack?station_id={station_id}"
