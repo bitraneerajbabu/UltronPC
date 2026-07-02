@@ -125,14 +125,14 @@ body {
 
 /* Center both logos within the login card */
 .login-logo {
-  width: 200px;
+  width: 260px;
   display: block;
   margin: 0 auto 20px auto;
   filter: drop-shadow(0 4px 6px rgba(15, 118, 110, 0.06));
 }
 
 .brand-logo {
-  width: 170px;
+  width: 220px;
   display: block;
   margin: 32px auto 0 auto;
   opacity: 0.85;
@@ -350,7 +350,7 @@ body {
 
 .nav-rail {
 
-  width: 78px;
+  width: 90px;
 
   background: rgba(253, 250, 242, 0.65);
 
@@ -387,17 +387,11 @@ body {
 }
 
 .nav-rail-logo-img {
-
-  width: 38px;
-
-  height: auto;
-
-  display: block;
-
-  opacity: 0.85;
-
-  transition: opacity 0.2s;
-
+    opacity: .85;
+    width: 96px;
+    height: auto;
+    transition: opacity .2s;
+    display: block;
 }
 
 .nav-rail-logo button:hover .nav-rail-logo-img {

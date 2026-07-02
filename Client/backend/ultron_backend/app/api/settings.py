@@ -108,20 +108,35 @@ async def reset_telemetry(db: AsyncSession = Depends(get_db)):
 
 
 # ─── Full DB Reset (wipe everything) ──────────────────────────────────────────
-@router.post("/reset-all", dependencies=[Depends(require_admin)])
-async def reset_all_data(db: AsyncSession = Depends(get_db)):
+
+async def factory_reset_core(*, restart: bool = True):
     """
-    Drop and recreate all tables — full factory reset.
-    WARNING: destroys ALL data including station/device/parameter config.
-    The server auto-restarts after the reset to pick up the fresh DB.
+    Core factory reset logic — stops background tasks, drops all tables,
+    recreates schema, re-seeds default admin user.
+
+    Can be called from:
+      - POST /settings/reset-all  (local UI button)
+      - Remote command polling     (admin panel → factory_reset)
+
+    If restart=True and running as a frozen PyInstaller EXE, spawns a new process
+    and exits the current one (after a short delay for the HTTP response to flush).
     """
     import sys, os
-    audit.warning("Full database reset initiated via /settings/reset-all")
+
+    # 1. Gracefully stop background tasks to prevent DB conflicts
+    try:
+        from app.services.polling_engine import stop_polling
+        await stop_polling()
+        log.info("Polling engine stopped for factory reset")
+    except Exception as e:
+        log.warning(f"Could not stop polling engine: {e}")
+
+    # 2. Drop and recreate all tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
-    # Re-seed default admin user (dropped with all other tables)
+    # 3. Re-seed default admin user (dropped with all other tables)
     async with AsyncSessionLocal() as seed_db:
         admin = User(
             username=settings.ADMIN_USERNAME,
@@ -136,24 +151,40 @@ async def reset_all_data(db: AsyncSession = Depends(get_db)):
 
     log.warning("Full database reset complete — all tables recreated, admin re-seeded")
 
-    # Auto-restart the server so all background jobs (polling, averages, WS)
-    # start fresh against the recreated tables.  Returns the response first,
-    # then restarts in a background thread after a short delay.
-    try:
-        if getattr(sys, "frozen", False):
-            import threading
-            def _do_restart():
-                import time, subprocess
-                time.sleep(2)
-                try:
-                    subprocess.Popen([sys.executable])
-                except Exception:
-                    pass
-                os._exit(0)
-            threading.Thread(target=_do_restart, daemon=True).start()
-    except Exception:
-        pass
+    # 4. Auto-restart the process so background jobs start fresh
+    if restart:
+        try:
+            if getattr(sys, "frozen", False):
+                import threading, subprocess, time
+                def _do_restart():
+                    time.sleep(2)
+                    try:
+                        startup_info = None
+                        if sys.platform == "win32":
+                            startup_info = subprocess.STARTUPINFO()
+                            startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                        subprocess.Popen(
+                            [sys.executable],
+                            startupinfo=startup_info,
+                            close_fds=True,
+                        )
+                    except Exception as e:
+                        log.error(f"Restart spawn failed: {e}")
+                    os._exit(0)
+                threading.Thread(target=_do_restart, daemon=True).start()
+        except Exception as e:
+            log.error(f"Restart setup failed: {e}")
 
+
+@router.post("/reset-all", dependencies=[Depends(require_admin)])
+async def reset_all_data():
+    """
+    Drop and recreate all tables — full factory reset.
+    WARNING: destroys ALL data including station/device/parameter config.
+    The server auto-restarts after the reset to pick up the fresh DB.
+    """
+    audit.warning("Full database reset initiated via /settings/reset-all")
+    await factory_reset_core(restart=True)
     return {"message": "Factory reset complete. Server restarting...", "success": True}
 
 
@@ -201,21 +232,17 @@ async def restart_app():
     if not getattr(sys, "frozen", False):
         raise HTTPException(status_code=400, detail="Restart is only supported in desktop (frozen) mode")
 
-    install_dir = os.path.dirname(sys.executable)
-    restart_flag = os.path.join(install_dir, "restart.flag")
-    try:
-        with open(restart_flag, "w") as f:
-            f.write("1")
-    except Exception:
-        pass
-
     def _do_restart():
         import time
         time.sleep(2)
         try:
-            subprocess.Popen([sys.executable])
-        except Exception:
-            pass
+            startup_info = None
+            if sys.platform == "win32":
+                startup_info = subprocess.STARTUPINFO()
+                startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            subprocess.Popen([sys.executable], startupinfo=startup_info, close_fds=True)
+        except Exception as e:
+            log.error(f"Restart spawn failed: {e}")
         os._exit(0)
 
     threading.Thread(target=_do_restart, daemon=True).start()
@@ -506,12 +533,16 @@ def _do_firmware_download(custom_url=None):
         flag_path = os.path.join(install_dir, "update_pending.flag")
 
         download_req = urllib.request.Request(download_url, headers={"User-Agent": "UltrON-Updater/1.0"})
-        with urlopen_with_ssl_fallback(download_req) as resp:
+        with urlopen_with_ssl_fallback(download_req, timeout=120) as resp:
             total = int(resp.getheader("Content-Length") or 0)
             downloaded = 0
             chunk_size = 65536
-            with open(new_exe_path, "wb") as out:
+            with open(new_exe_path + ".part", "wb") as out:
                 while True:
+                    if _fw_download_state.get("state") == "cancelled":
+                        _fw_download_state = {"state": "idle", "percent": 0, "message": "Download cancelled.", "restart_required": False}
+                        os.remove(new_exe_path + ".part")
+                        return
                     chunk = resp.read(chunk_size)
                     if not chunk:
                         break
@@ -521,6 +552,11 @@ def _do_firmware_download(custom_url=None):
                         pct = int(10 + (downloaded / total) * 85)
                         _fw_download_state["percent"] = pct
                         _fw_download_state["message"] = f"Downloading… {downloaded // 1024}KB / {total // 1024}KB"
+
+        # Move .part → final (atomic)
+        if os.path.exists(new_exe_path):
+            os.remove(new_exe_path)
+        os.rename(new_exe_path + ".part", new_exe_path)
 
         with open(flag_path, "w") as f:
             f.write(tag_name)
@@ -573,3 +609,14 @@ async def start_firmware_download_url(payload: dict):
 async def get_firmware_download_status():
     """Return current background firmware download state."""
     return _fw_download_state
+
+
+@router.post("/firmware/cancel", dependencies=[Depends(require_admin)])
+async def cancel_firmware_download():
+    """Cancel an in-progress firmware download."""
+    global _fw_download_state
+    if _fw_download_state.get("state") != "downloading":
+        return {"state": "idle", "message": "No download in progress."}
+    _fw_download_state["state"] = "cancelled"
+    audit.info("Firmware download cancelled by user")
+    return {"state": "cancelled", "message": "Download cancelled."}

@@ -304,7 +304,7 @@ export const ApiMappingsScreen = () => {
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#fafafa' }}>
                       <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Ch</th>
-                      <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Station</th>
+                      <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Station name (Device & Config)</th>
                       <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Parameter</th>
                       <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Push</th>
                       {isLed ? (

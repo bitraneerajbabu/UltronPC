@@ -301,7 +301,7 @@ export const ReportsScreen = () => {
         <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>Report Filters</div>
         <div style={gridStyle}>
           <div>
-            <div style={labelStyle}>Station</div>
+            <div style={labelStyle}>Station name (Device & Config)</div>
             <select style={SEL} value={stationId} onChange={e => setStationId(e.target.value)}>
               {allStations.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
             </select>

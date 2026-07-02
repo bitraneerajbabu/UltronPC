@@ -178,10 +178,10 @@ else:
 if DB_FILE.is_file():
     datas.append((str(DB_FILE), "."))
 
-# 3. Config files (bundle plain .env — .env.enc is generated at runtime on each PC)
-ENV_FILE = HERE / ".env"
-if ENV_FILE.is_file():
-    datas.append((str(ENV_FILE), "."))
+# 3. Config template (bundle .env.template — actual .env with secrets is NOT shipped)
+ENV_TEMPLATE = HERE / ".env.template"
+if ENV_TEMPLATE.is_file():
+    datas.append((str(ENV_TEMPLATE), "."))
 
 # 3. fpdf2 ships font & image data inside its package
 datas += collect_data_files("fpdf")
@@ -247,7 +247,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     exclude_binaries=False,
-    name="Ultron_1.0.65",
+    name="UltrON",
     debug=False,              # no debug console
     bootloader_ignore_signals=False,
     strip=False,

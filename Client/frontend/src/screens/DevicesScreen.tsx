@@ -325,7 +325,7 @@ export const DevicesScreen = () => {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                  {['#', 'Parameter', 'Unit', 'Protocol', 'Address', 'Slave', 'Register', 'Data Type', 'Live Value', 'Status', ''].map(h => (
+                  {['#', 'Parameter', 'Station', 'Protocol', 'Address', 'Slave', 'Register', 'Data Type', 'Status', ''].map(h => (
                     <th key={h} style={{ padding: '12px 14px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -344,7 +344,9 @@ export const DevicesScreen = () => {
                     <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', background: p.is_active ? '#fff' : '#fafafa' }}>
                       <td style={{ padding: '12px 14px', fontWeight: '700', color: '#0f172a' }}>{p.display_order}</td>
                       <td style={{ padding: '12px 14px', fontWeight: '700', color: '#0f766e' }}>{p.name}</td>
-                      <td style={{ padding: '12px 14px', color: '#64748b' }}>{p.unit}</td>
+                      <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>
+                        {stations.find(s => s.id == dev?.station_id)?.name || <span style={{ color: '#94a3b8' }}>\u2014</span>}
+                      </td>
                       <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>
                         <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>{protoLabel}</span>
                       </td>
@@ -352,9 +354,6 @@ export const DevicesScreen = () => {
                       <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{['tcp_custom', 'udp_custom'].includes(proto) ? '-' : (p.slave_id || dev?.slave_id || '')}</td>
                       <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{p.register_address}</td>
                       <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>{['tcp_custom', 'udp_custom'].includes(proto) ? '-' : getDataTypeLabel(p.data_type, p.byte_order)}</td>
-                      <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', fontWeight: '600', color: liveData[p.tag_name]?.value != null ? '#0f172a' : '#cbd5e1' }}>
-                        {liveData[p.tag_name]?.value != null ? liveData[p.tag_name].value + ' ' + p.unit : '\u2014'}
-                      </td>
                       <td style={{ padding: '12px 14px' }}>
                         <span style={{
                           fontSize: '10px', fontWeight: '700', padding: '3px 10px', borderRadius: '99px',
@@ -372,7 +371,7 @@ export const DevicesScreen = () => {
                   );
                 })}
                 {filteredParams.length === 0 && (
-                  <tr><td colSpan={11} style={{ padding: '48px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
+                  <tr><td colSpan={10} style={{ padding: '48px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
                     {parameters.length === 0
                       ? 'No rules configured. Click Add Rule to get started.'
                       : 'No ' + (activeProtoTab === 'tcp' ? 'TCP' : activeProtoTab === 'rs485' ? 'RS485' : activeProtoTab === 'udp' ? 'UDP' : 'CSV/Excel') + ' rules. Change the filter or add a new rule.'}

@@ -259,6 +259,20 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
+# ─── CSP Headers ──────────────────────────────────────────────────────────────
+from starlette.middleware.base import BaseHTTPMiddleware
+
+CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ws:; frame-ancestors 'none'; form-action 'self'"
+
+class CSPMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        resp = await call_next(request)
+        if "Content-Security-Policy" not in resp.headers:
+            resp.headers["Content-Security-Policy"] = CSP
+        return resp
+
+app.add_middleware(CSPMiddleware)
+
 # ─── Rate Limiting (slowapi) ─────────────────────────────────────────────────
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address

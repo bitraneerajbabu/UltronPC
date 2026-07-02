@@ -489,7 +489,7 @@ export const CPCB = () => {
                   <thead>
                     <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#fafafa' }}>
                       <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Ch</th>
-                      <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Station</th>
+                      <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Station name (Device & Config)</th>
                       <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Parameter</th>
                       <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Push</th>
                       {isLed ? (
@@ -894,7 +894,7 @@ export const CPCB = () => {
         <p style={{ fontSize: '12px', color: T.textFaint, marginBottom: '12px' }}>Recalculate and regenerate CPCB records for a date range.</p>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, display: 'block', marginBottom: '4px' }}>Station</label>
+            <label style={{ fontSize: '11px', fontWeight: '700', color: T.textLabel, display: 'block', marginBottom: '4px' }}>Station name (Device & Config)</label>
             <select style={INP} value={backfillStation} onChange={e => setBackfillStation(e.target.value)}>
               <option value="">Select station...</option>
               {configs.map(s => <option key={s.id} value={s.station_name}>{s.station_name}</option>)}
@@ -940,7 +940,7 @@ export const CPCB = () => {
             <thead>
               <tr style={{ background: T.primaryBg, borderBottom: `2px solid ${T.primaryBorder}` }}>
                 <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: '700', color: T.primary, fontSize: '11px', textTransform: 'uppercase' }}>Time</th>
-                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: '700', color: T.primary, fontSize: '11px', textTransform: 'uppercase' }}>Station</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: '700', color: T.primary, fontSize: '11px', textTransform: 'uppercase' }}>Station name (Device & Config)</th>
                 <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: T.primary, fontSize: '11px', textTransform: 'uppercase' }}>Records</th>
                 <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: '700', color: T.primary, fontSize: '11px', textTransform: 'uppercase' }}>Status</th>
                 <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: '700', color: T.primary, fontSize: '11px', textTransform: 'uppercase' }}>Duration (ms)</th>

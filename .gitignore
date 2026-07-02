@@ -12,6 +12,9 @@ build/
 _MEI*/
 *.spec
 
+# Frontend build output (bundled into EXE, not committed)
+ui_dist/
+
 # Local configurations
 .env
 .env.enc
