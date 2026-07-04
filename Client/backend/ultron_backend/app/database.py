@@ -329,6 +329,32 @@ async def init_db():
         except Exception as clean_err:
             log.warning(f"Device cleanup failed: {clean_err}")
 
+        # 2.13.5 Fix NULL status values in stations and devices (safety net for existing DBs)
+        try:
+            await conn.execute(text("UPDATE stations SET status = 'offline' WHERE status IS NULL"))
+            await conn.execute(text("UPDATE devices SET status = 'offline' WHERE status IS NULL"))
+        except Exception as fix_err:
+            log.warning(f"Status NULL cleanup skipped: {fix_err}")
+
+        # 2.13.6 Remove accidental demo broadcasts from existing/bundled databases.
+        # Real broadcasts should only come from RajAPI/manual creation.
+        try:
+            result = await conn.execute(
+                text(
+                    "DELETE FROM broadcasts "
+                    "WHERE lower(trim(message)) = :message "
+                    "AND CAST(expires_at AS TEXT) LIKE :expires_at"
+                ),
+                {
+                    "message": "scheduled maintenance tonight at 2 am",
+                    "expires_at": "2026-07-05%",
+                },
+            )
+            if result.rowcount and result.rowcount > 0:
+                log.info(f"Removed {result.rowcount} accidental placeholder broadcast(s).")
+        except Exception as clean_err:
+            log.warning(f"Broadcast cleanup skipped: {clean_err}")
+
         # 2.14 Seed default 'Global Gateway' if devices table is completely empty
         try:
             count = await conn.execute(text("SELECT COUNT(*) FROM devices"))

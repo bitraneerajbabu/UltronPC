@@ -384,8 +384,10 @@ function App() {
       {/* Navigation Rail */}
       <aside className="sidebar nav-rail">
         <div className="nav-rail-logo">
-          <button onClick={handleLogoClick} disabled={refreshing} title="Click to refresh dashboard values"
-            style={{ background: 'none', border: 'none', cursor: refreshing ? 'not-allowed' : 'pointer', padding: 0, display: 'flex', outline: 'none' }}>
+          <button onClick={handleHardRefresh} title="Click to hard refresh page"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', outline: 'none' }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = '0.75'; }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}>
             <img src="/assets/Ultron_logo.png?t=1" alt="UltrON" className="nav-rail-logo-img" />
           </button>
         </div>
@@ -466,10 +468,9 @@ function App() {
                 </span>
               </div>
             </div>
-            <button className="btn btn-sm btn-danger" onClick={logout}>Sign Out</button>
             <button
-              onClick={handleHardRefresh}
-              title="Perform Hard Refresh (Ctrl+Shift+R equivalent)"
+              onClick={logout}
+              title="Sign out"
               style={{
                 background: 'none',
                 border: 'none',
@@ -477,14 +478,14 @@ function App() {
                 padding: 0,
                 display: 'flex',
                 alignItems: 'center',
-                transition: 'transform 0.2s ease',
+                transition: 'transform 0.2s ease, opacity 0.2s ease',
                 marginLeft: '4px',
                 outline: 'none'
               }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.opacity = '0.8'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.opacity = '1'; }}
             >
-              <img src="/assets/sunshine_logo.png" alt="Sunshine" style={{ display: 'block', height: '40px', width: 'auto' }} />
+              <img src="/assets/sunshine_logo.png" alt="Sign Out" style={{ display: 'block', height: '40px', width: 'auto' }} />
             </button>
           </div>
         </header>

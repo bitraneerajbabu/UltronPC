@@ -1,6 +1,6 @@
 """UltrON — Pydantic Schemas for Device"""
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 from datetime import datetime
 from typing import Optional, List
 from app.models.device import DeviceType, DeviceProtocol
@@ -184,7 +184,7 @@ class DeviceUpdate(BaseModel):
 
 class DeviceOut(DeviceBase):
     id: int
-    status: str
+    status: str = "offline"
     last_poll: Optional[datetime] = None
     last_error: Optional[str] = None
     created_at: datetime
@@ -193,3 +193,8 @@ class DeviceOut(DeviceBase):
 
     class Config:
         from_attributes = True
+
+    @field_validator('status', mode='before')
+    @classmethod
+    def default_status(cls, v):
+        return v if v is not None else "offline"

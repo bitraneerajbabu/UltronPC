@@ -265,6 +265,11 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
                 "register_address": param.register_address,
                 "scale_factor": param.scale_factor,
                 "offset": param.offset,
+                "host": target_host,
+                "port": target_port,
+                "data_type": param.data_type,
+                "parse_method": param.parse_method or "csv_col",
+                "parse_config": param.parse_config,
             }
             res = await reader.poll_parameters([param_dict])
             await reader.close()
@@ -319,6 +324,9 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
                 "parse_config": param.parse_config,
                 "scale_factor": param.scale_factor,
                 "offset": param.offset,
+                "host": target_host,
+                "port": target_port,
+                "data_type": param.data_type,
             }
             res = await reader.poll_parameters([param_dict])
             if res and len(res) > 0:

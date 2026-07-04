@@ -49,6 +49,33 @@ export const AppProvider = ({ children }) => {
     parametersRef.current = parameters;
   }, [parameters]);
 
+  // ─── Startup token validation ───────────────────────────────────────────────
+  // On first load, if we have a stored token, verify it is still valid against
+  // the server. If the server returns 401 (e.g. server was restarted with a
+  // different key), silently clear localStorage and force re-login.
+  useEffect(() => {
+    const storedToken = localStorage.getItem('ultron_token');
+    const storedUser  = localStorage.getItem('ultron_user');
+    if (!storedToken || !storedUser) return; // nothing to validate
+    fetch(`${API_BASE}/auth/me`, {
+      headers: { 'Authorization': `Bearer ${storedToken}` },
+    })
+      .then(res => {
+        if (res.status === 401) {
+          // Token rejected by server — clear everything and go to login
+          localStorage.removeItem('ultron_token');
+          localStorage.removeItem('ultron_user');
+          localStorage.removeItem('ultron_role');
+          setAuthToken(null);
+          setCurrentUser(null);
+          setCurrentUserRole(null);
+        }
+        // If ok, state is already hydrated from localStorage — no action needed
+      })
+      .catch(() => { /* server unreachable — leave as-is, user can retry */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount only
+
   // Show dynamic toast notifications
   const showToast = useCallback((msg, type = 'success') => {
     const c = document.getElementById('toastContainer');
@@ -74,6 +101,7 @@ export const AppProvider = ({ children }) => {
     };
     try {
       const res = await fetch(url, { ...options, headers });
+      // Auto-logout on 401 — stale/invalid/expired token
       if (res.status === 401) {
         localStorage.removeItem('ultron_token');
         localStorage.removeItem('ultron_user');
@@ -81,8 +109,6 @@ export const AppProvider = ({ children }) => {
         setAuthToken(null);
         setCurrentUser(null);
         setCurrentUserRole(null);
-        if (wsRef.current) wsRef.current.close();
-        showToast('Session expired. Please log in again.', 'error');
       }
       return res;
     } catch (err) {

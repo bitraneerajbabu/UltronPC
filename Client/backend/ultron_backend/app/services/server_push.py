@@ -617,10 +617,13 @@ async def _poll_remote_commands():
     if not station_id or not api_key:
         return
 
-    url = f"{RAJAPI_COMMANDS_URL}?station_id={station_id}"
+    url = RAJAPI_COMMANDS_URL
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, headers={"X-Admin-Key": api_key})
+            resp = await client.get(
+                url,
+                headers={"X-Admin-Key": api_key, "X-Station-Id": station_id},
+            )
             if resp.status_code != 200:
                 return
             commands = resp.json().get("commands", [])
@@ -648,9 +651,12 @@ async def _poll_remote_commands():
                     log.error(f"[CMD] factory_reset failed: {e}")
 
             # Acknowledge command as executed
-            ack_url = f"https://rajapi.com/api/v1/commands/{cmd_id}/ack?station_id={station_id}"
+            ack_url = f"https://rajapi.com/api/v1/commands/{cmd_id}/ack"
             async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.post(ack_url, headers={"X-Admin-Key": api_key})
+                await client.post(
+                    ack_url,
+                    headers={"X-Admin-Key": api_key, "X-Station-Id": station_id},
+                )
 
     except Exception as e:
         log.debug(f"[CMD] Poll failed: {e}")
