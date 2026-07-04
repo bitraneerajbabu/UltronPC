@@ -52,6 +52,7 @@ import time
 import socket
 import logging
 import traceback
+import argparse
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 1 — Fix paths BEFORE any other import
@@ -430,9 +431,95 @@ def _run_server() -> None:
         log.critical("Server thread crashed:\n%s", traceback.format_exc())
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 5 — Main
+# STEP 5 — Windows Startup Registration
+# ─────────────────────────────────────────────────────────────────────────────
+def _register_startup() -> None:
+    """Add UltrON to Windows startup (HKCU\\Run) - runs headless on boot."""
+    try:
+        import winreg
+        exe_path = f'"{sys.executable}" --background'
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0, winreg.KEY_SET_VALUE
+        )
+        winreg.SetValueEx(key, "UltrON", 0, winreg.REG_SZ, exe_path)
+        winreg.CloseKey(key)
+        log.info("Registered UltrON for auto-start with Windows: %s", exe_path)
+        print("[OK] UltrON will auto-start when Windows boots.")
+    except Exception as e:
+        log.error("Failed to register startup: %s", e)
+        print(f"[ERROR] Could not register startup: {e}")
+
+
+def _unregister_startup() -> None:
+    """Remove UltrON from Windows startup."""
+    try:
+        import winreg
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0, winreg.KEY_SET_VALUE
+        )
+        try:
+            winreg.DeleteValue(key, "UltrON")
+            log.info("Removed UltrON from Windows startup")
+            print("[OK] UltrON removed from auto-start.")
+        except FileNotFoundError:
+            print("[OK] UltrON was not registered for auto-start.")
+        winreg.CloseKey(key)
+    except Exception as e:
+        log.error("Failed to unregister startup: %s", e)
+        print(f"[ERROR] Could not unregister startup: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 6 — Headless Background Mode
+# ─────────────────────────────────────────────────────────────────────────────
+def _run_headless() -> None:
+    """Run server-only mode with no UI window — intended for Windows startup."""
+    _prevent_sleep()
+    threading.Thread(target=_keepalive_loop, daemon=True, name="keepalive").start()
+
+    # Start server as non-daemon so process survives when main thread finishes
+    t = threading.Thread(target=_run_server, daemon=False, name="uvicorn")
+    t.start()
+
+    if not _wait_for_server(HOST, PORT, timeout=60):
+        log.error("Background server failed to start within 60 s")
+        sys.exit(1)
+
+    log.info("UltrON running in background mode on %s:%s", HOST, PORT)
+
+    try:
+        t.join()
+    except KeyboardInterrupt:
+        log.info("Background server shutting down...")
+        sys.exit(0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 7 — Main
 # ─────────────────────────────────────────────────────────────────────────────
 def main() -> None:
+    # Parse command-line arguments first
+    parser = argparse.ArgumentParser(description="UltrON Industrial Monitoring Platform")
+    parser.add_argument("--background", action="store_true",
+                        help="Run backend only (no UI window) — for auto-start with Windows")
+    parser.add_argument("--register-startup", action="store_true",
+                        help="Register UltrON to auto-start with Windows")
+    parser.add_argument("--unregister-startup", action="store_true",
+                        help="Remove UltrON from Windows auto-start")
+    args = parser.parse_args()
+
+    # Handle startup registration commands (run and exit)
+    if args.register_startup:
+        _register_startup()
+        return
+    if args.unregister_startup:
+        _unregister_startup()
+        return
+
     log.info("=" * 60)
     log.info("UltrON starting")
     log.info("  BUNDLE_DIR : %s", BUNDLE_DIR)
@@ -441,7 +528,12 @@ def main() -> None:
     log.info("  sys.path[0]: %s", sys.path[0])
     log.info("=" * 60)
 
-    # Check if server is already running
+    # If --background, run headless and never open a window
+    if args.background:
+        _run_headless()
+        return
+
+    # Check if server is already running (second instance → restore window)
     if _port_open(HOST, PORT):
         log.info("UltrON is already running in the background. Restoring window...")
         if sys.platform == "win32":
@@ -450,7 +542,6 @@ def main() -> None:
                 hwnd = ctypes.windll.user32.FindWindowW(None, "UltrON Industrial Monitoring Platform")
                 if hwnd:
                     log.info("Found window handle %s via Win32. Showing and restoring...", hwnd)
-                    # SW_RESTORE = 9
                     ctypes.windll.user32.ShowWindow(hwnd, 9)
                     ctypes.windll.user32.SetForegroundWindow(hwnd)
                     sys.exit(0)
@@ -480,8 +571,8 @@ def main() -> None:
         else:
             log.warning("ui_dist/index.html NOT FOUND — UI will not load")
 
-    # 2. Start server thread
-    t = threading.Thread(target=_run_server, daemon=True, name="uvicorn")
+    # 2. Start server thread (non-daemon — survives window close)
+    t = threading.Thread(target=_run_server, daemon=False, name="uvicorn")
     t.start()
 
     # 3. Wait for server

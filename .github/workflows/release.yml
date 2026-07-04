@@ -58,7 +58,9 @@ jobs:
 
       - name: Rename Output Exe
         run: |
-          Copy-Item dist/Ultron_*.exe dist/UltrON.exe
+          if (-not (Test-Path dist/UltrON.exe)) {
+            Copy-Item dist/Ultron_*.exe dist/UltrON.exe
+          }
         working-directory: client/backend/ultron_backend
 
       - name: Build UltrON_Installer.exe

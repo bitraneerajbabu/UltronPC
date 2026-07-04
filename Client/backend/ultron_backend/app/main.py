@@ -6,6 +6,7 @@ CORS for the frontend, and APScheduler for averaging + heartbeat.
 
 import asyncio
 import os
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -200,12 +201,20 @@ async def lifespan(app: FastAPI):
         id="server_push_delay",
         replace_existing=True,
     )
-    # RajAPI Central Sync — silently push live data every 5 seconds (if API key is configured)
+    # RajAPI Autopilot — lightweight heartbeat every 60 seconds
     scheduler.add_job(
         push_to_rajapi,
         trigger="interval",
-        seconds=5,
+        seconds=60,
         id="rajapi_sync",
+        replace_existing=True,
+    )
+    # Heartbeat monitor for device and station connectivity — run every 60 seconds
+    scheduler.add_job(
+        polling_engine.check_heartbeats,
+        trigger="interval",
+        seconds=60,
+        id="heartbeat_monitor",
         replace_existing=True,
     )
     # CPCB CAAQM Legacy Export — run every 5 seconds
@@ -406,6 +415,16 @@ async def show_window():
             log.error(f"Failed to show window: {e}")
             return {"status": "error", "message": str(e)}
     return {"status": "no_window"}
+
+
+@app.post("/shutdown", include_in_schema=False)
+async def shutdown_server():
+    """Fully stop UltrON server and process."""
+    import os
+    log.warning("Shutdown requested via API — exiting.")
+    thread = threading.Thread(target=lambda: os._exit(0), daemon=True)
+    thread.start()
+    return {"status": "shutting_down"}
 
 
 # ─── Serve Built Frontend (SPA) ───────────────────────────────────────────────

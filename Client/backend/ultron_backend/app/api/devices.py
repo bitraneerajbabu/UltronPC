@@ -293,7 +293,7 @@ async def test_device_connection(device_id: int, db: AsyncSession = Depends(get_
     target_parity = device.parity
     target_stop_bits = device.stop_bits
 
-    if protocol in ("modbus_tcp", "tcp_custom"):
+    if protocol in ("modbus_tcp", "tcp_custom", "udp_custom"):
         if not target_host and device.parameters:
             for p in device.parameters:
                 if p.host:

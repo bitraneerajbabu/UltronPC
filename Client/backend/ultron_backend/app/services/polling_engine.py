@@ -492,9 +492,6 @@ async def start_polling():
         )
         _device_tasks[device.id] = task
 
-    # Start the central sync worker
-    _device_tasks[-1] = asyncio.create_task(_central_sync_worker(), name="central-sync")
-
     log.info(f"Polling engine started: {len(devices)} device(s)")
 
 
@@ -535,3 +532,63 @@ async def reload_device(device_id: int):
         )
         _device_tasks[device_id] = task
         log.info(f"Device {device_id} poll loop reloaded (interval={interval}s)")
+
+
+def is_polling_active() -> bool:
+    return _running
+
+
+async def restart_polling():
+    await stop_polling()
+    await asyncio.sleep(1)
+    await start_polling()
+
+
+async def check_heartbeats():
+    """
+    Heartbeat monitor running every minute.
+    Check last heartbeat (last_poll for devices, last_seen for stations).
+    If heartbeat older than 90 seconds, Status = Offline.
+    If heartbeat newer than 90 seconds, Status = Online.
+    No analyzer data.
+    """
+    from datetime import datetime, timedelta
+    from app.models.device import Device
+    from app.models.station import Station, StationStatus
+    from sqlalchemy import update
+    
+    now = datetime.utcnow()
+    cutoff = now - timedelta(seconds=90)
+    
+    async with AsyncSessionLocal() as db:
+        try:
+            # Update devices based on last_poll
+            await db.execute(
+                update(Device)
+                .where((Device.last_poll < cutoff) | (Device.last_poll.is_(None)))
+                .values(status="offline")
+            )
+            await db.execute(
+                update(Device)
+                .where(Device.last_poll >= cutoff)
+                .values(status="online")
+            )
+            
+            # Update stations based on last_seen
+            await db.execute(
+                update(Station)
+                .where((Station.last_seen < cutoff) | (Station.last_seen.is_(None)))
+                .values(status=StationStatus.offline)
+            )
+            await db.execute(
+                update(Station)
+                .where(Station.last_seen >= cutoff)
+                .values(status=StationStatus.online)
+            )
+            
+            await db.commit()
+            log.info("[Heartbeat Monitor] Checked and updated device/station statuses based on 90s cutoff")
+        except Exception as e:
+            log.error(f"[Heartbeat Monitor] Error checking heartbeats: {e}")
+            await db.rollback()
+

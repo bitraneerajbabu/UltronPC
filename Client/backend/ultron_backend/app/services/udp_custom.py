@@ -21,17 +21,30 @@ log = get_logger("ultron.udp_custom")
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+def _strip_ack_etx(raw_response: str) -> str:
+    """Remove leading ACK (0x06) and trailing ETX (0x03) if present."""
+    if not raw_response:
+        return raw_response
+    s = raw_response
+    if s and s[0] == "\x06":
+        s = s[1:]
+    if s and s[-1] == "\x03":
+        s = s[:-1]
+    return s
+
+
 def _decode_m10404(raw_response: str, channel: int = 0) -> Optional[float]:
     """
     M10404 protocol — used by Envco PM10 / PM2.5 analysers.
     Frame: ACK + 'M10404DDMMYYM<status6><val×100:4><f2:4><f3:4><f4:4><chk:2>' + ETX
+    ACK/ETX are optional — stripped if present.
     Returns value ÷ 100 based on channel (0=val, 1=f2, 2=f3, 3=f4).
     """
     try:
-        if not raw_response or raw_response[0] != "\x06" or raw_response[-1] != "\x03":
-            log.warning("M10404: bad frame delimiters")
+        payload = _strip_ack_etx(raw_response)
+        if not payload:
+            log.warning("M10404: empty payload")
             return None
-        payload = raw_response[1:-1]
         data = payload[13:]          # skip DevID(6) + Date(6) + Mode(1)
         start_idx = 6 + (channel * 4)
         val_str = data[start_idx:start_idx + 4]
@@ -45,13 +58,13 @@ def _decode_af2216(raw_response: str, channel: int = 0) -> Optional[float]:
     """
     AF2216 protocol — used by Envco SO2 analysers.
     Frame: ACK + 'AF2216DDMMYYM00 <SO2> <f2> <f3> <chk>' + ETX
-    Returns value based on channel (first numeric field after header is channel 0).
+    ACK/ETX are optional. Returns value based on channel.
     """
     try:
-        if not raw_response or raw_response[0] != "\x06" or raw_response[-1] != "\x03":
-            log.warning("AF2216: bad frame delimiters")
+        payload = _strip_ack_etx(raw_response)
+        if not payload:
+            log.warning("AF2216: empty payload")
             return None
-        payload = raw_response[1:-1]
         after_header = payload[15:].strip()   # DevID(6) + Date(6) + 'M00'
         tokens = after_header.split()
         if channel < len(tokens):
@@ -66,13 +79,13 @@ def _decode_ac3216(raw_response: str, channel: int = 0) -> Optional[float]:
     """
     AC3216 protocol — used by Envco NO/NO2/NOx analysers.
     Frame: ACK + 'AC3216DDMMYYM00 <NO> <NO2> <NOx> <chk>' + ETX
-    channel 0 = NO, 1 = NO2, 2 = NOx.
+    ACK/ETX are optional. channel 0 = NO, 1 = NO2, 2 = NOx.
     """
     try:
-        if not raw_response or raw_response[0] != "\x06" or raw_response[-1] != "\x03":
-            log.warning("AC3216: bad frame delimiters")
+        payload = _strip_ack_etx(raw_response)
+        if not payload:
+            log.warning("AC3216: empty payload")
             return None
-        payload = raw_response[1:-1]
         after_header = payload[15:].strip()
         tokens = after_header.split()
         if len(tokens) < 4:

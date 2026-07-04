@@ -345,7 +345,7 @@ export const DevicesScreen = () => {
                       <td style={{ padding: '12px 14px', fontWeight: '700', color: '#0f172a' }}>{p.display_order}</td>
                       <td style={{ padding: '12px 14px', fontWeight: '700', color: '#0f766e' }}>{p.name}</td>
                       <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>
-                        {stations.find(s => s.id == dev?.station_id)?.name || <span style={{ color: '#94a3b8' }}>\u2014</span>}
+                        {stations.find(s => s.id == dev?.station_id)?.name || <span style={{ color: '#94a3b8' }}>{'\u2014'}</span>}
                       </td>
                       <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>
                         <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>{protoLabel}</span>

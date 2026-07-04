@@ -219,7 +219,7 @@ class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.66"
+    APP_VERSION: str = "1.0.68"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -252,7 +252,7 @@ class Settings(BaseSettings):
     # ─── Security ─────────────────────────────────────────────
     SECRET_KEY: str = Field(default_factory=lambda: _load_or_create_secret_key())
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 5256000  # 10 years — effectively never expires
     ADMIN_USERNAME: str = Field(default="Master")
     ADMIN_PASSWORD: str = Field(default="")
 
@@ -272,10 +272,14 @@ class Settings(BaseSettings):
     WS_LIVE_PUSH_INTERVAL: int = 5
 
     # ─── RajAPI Central Sync (background, invisible to user) ────
-    RAJAPI_API_KEY: str = ""                  # Site API key from rajapi.com — set per client
+    RAJAPI_API_KEY: str = ""                  # Legacy API key — kept for backward compatibility
     RAJAPI_SYNC_ENABLED: bool = True
 
-    RAJAPI_STATION_ID: str = "default_station"
+    RAJAPI_STATION_ID: str = "default_station"  # Legacy station ID — kept for backward compatibility
+
+    # Gateway ID + Device Secret (new auth model, preferred over RAJAPI_API_KEY)
+    GATEWAY_ID: str = ""
+    DEVICE_SECRET: str = ""
 
     # ─── Polling Engine ───────────────────────────────────────
     POLLING_DEFAULT_INTERVAL: int = 60
@@ -352,6 +356,6 @@ settings = Settings()
 # ─── Immutable RajAPI Server URL ──────────────────────────────
 # Hardcoded — cannot be overridden by .env. All UltrON clients
 # past, present, and future connect here.
-RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/tgpcb/"
+RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/heartbeat"
 RAJAPI_COMMANDS_URL: str = "https://rajapi.com/api/v1/commands/pending"
 CENTRAL_API_URL: str = "https://rajapi.com/api/v1/sync/"

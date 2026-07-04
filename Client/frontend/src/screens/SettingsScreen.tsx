@@ -243,6 +243,19 @@ export const SettingsScreen = () => {
     window.location.reload();
   };
 
+  const handleShutdown = async () => {
+    if (!window.confirm('Shutdown the UltrON server entirely? You will need to restart UltrON manually.')) return;
+    try {
+      await authFetch(`${API_BASE}/shutdown`, { method: 'POST' });
+      showToast('Shutdown command sent.');
+    } catch {
+      showToast('Server shutting down...');
+    }
+    setTimeout(() => {
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#555"><div style="text-align:center"><h2>UltrON has been shut down.</h2><p style="color:#888;margin-top:8px">Please restart UltrON from the Start Menu or desktop shortcut.</p></div></div>';
+    }, 1000);
+  };
+
   const labelS = { fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: '4px' };
   const sectionTitleS = { fontSize: '13px', fontWeight: '700', color: T.primary, marginBottom: '10px', gridColumn: '1 / -1', borderBottom: `1.5px solid ${T.primaryBorder}`, paddingBottom: '6px' };
 
@@ -395,6 +408,7 @@ export const SettingsScreen = () => {
           <div style={{ display: 'flex', gap: '8px' }}>
             <button style={BTN.danger} onClick={handleResetTelemetry} disabled={!!actionLoading}>{actionLoading === 'resetTel' ? '…' : 'Clear Telemetry'}</button>
             <button style={BTN.danger} onClick={handleFactoryReset} disabled={!!actionLoading}>{actionLoading === 'resetAll' ? '…' : 'Factory Reset'}</button>
+            <button style={BTN.danger} onClick={handleShutdown}>{'Shutdown Server'}</button>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button style={BTN.ghost} onClick={handleResetFrontend}>Reset UI</button>
