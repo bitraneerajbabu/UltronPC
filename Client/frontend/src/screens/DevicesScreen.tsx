@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect, useMemo } from 'react';
+import React, { useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { T } from '../theme';
 
@@ -10,12 +10,12 @@ const DATA_TYPES = [
 const DT_MAP = {
   'Integer':        { data_type: 'uint16',  byte_order: 'big' },
   'Signed Integer': { data_type: 'int16',   byte_order: 'big' },
-  'Long Integer':   { data_type: 'int32',   byte_order: 'big' },
-  'Swaped Long':    { data_type: 'int32',   byte_order: 'big_swap' },
-  'Float point':    { data_type: 'float32', byte_order: 'big' },
-  'Swaped Float':   { data_type: 'float32', byte_order: 'big_swap' },
-  'Double Float':   { data_type: 'int64',   byte_order: 'big' },
-  'Swaped Double':  { data_type: 'int64',   byte_order: 'big_swap' },
+  'Long Integer':   { data_type: 'int32',   byte_order: 'big_swap' },
+  'Swaped Long':    { data_type: 'int32',   byte_order: 'big' },
+  'Float point':    { data_type: 'float32', byte_order: 'big_swap' },
+  'Swaped Float':   { data_type: 'float32', byte_order: 'big' },
+  'Double Float':   { data_type: 'int64',   byte_order: 'big_swap' },
+  'Swaped Double':  { data_type: 'int64',   byte_order: 'big' },
 };
 
 const revMap = Object.fromEntries(
@@ -29,11 +29,14 @@ const DEFAULT_PARAM = {
   input_type: 'modbus_tcp', register_type: 'input_reg', register_address: 40001,
   register_count: 2, data_type: 'float32', byte_order: 'big',
   scale_factor: 1.0, offset: 0.0, min_valid: 0.0, max_valid: 1000.0,
-  alarm_low: 0.0, alarm_high: 80.0, alarm_enabled: true, display_order: 1, is_active: true,
-  host: '192.168.1.101', port: '502', slave_id: '1',
+  alarm_low: null, alarm_high: 80.0, alarm_enabled: true, display_order: 1, is_active: true,
+  host: '', port: '', slave_id: '',
   serial_port: 'COM1', baud_rate: 9600, data_bits: 8, parity: 'N', stop_bits: 1,
   csv_mode: 'fixed', csv_path: '', csv_folder: '', csv_filename_pattern: '{YYYYMMDD}.csv',
   csv_delimiter: ',', csv_timestamp_col: 0,
+  request_hex: '', response_delimiter: 'newline',
+  parse_method: 'csv_col', parse_config: '',
+  station_name: '', poll_interval: 5,
 };
 
 const Plus = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
@@ -51,16 +54,17 @@ const genTag = (name) => !name ? '' : name.trim().toUpperCase().replace(/[^A-Z0-
 const renderCsvPattern = (pattern) => {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
-  return 'Today: ' + (pattern || '{YYYYMMDD}.csv')
+  return 'Today ' + String.fromCharCode(8594) + ' ' + (pattern || '{YYYYMMDD}.csv')
     .replace('{YYYYMMDD}', d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()))
     .replace('{YYYY-MM-DD}', d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate()))
     .replace('{DD-MM-YYYY}', p(d.getDate()) + '-' + p(d.getMonth()+1) + '-' + d.getFullYear())
     .replace('{DDMMYYYY}', p(d.getDate()) + p(d.getMonth()+1) + d.getFullYear())
+    .replace('{DD.MM.YYYY}', p(d.getDate()) + '.' + p(d.getMonth()+1) + '.' + d.getFullYear())
     .replace('{date}', d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()));
 };
 
 export const DevicesScreen = () => {
-  const { parameters, devices, addParameter, editParameter, deleteParameter, addDevice, editDevice, showToast, testParameterConnection, hasLoadedOnce } = useContext(AppContext);
+  const { parameters, devices, stations, addParameter, editParameter, deleteParameter, addDevice, editDevice, showToast, testParameterConnection, hasLoadedOnce, API_BASE, authFetch, liveData } = useContext(AppContext);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingIdx, setEditingIdx] = useState(null);
@@ -68,32 +72,53 @@ export const DevicesScreen = () => {
   const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState(null);
 
-  const globalDevice = useMemo(() => {
-    let gd = devices.find(d => d.name === 'Global Gateway');
-    if (!gd && devices.length > 0) gd = devices[0];
-    return gd;
-  }, [devices]);
+  const [activeProtoTab, setActiveProtoTab] = useState('all');
+  const [modalTab, setModalTab] = useState('source');
 
-  useEffect(() => {
-    if (hasLoadedOnce && devices && devices.length === 0) {
-      addDevice({ name: 'Global Gateway', is_active: true, protocol: 'modbus_tcp' });
-    }
-  }, [devices, hasLoadedOnce, addDevice]);
+  const filteredParams = useMemo(() => {
+    if (activeProtoTab === 'all') return parameters;
+    return parameters.filter(p => {
+      const d = devices.find(dd => dd.id == p.device_id);
+      const proto = d?.protocol || '';
+      switch (activeProtoTab) {
+        case 'tcp': return proto === 'modbus_tcp' || proto === 'tcp_custom';
+        case 'rs485': return proto === 'modbus_rtu';
+        case 'udp': return proto === 'udp_custom';
+        case 'csv': return proto === 'csv';
+        default: return true;
+      }
+    });
+  }, [activeProtoTab, parameters, devices]);
+
+  const protoTabs = [
+    { key: 'all', label: 'All' },
+    { key: 'tcp', label: 'TCP' },
+    { key: 'rs485', label: 'RS485' },
+    { key: 'udp', label: 'UDP' },
+    { key: 'csv', label: 'CSV / Excel' },
+  ];
+
+  const protoCounts = useMemo(() => {
+    const count = (pred) => parameters.filter(p => { const d = devices.find(dd => dd.id == p.device_id); return pred(d?.protocol || ''); }).length;
+    return {
+      all: parameters.length,
+      tcp:  count(pr => pr === 'modbus_tcp' || pr === 'tcp_custom'),
+      rs485: count(pr => pr === 'modbus_rtu'),
+      udp:  count(pr => pr === 'udp_custom'),
+      csv:  count(pr => pr === 'csv'),
+    };
+  }, [parameters, devices]);
+
+  const protoFromTab = (tab: string) => {
+    return tab === 'all' ? 'modbus_tcp' : tab === 'tcp' ? 'modbus_tcp' : tab === 'rs485' ? 'modbus_rtu' : tab === 'udp' ? 'udp_custom' : 'csv';
+  };
 
   const openNew = () => {
     setForm({
       ...DEFAULT_PARAM,
       display_order: parameters.length + 1,
-      input_type: globalDevice?.protocol || 'modbus_tcp',
-      host: globalDevice?.host || DEFAULT_PARAM.host,
-      port: globalDevice?.port || DEFAULT_PARAM.port,
-      slave_id: globalDevice?.slave_id || DEFAULT_PARAM.slave_id,
-      csv_mode: globalDevice?.csv_folder ? 'daily' : 'fixed',
-      csv_path: globalDevice?.csv_path || '',
-      csv_folder: globalDevice?.csv_folder || '',
-      csv_filename_pattern: globalDevice?.csv_filename_pattern || '{YYYYMMDD}.csv',
-      csv_delimiter: globalDevice?.csv_delimiter || ',',
-      csv_timestamp_col: globalDevice?.csv_timestamp_col ?? 0,
+      input_type: protoFromTab(activeProtoTab),
+      device_id: null,
     });
     setEditingIdx(null);
     setModalOpen(true);
@@ -101,12 +126,14 @@ export const DevicesScreen = () => {
 
   const openEdit = (i) => {
     const p = parameters[i];
-    const dev = devices.find(d => d.id === p.device_id);
+    const dev = devices.find(d => d.id == p.device_id);
     setForm({
       ...DEFAULT_PARAM, ...p,
       host: p.host || dev?.host || '',
       port: p.port || dev?.port || '',
       slave_id: p.slave_id || dev?.slave_id || '',
+      request_hex: dev?.request_hex || '',
+      response_delimiter: dev?.response_delimiter || 'newline',
       input_type: dev?.protocol || 'modbus_tcp',
       csv_mode: dev?.csv_folder ? 'daily' : 'fixed',
       csv_path: dev?.csv_path || '',
@@ -114,6 +141,14 @@ export const DevicesScreen = () => {
       csv_filename_pattern: dev?.csv_filename_pattern || '{YYYYMMDD}.csv',
       csv_delimiter: dev?.csv_delimiter || ',',
       csv_timestamp_col: dev?.csv_timestamp_col ?? 0,
+      station_name: (dev?.station_id ? (stations.find(s => s.id == dev.station_id)?.name || '') : '') || p.description || '',
+      serial_port: dev?.serial_port || '',
+      baud_rate: dev?.baud_rate || 9600,
+      data_bits: dev?.data_bits || 8,
+      parity: dev?.parity || 'N',
+      stop_bits: dev?.stop_bits || 1,
+      poll_interval: dev?.poll_interval ?? 5,
+      device_id: p.device_id,
     });
     setEditingIdx(i);
     setModalOpen(true);
@@ -126,43 +161,102 @@ export const DevicesScreen = () => {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm(p => ({ ...p, [name]: type === 'checkbox' ? checked : (type === 'number' && value !== '' ? Number(value) : value) }));
+    if (type === 'number' && value === '') {
+      const defaults = { scale_factor: 1.0, offset: 0.0, register_count: 2 };
+      setForm(p => ({ ...p, [name]: name in defaults ? defaults[name] : '' }));
+    } else {
+      setForm(p => ({ ...p, [name]: type === 'checkbox' ? checked : value }));
+    }
   };
 
   const handleSave = async () => {
     if (!form.name) return showToast('Monitored Sensor name is required.', 'error');
-    if (!globalDevice) return showToast('Initializing global gateway, please wait...', 'error');
     if (form.input_type === 'csv' && form.csv_mode === 'fixed' && !form.csv_path?.trim()) {
-      return showToast('CSV fixed file path is required.', 'error');
+      return showToast('File path is required for fixed CSV/Excel mode.', 'error');
     }
     if (form.input_type === 'csv' && form.csv_mode === 'daily' && !form.csv_folder?.trim()) {
-      return showToast('CSV daily folder is required.', 'error');
+      return showToast('Folder path is required for daily rotating CSV/Excel mode.', 'error');
     }
 
     setSaving(true);
     try {
       const deviceProtocol = form.input_type;
-      const deviceSaved = await editDevice(globalDevice.id, {
-        protocol: deviceProtocol,
-        host: deviceProtocol === 'csv' || deviceProtocol === 'modbus_rtu' ? null : (form.host || null),
-        port: deviceProtocol === 'csv' || deviceProtocol === 'modbus_rtu' ? null : (form.port || null),
-        serial_port: deviceProtocol === 'modbus_rtu' ? (form.serial_port || null) : null,
-        baud_rate: deviceProtocol === 'modbus_rtu' ? (form.baud_rate || 9600) : null,
-        data_bits: deviceProtocol === 'modbus_rtu' ? (form.data_bits || 8) : null,
-        parity: deviceProtocol === 'modbus_rtu' ? (form.parity || 'N') : null,
-        stop_bits: deviceProtocol === 'modbus_rtu' ? (form.stop_bits || 1) : null,
-        slave_id: form.slave_id || 1,
-        csv_path: deviceProtocol === 'csv' && form.csv_mode === 'fixed' ? form.csv_path : null,
-        csv_folder: deviceProtocol === 'csv' && form.csv_mode === 'daily' ? form.csv_folder : null,
-        csv_filename_pattern: deviceProtocol === 'csv' && form.csv_mode === 'daily'
-          ? (form.csv_filename_pattern || '{YYYYMMDD}.csv') : null,
-        csv_delimiter: deviceProtocol === 'csv' ? (form.csv_delimiter || ',') : ',',
-        csv_timestamp_col: deviceProtocol === 'csv' ? (form.csv_timestamp_col ?? 0) : null,
-      });
-      if (!deviceSaved) return;
+      const toNum = (v: any, fallback: any) => { const n = Number(v); return isNaN(n) ? fallback : n; };
 
-      const payload = { ...form, tag_name: genTag(form.name), device_id: globalDevice.id, overrideConnection: true };
-      const success = editingIdx !== null ? await editParameter(form.id, payload) : await addParameter(payload);
+      const protoLabel = {
+        modbus_tcp: 'TCP Gateway', modbus_rtu: 'RS485 Gateway',
+        tcp_custom: 'TCP Custom', udp_custom: 'UDP Gateway', csv: 'CSV Reader'
+      }[deviceProtocol] || 'Gateway';
+      const autoDeviceName = (form.station_name?.trim() || form.name?.trim() || 'Device') + ' ' + protoLabel;
+
+      const deviceUpdate: Record<string, any> = { protocol: deviceProtocol, name: autoDeviceName };
+      deviceUpdate.poll_interval = toNum(form.poll_interval, 5);
+      if (form.station_name?.trim()) deviceUpdate.station_name = form.station_name.trim();
+      if (deviceProtocol === 'modbus_tcp' || deviceProtocol === 'tcp_custom' || deviceProtocol === 'udp_custom') {
+        deviceUpdate.host = form.host || '';
+        deviceUpdate.port = form.port || '';
+        deviceUpdate.slave_id = toNum(form.slave_id, 1);
+        if (deviceProtocol === 'tcp_custom' || deviceProtocol === 'udp_custom') {
+          deviceUpdate.request_hex = form.request_hex || null;
+          deviceUpdate.response_delimiter = form.response_delimiter || 'newline';
+        }
+      } else if (deviceProtocol === 'modbus_rtu') {
+        deviceUpdate.serial_port = form.serial_port || '';
+        deviceUpdate.baud_rate = toNum(form.baud_rate, 9600);
+        deviceUpdate.data_bits = toNum(form.data_bits, 8);
+        deviceUpdate.parity = form.parity || 'N';
+        deviceUpdate.stop_bits = toNum(form.stop_bits, 1);
+        deviceUpdate.slave_id = toNum(form.slave_id, 1);
+      } else if (deviceProtocol === 'csv') {
+        if (form.csv_mode === 'fixed') deviceUpdate.csv_path = form.csv_path || '';
+        if (form.csv_mode === 'daily') deviceUpdate.csv_folder = form.csv_folder || '';
+        deviceUpdate.csv_filename_pattern = form.csv_filename_pattern || '{YYYYMMDD}.csv';
+        deviceUpdate.csv_delimiter = form.csv_delimiter || ',';
+        deviceUpdate.csv_timestamp_col = toNum(form.csv_timestamp_col, 0);
+      }
+
+      let targetDeviceId = form.device_id;
+      if (editingIdx !== null && targetDeviceId) {
+        const devExists = devices.find(d => d.id == targetDeviceId);
+        if (devExists) {
+          const deviceSaved = await editDevice(targetDeviceId, deviceUpdate);
+          if (!deviceSaved) return;
+        }
+      } else {
+        const newDevice = await addDevice(deviceUpdate);
+        if (!newDevice) return;
+        targetDeviceId = newDevice.id;
+      }
+
+      let parseConfigStr = form.parse_config || '';
+      if (deviceProtocol === 'tcp_custom' || deviceProtocol === 'udp_custom') {
+        const customConf = {
+          request_hex: form.request_hex || null,
+          response_delimiter: form.response_delimiter || 'newline'
+        };
+        try {
+          const existing = parseConfigStr ? JSON.parse(parseConfigStr) : {};
+          parseConfigStr = JSON.stringify({ ...existing, ...customConf });
+        } catch(e) {
+          parseConfigStr = JSON.stringify(customConf);
+        }
+      }
+
+      const numFields = ['display_order','register_address','register_count','scale_factor','offset','min_valid','max_valid','alarm_low','alarm_high','baud_rate','data_bits','stop_bits','slave_id','csv_timestamp_col','poll_interval'];
+      const payload: Record<string, any> = { 
+        ...form, 
+        parse_config: parseConfigStr, 
+        tag_name: genTag(form.name), 
+        device_id: targetDeviceId, 
+        overrideConnection: true 
+      };
+      numFields.forEach(f => {
+        if (payload[f] !== undefined && payload[f] !== null && payload[f] !== '') {
+          const n = Number(payload[f]);
+          if (!isNaN(n)) payload[f] = n;
+        }
+      });
+      const success = editingIdx !== null ? await editParameter((form as any).id, payload) : await addParameter(payload);
       if (success) closeModal();
     } catch (err) {
       console.error('Failed to save parameter config:', err);
@@ -207,39 +301,59 @@ export const DevicesScreen = () => {
         }}><Plus /> Add Rule</button>
       </div>
 
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0 28px', display: 'flex', gap: '4px', flexShrink: 0 }}>
+        {protoTabs.map(tab => (
+          <button key={tab.key} onClick={() => setActiveProtoTab(tab.key)} style={{
+            padding: '12px 16px', fontSize: '12px', fontWeight: '700', cursor: 'pointer',
+            background: 'none', border: 'none', borderBottom: '3px solid ' + (activeProtoTab === tab.key ? '#0f766e' : 'transparent'),
+            color: activeProtoTab === tab.key ? '#0f766e' : '#94a3b8',
+            transition: 'color 0.15s, border-color 0.15s',
+          }}>
+            {tab.label}
+            <span style={{
+              marginLeft: '6px', fontSize: '10px', fontWeight: '700',
+              background: activeProtoTab === tab.key ? '#f0fdfa' : '#f1f5f9',
+              color: '#64748b', padding: '1px 7px', borderRadius: '99px',
+            }}>{protoCounts[tab.key]}</span>
+          </button>
+        ))}
+      </div>
+
       <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
         <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                  {['#', 'Parameter', 'Unit', 'Protocol', 'Address', 'Slave', 'Register', 'Data Type', 'Status', ''].map(h => (
+                  {['#', 'Parameter', 'Station', 'Protocol', 'Address', 'Slave', 'Register', 'Data Type', 'Status', ''].map(h => (
                     <th key={h} style={{ padding: '12px 14px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {parameters.map((p, i) => {
-                  const dev = devices.find(d => d.id === p.device_id);
-                  const proto = dev?.protocol || '�';
-                  const protoLabel = proto === 'modbus_tcp' ? 'Modbus TCP' : proto === 'modbus_rtu' ? 'Modbus RTU' : proto === 'csv' ? 'CSV' : proto;
+                {filteredParams.map((p, i) => {
+                  const dev = devices.find(d => d.id == p.device_id);
+                  const proto = dev?.protocol || '';
+                  const protoLabel = proto === 'modbus_tcp' ? 'Modbus TCP' : proto === 'modbus_rtu' ? 'Modbus RTU' : proto === 'csv' ? 'CSV / Excel' : proto === 'tcp_custom' ? 'TCP Custom' : proto === 'udp_custom' ? 'UDP Custom' : proto;
                   const addr = proto === 'csv'
-                    ? (dev?.csv_folder ? dev.csv_folder + '\\' + (dev.csv_filename_pattern || '') : (dev?.csv_path || '�'))
-                    : (p.host || dev?.host || '�');
-                  const port = p.port || dev?.port || '�';
+                    ? (dev?.csv_folder ? dev.csv_folder + '\\' + (dev.csv_filename_pattern || '') : (dev?.csv_path || ''))
+                    : (p.host || dev?.host || '');
+                  const port = p.port || dev?.port || '';
 
                   return (
-                    <tr key={p.id || i} style={{ borderBottom: '1px solid #f1f5f9', background: p.is_active ? '#fff' : '#fafafa' }}>
+                    <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', background: p.is_active ? '#fff' : '#fafafa' }}>
                       <td style={{ padding: '12px 14px', fontWeight: '700', color: '#0f172a' }}>{p.display_order}</td>
                       <td style={{ padding: '12px 14px', fontWeight: '700', color: '#0f766e' }}>{p.name}</td>
-                      <td style={{ padding: '12px 14px', color: '#64748b' }}>{p.unit}</td>
+                      <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>
+                        {stations.find(s => s.id == dev?.station_id)?.name || <span style={{ color: '#94a3b8' }}>{'\u2014'}</span>}
+                      </td>
                       <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>
                         <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>{protoLabel}</span>
                       </td>
                       <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{proto !== 'csv' ? addr + ':' + port : addr}</td>
-                      <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{p.slave_id || dev?.slave_id || '�'}</td>
+                      <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{['tcp_custom', 'udp_custom'].includes(proto) ? '-' : (p.slave_id || dev?.slave_id || '')}</td>
                       <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{p.register_address}</td>
-                      <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>{getDataTypeLabel(p.data_type, p.byte_order)}</td>
+                      <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>{['tcp_custom', 'udp_custom'].includes(proto) ? '-' : getDataTypeLabel(p.data_type, p.byte_order)}</td>
                       <td style={{ padding: '12px 14px' }}>
                         <span style={{
                           fontSize: '10px', fontWeight: '700', padding: '3px 10px', borderRadius: '99px',
@@ -256,8 +370,12 @@ export const DevicesScreen = () => {
                     </tr>
                   );
                 })}
-                {parameters.length === 0 && (
-                  <tr><td colSpan={10} style={{ padding: '48px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>No rules configured. Click <strong>Add Rule</strong> to get started.</td></tr>
+                {filteredParams.length === 0 && (
+                  <tr><td colSpan={10} style={{ padding: '48px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
+                    {parameters.length === 0
+                      ? 'No rules configured. Click Add Rule to get started.'
+                      : 'No ' + (activeProtoTab === 'tcp' ? 'TCP' : activeProtoTab === 'rs485' ? 'RS485' : activeProtoTab === 'udp' ? 'UDP' : 'CSV/Excel') + ' rules. Change the filter or add a new rule.'}
+                  </td></tr>
                 )}
               </tbody>
             </table>
@@ -277,234 +395,322 @@ export const DevicesScreen = () => {
               <button onClick={closeModal} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}><X /></button>
             </div>
 
-            <div style={{ padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div>
-                  <label style={s()}>Channel ID</label>
-                  <input type="number" name="display_order" value={form.display_order} onChange={handleChange} style={ipt} />
-                </div>
-                <div>
-                  <label style={s()}>Status</label>
-                  <select value={form.is_active ? 'Enabled' : 'Disabled'} onChange={(e) => setForm(p => ({ ...p, is_active: e.target.value === 'Enabled' }))} style={ipt}>
-                    <option value="Enabled">Enabled</option>
-                    <option value="Disabled">Disabled</option>
-                  </select>
-                </div>
+            <div style={{ padding: '0 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+                {[
+                  { key: 'source', label: 'Source' },
+                  { key: 'scaling', label: 'Scaling & Limits' },
+                  { key: 'identification', label: 'Identification' },
+                ].map(tab => (
+                  <button key={tab.key} onClick={() => setModalTab(tab.key)} style={{
+                    padding: '12px 16px', fontSize: '12px', fontWeight: '700', cursor: 'pointer',
+                    background: 'none', border: 'none', borderBottom: '3px solid ' + (modalTab === tab.key ? '#0f766e' : 'transparent'),
+                    color: modalTab === tab.key ? '#0f766e' : '#94a3b8',
+                    transition: 'color 0.15s, border-color 0.15s',
+                  }}>
+                    {tab.label}
+                  </button>
+                ))}
               </div>
 
-              <div>
-                <label style={s()}>Protocol</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {['modbus_tcp', 'modbus_rtu', 'csv'].map(proto => (
-                    <button key={proto} onClick={() => setForm(p => ({ ...p, input_type: proto }))} style={btnStyle(form.input_type === proto)}>
-                      {proto === 'modbus_tcp' ? 'TCP' : proto === 'modbus_rtu' ? 'RS485' : 'CSV'}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <div style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-              {form.input_type === 'csv' ? (
-                <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {['daily', 'fixed'].map(mode => (
-                      <button key={mode} onClick={() => setForm(p => ({ ...p, csv_mode: mode }))} style={btnStyle(form.csv_mode === mode)}>
-                        {mode === 'daily' ? 'Daily Rotating' : 'Fixed File'}
-                      </button>
-                    ))}
-                  </div>
-                  {form.csv_mode === 'daily' ? (
+                {modalTab === 'source' && (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div>
+                        <label style={s()}>Channel ID</label>
+                        <input type="number" name="display_order" value={form.display_order} onChange={handleChange} style={ipt} />
+                      </div>
+                      <div>
+                        <label style={s()}>Status</label>
+                        <select value={form.is_active ? 'Enabled' : 'Disabled'} onChange={(e) => setForm(p => ({ ...p, is_active: e.target.value === 'Enabled' }))} style={ipt}>
+                          <option value="Enabled">Enabled</option>
+                          <option value="Disabled">Disabled</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={s()}>Protocol / Data Source</label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {['modbus_tcp', 'modbus_rtu', 'udp_custom', 'csv'].map(proto => (
+                          <button key={proto} onClick={() => setForm(p => ({ ...p, input_type: proto }))} style={btnStyle(form.input_type === proto)}>
+                            {proto === 'modbus_tcp' ? 'TCP' : proto === 'modbus_rtu' ? 'RS485' : proto === 'udp_custom' ? 'UDP Custom' : 'CSV / Excel'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {form.input_type === 'csv' ? (
+                      <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        <div>
+                          <label style={s()}>File Mode</label>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            {['daily', 'fixed'].map(mode => (
+                              <button key={mode} onClick={() => setForm(p => ({ ...p, csv_mode: mode }))} style={btnStyle(form.csv_mode === mode)}>
+                                {mode === 'daily' ? 'Daily Rotating (new file each day)' : 'Fixed File (single file)'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {form.csv_mode === 'daily' ? (
+                          <>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                              <div>
+                                <label style={s()}>Folder Path</label>
+                                <input type="text" name="csv_folder" value={form.csv_folder || ''} onChange={handleChange} style={ipt} placeholder={String.raw`C:\Users\sunsh\OneDrive\Desktop`} />
+                                <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Full path to the folder containing daily files</div>
+                              </div>
+                              <div>
+                                <label style={s()}>Filename Pattern</label>
+                                <input type="text" name="csv_filename_pattern" value={form.csv_filename_pattern || ''} onChange={handleChange} style={ipt} placeholder="{DD.MM.YYYY} Daily Rep..xlsx" />
+                                <div style={{ fontSize: '10px', color: '#0369a1', marginTop: '4px', fontWeight: '600' }}>{renderCsvPattern(form.csv_filename_pattern)}</div>
+                              </div>
+                            </div>
+                            <div style={{ background: '#dbeafe', borderRadius: '8px', padding: '10px 12px', fontSize: '11px', color: '#1e40af', lineHeight: 1.7 }}>
+                              <strong>Date Tokens:</strong>&nbsp;
+                              <code>{'{DD.MM.YYYY}'}</code> 26.06.2026 &nbsp;|&nbsp;
+                              <code>{'{DD-MM-YYYY}'}</code> 26-06-2026 &nbsp;|&nbsp;
+                              <code>{'{YYYYMMDD}'}</code> 20260626 &nbsp;|&nbsp;
+                              <code>{'{YYYY-MM-DD}'}</code> 2026-06-26
+                            </div>
+                          </>
+                        ) : (
+                          <div>
+                            <label style={s()}>Full File Path (.csv or .xlsx)</label>
+                            <input type="text" name="csv_path" value={form.csv_path || ''} onChange={handleChange} style={ipt} placeholder={String.raw`C:\Users\sunsh\OneDrive\Desktop\readings.csv`} />
+                            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Supports both .csv and .xlsx files</div>
+                          </div>
+                        )}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                          <div>
+                            <label style={s()}>Delimiter</label>
+                            <input type="text" name="csv_delimiter" value={form.csv_delimiter || ','} onChange={handleChange} style={ipt} maxLength={5} placeholder="," />
+                            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>For .xlsx files, leave as comma (ignored)</div>
+                          </div>
+                          <div>
+                            <label style={s()}>Timestamp Column (0=A)</label>
+                            <input type="number" name="csv_timestamp_col" value={form.csv_timestamp_col ?? 0} onChange={handleChange} style={ipt} min={0} />
+                            <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Col A=0, B=1, C=2, D=3...</div>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: '2px' }}>
+                            <label style={s()}>Data Column (Register Address)</label>
+                            <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: '600', background: '#e0f2fe', padding: '8px 10px', borderRadius: '6px' }}>
+                              Set Register Address = column index (A=0, B=1, C=2...)
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#0f766e', fontWeight: '500', padding: '10px 12px', background: '#d1fae5', borderRadius: '8px', lineHeight: 1.6, border: '1px solid #6ee7b7' }}>
+                          <strong>Supported Formats:</strong> CSV (.csv) and Excel (.xlsx)<br />
+                          <strong>Excel layout:</strong> Header rows (Date, column names, units) are auto-skipped. Footer rows (MAX/MIN/AVG) are also auto-skipped. UltrON reads the last hourly data row.<br />
+                          <strong>Column mapping:</strong> Use Register Address = column index. For your daily report: NOX=1, PM10=2, PM25=3, SO2=4
+                        </div>
+                      </div>
+                    ) : form.input_type === 'modbus_rtu' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                          <div>
+                            <label style={s()}>Serial Port</label>
+                            <input type="text" name="serial_port" value={form.serial_port || ''} onChange={handleChange} style={ipt} placeholder="COM1" />
+                          </div>
+                          <div>
+                            <label style={s()}>Baud Rate</label>
+                            <select name="baud_rate" value={form.baud_rate || 9600} onChange={handleChange} style={ipt}>
+                              {[9600, 19200, 38400, 57600, 115200].map(b => <option key={b} value={b}>{b}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label style={s()}>Slave ID</label>
+                            <input type="number" name="slave_id" value={form.slave_id} onChange={handleChange} style={ipt} />
+                          </div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                          <div>
+                            <label style={s()}>Data Bits</label>
+                            <select name="data_bits" value={form.data_bits || 8} onChange={handleChange} style={ipt}>
+                              {[5, 6, 7, 8].map(b => <option key={b} value={b}>{b}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label style={s()}>Parity</label>
+                            <select name="parity" value={form.parity || 'N'} onChange={handleChange} style={ipt}>
+                              <option value="N">None</option>
+                              <option value="E">Even</option>
+                              <option value="O">Odd</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label style={s()}>Stop Bits</label>
+                            <select name="stop_bits" value={form.stop_bits || 1} onChange={handleChange} style={ipt}>
+                              {[1, 2].map(b => <option key={b} value={b}>{b}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: ['tcp_custom', 'udp_custom'].includes(form.input_type) ? '1fr 1fr' : '1fr 1fr 1fr', gap: '12px' }}>
+                          <div>
+                            <label style={s()}>IP Address</label>
+                            <input type="text" name="host" value={form.host} onChange={handleChange} style={ipt} placeholder="192.168.1.101" />
+                          </div>
+                          <div>
+                            <label style={s()}>Port</label>
+                            <input type="text" name="port" value={form.port} onChange={handleChange} style={ipt} placeholder="502" />
+                          </div>
+                          {!['tcp_custom', 'udp_custom'].includes(form.input_type) && (
+                            <div>
+                              <label style={s()}>Slave ID</label>
+                              <input type="number" name="slave_id" value={form.slave_id} onChange={handleChange} style={ipt} />
+                            </div>
+                          )}
+                        </div>
+                        {(form.input_type === 'tcp_custom' || form.input_type === 'udp_custom') && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div>
+                              <label style={s()}>Request Hex Command</label>
+                              <input type="text" name="request_hex" value={form.request_hex || ''} onChange={handleChange} style={ipt} placeholder="02 4D 31 30 34 30 34 37 43 03" />
+                              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Hex bytes sent to device (space-separated)</div>
+                            </div>
+                            <div>
+                              <label style={s()}>Response Delimiter</label>
+                              <select name="response_delimiter" value={form.response_delimiter || 'newline'} onChange={handleChange} style={ipt}>
+                                <option value="newline">Newline (\n)</option>
+                                <option value="etx">ETX (0x03)</option>
+                              </select>
+                              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Character that ends the device response</div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+
+                    {form.input_type !== 'csv' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                        {!['tcp_custom', 'udp_custom'].includes(form.input_type) && (
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div>
+                              <label style={s()}>Function Code</label>
+                              <select name="register_type" value={form.register_type} onChange={handleChange} style={ipt}>
+                                <option value="input_reg">04 Input Register</option>
+                                <option value="holding">03 Holding Register</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label style={s()}>Data Type</label>
+                              <select value={getDataTypeLabel(form.data_type, form.byte_order)} onChange={(e) => {
+                                const m = DT_MAP[e.target.value];
+                                if (m) setForm(p => ({ ...p, data_type: m.data_type, byte_order: m.byte_order }));
+                              }} style={ipt}>
+                                {DATA_TYPES.map(dt => (
+                                  <option key={dt} value={dt}>{dt}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                        <div style={{ display: 'grid', gridTemplateColumns: ['tcp_custom', 'udp_custom'].includes(form.input_type) ? '1fr 1fr' : '1fr 1fr', gap: '12px' }}>
+                          <div>
+                            <label style={s()}>{['tcp_custom', 'udp_custom'].includes(form.input_type) ? 'Field Index' : 'Start Address'}</label>
+                            <input type="number" name="register_address" value={form.register_address} onChange={handleChange} style={ipt} />
+                            {['tcp_custom', 'udp_custom'].includes(form.input_type) && (
+                              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>ASCII field index (0-based space-delimited position)</div>
+                            )}
+                          </div>
+                          {!['tcp_custom', 'udp_custom'].includes(form.input_type) ? (
+                            <div>
+                              <label style={s()}>Register Count</label>
+                              <input type="number" name="register_count" value={form.register_count} onChange={handleChange} style={ipt} />
+                            </div>
+                          ) : (
+                            <div>
+                              <label style={s()}>Parse Method</label>
+                              <select name="parse_method" value={form.parse_method || 'csv_col'} onChange={handleChange} style={ipt}>
+                                <option value="csv_col">CSV Column</option>
+                                <option value="position">Position</option>
+                                <option value="regex">Regex</option>
+                                <option value="delimiter_split">Delimiter Split</option>
+                                <option value="m10404">M10404 (Envco PM)</option>
+                                <option value="af2216">AF2216 (Envco SO2)</option>
+                                <option value="ac3216">AC3216 (Envco NOx)</option>
+                              </select>
+                              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Decode method for this parameter</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {modalTab === 'scaling' && (
+                  <>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div>
-                        <label style={s()}>Folder Path</label>
-                        <input type="text" name="csv_folder" value={form.csv_folder || ''} onChange={handleChange} style={ipt} placeholder="C:\Data\Station1" />
+                        <label style={s()}>Scale / Gain</label>
+                        <input type="number" step="0.001" name="scale_factor" value={form.scale_factor} onChange={handleChange} style={ipt} />
                       </div>
                       <div>
-                        <label style={s()}>Filename Pattern</label>
-                        <input type="text" name="csv_filename_pattern" value={form.csv_filename_pattern || ''} onChange={handleChange} style={ipt} placeholder="{YYYYMMDD}.csv" />
+                        <label style={s()}>Offset</label>
+                        <input type="number" step="0.001" name="offset" value={form.offset} onChange={handleChange} style={ipt} />
                       </div>
                     </div>
-                  ) : (
-                    <div>
-                      <label style={s()}>File Path</label>
-                      <input type="text" name="csv_path" value={form.csv_path || ''} onChange={handleChange} style={ipt} placeholder="C:\Data\readings.csv" />
-                    </div>
-                  )}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={s()}>Delimiter</label>
-                      <input type="text" name="csv_delimiter" value={form.csv_delimiter || ','} onChange={handleChange} style={ipt} maxLength={5} />
-                    </div>
-                    <div>
-                      <label style={s()}>Timestamp Col</label>
-                      <input type="number" name="csv_timestamp_col" value={form.csv_timestamp_col ?? 0} onChange={handleChange} style={ipt} min={0} />
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '2px' }}>
-                      <span style={{ fontSize: '11px', color: '#0369a1', fontWeight: '600' }}>
-                        {form.csv_mode === 'daily'
-                          ? renderCsvPattern(form.csv_filename_pattern)
-                          : 'A=0, B=1, C=2, D=3'}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#0369a1', fontWeight: '500', padding: '8px 10px', background: '#e0f2fe', borderRadius: '6px', lineHeight: 1.5 }}>
-                    CSV format: Row 1 = header (skipped), Row 2+ = data. Column mapping: register_address = column index (col A=0, B=1, C=2...). Timestamp col reads date/time from that column.
-                  </div>
-                </div>
-              ) : form.input_type === 'modbus_rtu' ? (
-                <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={s()}>Serial Port</label>
-                      <input type="text" name="serial_port" value={form.serial_port || ''} onChange={handleChange} style={ipt} placeholder="COM1" />
-                    </div>
-                    <div>
-                      <label style={s()}>Baud Rate</label>
-                      <select name="baud_rate" value={form.baud_rate || 9600} onChange={handleChange} style={ipt}>
-                        {[9600, 19200, 38400, 57600, 115200].map(b => <option key={b} value={b}>{b}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={s()}>Slave ID</label>
-                      <input type="number" name="slave_id" value={form.slave_id} onChange={handleChange} style={ipt} />
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={s()}>Data Bits</label>
-                      <select name="data_bits" value={form.data_bits || 8} onChange={handleChange} style={ipt}>
-                        {[5, 6, 7, 8].map(b => <option key={b} value={b}>{b}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={s()}>Parity</label>
-                      <select name="parity" value={form.parity || 'N'} onChange={handleChange} style={ipt}>
-                        <option value="N">None</option>
-                        <option value="E">Even</option>
-                        <option value="O">Odd</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label style={s()}>Stop Bits</label>
-                      <select name="stop_bits" value={form.stop_bits || 1} onChange={handleChange} style={ipt}>
-                        {[1, 2].map(b => <option key={b} value={b}>{b}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={s()}>IP Address</label>
-                      <input type="text" name="host" value={form.host} onChange={handleChange} style={ipt} placeholder="192.168.1.101" />
-                    </div>
-                    <div>
-                      <label style={s()}>Port</label>
-                      <input type="text" name="port" value={form.port} onChange={handleChange} style={ipt} placeholder="502" />
-                    </div>
-                    <div>
-                      <label style={s()}>Slave ID</label>
-                      <input type="number" name="slave_id" value={form.slave_id} onChange={handleChange} style={ipt} />
-                    </div>
-                  </div>
-                </>
-              )}
-              {form.input_type !== 'csv' && (
-                <>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={s()}>Function Code</label>
-                      <select name="register_type" value={form.register_type} onChange={handleChange} style={ipt}>
-                        <option value="input_reg">04 Input Register</option>
-                        <option value="holding">03 Holding Register</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label style={s()}>Data Type</label>
-                      <select value={getDataTypeLabel(form.data_type, form.byte_order)} onChange={(e) => {
-                        const m = DT_MAP[e.target.value];
-                        if (m) setForm(p => ({ ...p, data_type: m.data_type, byte_order: m.byte_order }));
-                      }} style={ipt}>
-                        {DATA_TYPES.map(dt => (
-                          <option key={dt} value={dt}>{dt}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label style={s()}>Start Address</label>
-                      <input type="number" name="register_address" value={form.register_address} onChange={handleChange} style={ipt} />
-                    </div>
-                    <div>
-                      <label style={s()}>Register Count</label>
-                      <input type="number" name="register_count" value={form.register_count} onChange={handleChange} style={ipt} />
-                    </div>
-                  </div>
-                </>
-              )}
 
-              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
-                <p style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scaling</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={s()}>Scale / Gain</label>
-                    <input type="number" step="0.001" name="scale_factor" value={form.scale_factor} onChange={handleChange} style={ipt} />
-                  </div>
-                  <div>
-                    <label style={s()}>Offset</label>
-                    <input type="number" step="0.001" name="offset" value={form.offset} onChange={handleChange} style={ipt} />
-                  </div>
-                </div>
-              </div>
+                    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                      <p style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Limits</p>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                          <label style={s()}>Min Range</label>
+                          <input type="number" step="any" name="min_valid" value={form.min_valid ?? ''} onChange={handleChange} style={ipt} placeholder="0.0" />
+                        </div>
+                        <div>
+                          <label style={s()}>Max Range</label>
+                          <input type="number" step="any" name="max_valid" value={form.max_valid ?? ''} onChange={handleChange} style={ipt} placeholder="1000.0" />
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                        <div>
+                          <label style={s()}>Warning Low</label>
+                          <input type="number" step="any" name="alarm_low" value={form.alarm_low ?? ''} onChange={handleChange} style={ipt} placeholder="0.0" />
+                        </div>
+                        <div>
+                          <label style={s()}>Warning High</label>
+                          <input type="number" step="any" name="alarm_high" value={form.alarm_high ?? ''} onChange={handleChange} style={ipt} placeholder="80.0" />
+                        </div>
+                        <div>
+                          <label style={s()}>Alarm Enabled</label>
+                          <select name="alarm_enabled" value={form.alarm_enabled ? 'Enabled' : 'Disabled'} onChange={(e) => setForm(p => ({ ...p, alarm_enabled: e.target.value === 'Enabled' }))} style={ipt}>
+                            <option value="Enabled">Enabled</option>
+                            <option value="Disabled">Disabled</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
 
-              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
-                <p style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Limits</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={s()}>Min Range</label>
-                    <input type="number" step="any" name="min_valid" value={form.min_valid ?? ''} onChange={handleChange} style={ipt} placeholder="0.0" />
+                {modalTab === 'identification' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <label style={s()}>Station Name</label>
+                        <input type="text" name="station_name" value={form.station_name} onChange={handleChange} style={ipt} placeholder="e.g. PM10, SO2" />
+                      </div>
+                      <div>
+                        <label style={s()}>Parameter Name</label>
+                        <input type="text" name="name" value={form.name} onChange={handleChange} style={ipt} placeholder="SO2" />
+                      </div>
+                    </div>
+                    <div>
+                      <label style={s()}>Engineering Unit</label>
+                      <input type="text" name="unit" value={form.unit} onChange={handleChange} style={ipt} placeholder="ppm" />
+                    </div>
                   </div>
-                  <div>
-                    <label style={s()}>Max Range</label>
-                    <input type="number" step="any" name="max_valid" value={form.max_valid ?? ''} onChange={handleChange} style={ipt} placeholder="1000.0" />
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginTop: '12px' }}>
-                  <div>
-                    <label style={s()}>Warning Low</label>
-                    <input type="number" step="any" name="alarm_low" value={form.alarm_low ?? ''} onChange={handleChange} style={ipt} placeholder="0.0" />
-                  </div>
-                  <div>
-                    <label style={s()}>Warning High</label>
-                    <input type="number" step="any" name="alarm_high" value={form.alarm_high ?? ''} onChange={handleChange} style={ipt} placeholder="80.0" />
-                  </div>
-                  <div>
-                    <label style={s()}>Alarm Enabled</label>
-                    <select name="alarm_enabled" value={form.alarm_enabled ? 'Enabled' : 'Disabled'} onChange={(e) => setForm(p => ({ ...p, alarm_enabled: e.target.value === 'Enabled' }))} style={ipt}>
-                      <option value="Enabled">Enabled</option>
-                      <option value="Disabled">Disabled</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
+                )}
 
-              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
-                <p style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Identification</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={s()}>Station Location</label>
-                    <input type="text" name="description" value={form.description} onChange={handleChange} style={ipt} placeholder="e.g. Berger Stack Alpha" />
-                  </div>
-                  <div>
-                    <label style={s()}>Monitored Sensor</label>
-                    <input type="text" name="name" value={form.name} onChange={handleChange} style={ipt} placeholder="SO2" />
-                  </div>
-                </div>
-                <div style={{ marginTop: '12px' }}>
-                  <label style={s()}>Engineering Unit</label>
-                  <input type="text" name="unit" value={form.unit} onChange={handleChange} style={ipt} placeholder="ppm" />
-                </div>
+
               </div>
             </div>
 

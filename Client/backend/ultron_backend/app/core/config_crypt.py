@@ -2,26 +2,61 @@
 """
 UltrON — Configuration Encryption / Decryption Utilities
 Uses cryptography Fernet (AES-128 in CBC mode with HMAC-SHA256).
-
-WARNING: This encryption is obfuscation only; the derivation key is bundled.
-Only the public anon key and non-sensitive settings may be stored here.
-Never store the service_role key or other true secrets.
 """
 
 import base64
 import os
+from pathlib import Path
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet
 
+def _get_secret_key_from_file() -> str:
+    """Read SECRET_KEY directly from secret.key file, or generate a new one if missing."""
+    from pathlib import Path
+    import sys
+    import secrets
+    IS_FROZEN = getattr(sys, "frozen", False)
+    if IS_FROZEN:
+        app_dir = Path(sys.executable).parent.resolve()
+    else:
+        app_dir = Path(__file__).parent.parent.parent.resolve()
+    key_file = app_dir / "secret.key"
+    try:
+        if key_file.is_file():
+            key = key_file.read_text(encoding="utf-8").strip()
+            if key:
+                return key
+        # Generate and save a new secure unique secret.key file
+        key = secrets.token_urlsafe(64)
+        key_file.write_text(key, encoding="utf-8")
+        return key
+    except Exception:
+        pass
+    return ""
+
+
 def get_fernet_key() -> bytes:
     """
-    Derives a secure, deterministic key for Fernet.
-    Uses a fixed salt and password so that the compiled binary can
-    always decrypt the encrypted configuration without external state.
+    Derives a Fernet key from the machine-local secret.key file.
+    Each installation gets a unique encryption key, so the bundled
+    .env.enc cannot be decrypted with the public source alone.
+    Raises if no secret.key exists — never falls back to a hardcoded key.
     """
-    password = b"UltrON.Security.Password.Key.2026.Sunshine"
-    salt = b"UltrON_Fixed_Salt_2026_#SunshineTech"
+    file_key = _get_secret_key_from_file()
+    if not file_key:
+        raise RuntimeError(
+            "No secret.key found. Generate one with: "
+            "python -c \"import secrets; "
+            "open('secret.key','w').write(secrets.token_urlsafe(64))\""
+        )
+    password = file_key.encode("utf-8")
+    salt_path = Path(__file__).parent.parent.parent / "secret.salt"
+    if salt_path.is_file():
+        salt = base64.urlsafe_b64decode(salt_path.read_text(encoding="utf-8").strip())
+    else:
+        salt = os.urandom(16)
+        salt_path.write_text(base64.urlsafe_b64encode(salt).decode("utf-8"), encoding="utf-8")
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,

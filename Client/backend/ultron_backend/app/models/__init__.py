@@ -6,6 +6,8 @@ from app.models.telemetry import LiveData, HistoricalData, Averages, Alarm, Syst
 from app.models.user import User
 from app.models.server_config import ServerConfig
 from app.models.cpcb import CPCBStationConfig, CPCBParameterMapping, CPCBExportRecord, CPCBExportLog
+from app.models.calibration import CalibrationJob, CalibrationResult, CalibrationApproval
+from app.models.plant_settings import PlantSettings
 
 __all__ = [
     "Station", "StationStatus", "StationType",
@@ -15,4 +17,6 @@ __all__ = [
     "DataQuality", "AverageType", "AlarmState",
     "User", "ServerConfig",
     "CPCBStationConfig", "CPCBParameterMapping", "CPCBExportRecord", "CPCBExportLog",
+    "CalibrationJob", "CalibrationResult", "CalibrationApproval",
+    "PlantSettings",
 ]

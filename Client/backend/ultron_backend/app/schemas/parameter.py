@@ -31,6 +31,10 @@ class ParameterBase(BaseModel):
     display_order: int = 0
     is_active: bool = True
 
+    # TCP Custom parsing
+    parse_method: Optional[str] = "csv_col"
+    parse_config: Optional[str] = None
+
     # Connection overrides
     host: Optional[str] = None
     port: Optional[int] = None
@@ -49,7 +53,7 @@ class ParameterBase(BaseModel):
                 "description", "unit", "min_valid", "max_valid", 
                 "alarm_low_low", "alarm_low", "alarm_high", "alarm_high_high",
                 "host", "port", "serial_port", "baud_rate", "data_bits", 
-                "parity", "stop_bits", "slave_id"
+                "parity", "stop_bits", "slave_id", "parse_config"
             ]
             for f in nullable_fields:
                 if data.get(f) == "":
@@ -74,6 +78,7 @@ class ParameterCreate(ParameterBase):
 
 
 class ParameterUpdate(BaseModel):
+    device_id: Optional[int] = None
     name: Optional[str] = None
     tag_name: Optional[str] = None
     description: Optional[str] = None
@@ -97,6 +102,10 @@ class ParameterUpdate(BaseModel):
     display_order: Optional[int] = None
     is_active: Optional[bool] = None
 
+    # TCP Custom parsing
+    parse_method: Optional[str] = None
+    parse_config: Optional[str] = None
+
     # Connection overrides
     host: Optional[str] = None
     port: Optional[int] = None
@@ -114,7 +123,7 @@ class ParameterUpdate(BaseModel):
             fields = [
                 "name", "tag_name", "description", "unit", "register_type", 
                 "register_address", "register_count", "data_type", "byte_order", 
-                "scale_factor", "offset", "min_valid", "max_valid", 
+                "min_valid", "max_valid", 
                 "alarm_low_low", "alarm_low", "alarm_high", "alarm_high_high", 
                 "alarm_severity", "alarm_enabled", "alarm_deadband", "display_order", 
                 "is_active", "host", "port", "serial_port", "baud_rate", 
@@ -123,6 +132,11 @@ class ParameterUpdate(BaseModel):
             for f in fields:
                 if data.get(f) == "":
                     data[f] = None
+            # Numeric fields with defaults: remove entirely when empty so DB default is preserved
+            numeric_with_defaults = ["scale_factor", "offset", "register_count"]
+            for f in numeric_with_defaults:
+                if data.get(f) in ("", None):
+                    data.pop(f, None)
         return data
 
 

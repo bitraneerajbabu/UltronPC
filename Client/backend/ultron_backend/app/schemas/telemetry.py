@@ -36,6 +36,7 @@ class LiveDataPoint(BaseModel):
     station_name: str
     device_name: str
     value: Optional[float]
+    raw_value: Optional[float] = None
     unit: str
     quality: str
     timestamp: datetime

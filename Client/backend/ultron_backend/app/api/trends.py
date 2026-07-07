@@ -8,8 +8,9 @@ from typing import List, Optional
 from app.database import get_db
 from app.models.telemetry import HistoricalData, Averages, AverageType, DataQuality
 from app.models.parameter import Parameter
+from app.core.security import get_current_user
 
-router = APIRouter(prefix="/trends", tags=["Trends"])
+router = APIRouter(prefix="/trends", tags=["Trends"], dependencies=[Depends(get_current_user)])
 
 
 @router.get("/chart-data")

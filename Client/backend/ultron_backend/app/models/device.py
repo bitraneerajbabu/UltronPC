@@ -21,6 +21,7 @@ class DeviceProtocol(str, enum.Enum):
     modbus_tcp = "modbus_tcp"
     modbus_rtu = "modbus_rtu"
     tcp_custom = "tcp_custom"
+    udp_custom = "udp_custom"
     csv = "csv"
     opc_ua = "opc_ua"
 
@@ -58,8 +59,12 @@ class Device(Base):
     csv_delimiter = Column(String(5), default=",")
     csv_timestamp_col = Column(Integer, nullable=True)
 
+    # TCP Custom-specific
+    request_hex = Column(String(500), nullable=True)     # hex bytes to send before each read (e.g. "02 4D 31 30 34 30 34 37 43 03")
+    response_delimiter = Column(String(20), default="newline")  # "newline", "etx", "length"
+
     # Polling
-    poll_interval = Column(Integer, default=60)    # seconds
+    poll_interval = Column(Integer, default=5)    # seconds
     timeout = Column(Integer, default=5)            # seconds
     retry_count = Column(Integer, default=3)
 

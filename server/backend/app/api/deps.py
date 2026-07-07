@@ -1,32 +1,96 @@
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, HTTPException, Security, status, Header
 from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
+from typing import Optional
 from app.db.database import get_db
-from app.models.core import IndustrySite
+from app.models.core import IndustrySite, Device
+from app.core.config import settings
 
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=True)
+
+
+class AuthContext:
+    is_admin: bool
+    site_id: Optional[int]
+    auth_key: str
+
+    def __init__(self, is_admin: bool, site_id: Optional[int], auth_key: str):
+        self.is_admin = is_admin
+        self.site_id = site_id
+        self.auth_key = auth_key
+
+
+def get_auth_context(
+    x_admin_key: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> AuthContext:
+    if not x_admin_key:
+        raise HTTPException(status_code=403, detail="Missing authentication key")
+
+    # Check admin key first
+    if x_admin_key == settings.ADMIN_KEY:
+        return AuthContext(is_admin=True, site_id=None, auth_key=x_admin_key)
+
+    # Check site-level key
+    site = db.query(IndustrySite).filter(IndustrySite.api_key == x_admin_key).first()
+    if site:
+        if not site.is_active:
+            raise HTTPException(status_code=403, detail="Site is inactive")
+        from datetime import datetime, timezone
+        if site.amc_expiry and site.amc_expiry.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+            raise HTTPException(status_code=403, detail="AMC has expired. Please contact support.")
+        return AuthContext(is_admin=False, site_id=site.id, auth_key=x_admin_key)
+
+    # Check device-level key
+    device = db.query(Device).filter(Device.api_key == x_admin_key).first()
+    if device and device.site:
+        if not device.site.is_active:
+            raise HTTPException(status_code=403, detail="Site is inactive")
+        from datetime import datetime, timezone
+        if device.site.amc_expiry and device.site.amc_expiry.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+            raise HTTPException(status_code=403, detail="AMC has expired. Please contact support.")
+        return AuthContext(is_admin=False, site_id=device.site_id, auth_key=x_admin_key)
+
+    raise HTTPException(status_code=403, detail="Invalid or missing admin key")
+
 
 def get_current_site(
     api_key: str = Security(API_KEY_HEADER),
     db: Session = Depends(get_db)
 ) -> IndustrySite:
+    # Try site-level key first
     site = db.query(IndustrySite).filter(IndustrySite.api_key == api_key).first()
-    if not site:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Could not validate API Key",
-        )
-    if not site.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Site is inactive",
-        )
-    
-    from datetime import datetime, timezone
-    if site.amc_expiry and site.amc_expiry.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="AMC has expired. Please contact support.",
-        )
-        
-    return site
+    if site:
+        if not site.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Site is inactive",
+            )
+        from datetime import datetime, timezone
+        if site.amc_expiry and site.amc_expiry.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="AMC has expired. Please contact support.",
+            )
+        return site
+
+    # Fall back to device-level key — look up the device and return its parent site
+    device = db.query(Device).filter(Device.api_key == api_key).first()
+    if device and device.site:
+        if not device.site.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Site is inactive",
+            )
+        from datetime import datetime, timezone
+        if device.site.amc_expiry and device.site.amc_expiry.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="AMC has expired. Please contact support.",
+            )
+        return device.site
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Could not validate API Key",
+    )

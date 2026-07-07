@@ -105,6 +105,11 @@ async def create_device(payload: DeviceCreate, background_tasks: BackgroundTasks
         p_dict["device_id"] = device.id
         if not p_dict.get("tag_name"):
             p_dict["tag_name"] = generate_tag_name(p_dict["name"])
+        if p_dict.get("display_order", 0) == 0:
+            from sqlalchemy import func as sa_func
+            max_res = await db.execute(sa_func.max(Parameter.display_order).select())
+            max_ord = max_res.scalar() or 0
+            p_dict["display_order"] = max_ord + 1
         param = Parameter(**p_dict)
         db.add(param)
 
@@ -288,7 +293,7 @@ async def test_device_connection(device_id: int, db: AsyncSession = Depends(get_
     target_parity = device.parity
     target_stop_bits = device.stop_bits
 
-    if protocol in ("modbus_tcp", "tcp_custom"):
+    if protocol in ("modbus_tcp", "tcp_custom", "udp_custom"):
         if not target_host and device.parameters:
             for p in device.parameters:
                 if p.host:
@@ -365,22 +370,38 @@ async def test_device_connection(device_id: int, db: AsyncSession = Depends(get_
         elif protocol == "csv":
             import os
             if device.csv_folder:
-                from app.services.csv_watcher import DailyCSVWatcher
-                watcher = DailyCSVWatcher(
+                from app.services.csv_watcher import DailySmartWatcher
+                watcher = DailySmartWatcher(
                     device.csv_folder,
                     device.csv_filename_pattern or "{YYYYMMDD}.csv",
                     device.csv_delimiter or ",",
-                    device.poll_interval or 60,
+                    device.poll_interval or 5,
                     device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
                 )
                 csv_path = watcher.resolve_path()
             else:
                 csv_path = device.csv_path or ""
             if not csv_path:
-                return {"success": False, "message": "No CSV source configured", "latency_ms": None}
+                return {"success": False, "message": "No CSV/Excel source configured", "latency_ms": None}
             exists = os.path.exists(csv_path)
             if not exists:
-                return {"success": False, "message": f"CSV file not found: {csv_path}", "latency_ms": None}
+                return {"success": False, "message": f"File not found: {csv_path}", "latency_ms": None}
+
+        elif protocol == "udp_custom":
+            from app.services.udp_custom import UDPCustomReader
+            reader = UDPCustomReader(
+                host=target_host or "",
+                port=target_port or 4001,
+                timeout=min(device.timeout or 5, 5),
+                request_hex=device.request_hex,
+            )
+            resp = await reader.send_request()
+            if resp is None:
+                return {
+                    "success": False,
+                    "message": f"UDP no response — {target_host or ''}:{target_port or 4001} (timeout)",
+                    "latency_ms": None,
+                }
 
         else:
             return {"success": False, "message": f"Protocol '{protocol}' not supported for connection test", "latency_ms": None}
@@ -393,8 +414,8 @@ async def test_device_connection(device_id: int, db: AsyncSession = Depends(get_
             "latency_ms": elapsed_ms,
         }
 
-    except Exception as e:
-        log.error(f"Connection test error device={device_id}: {e}")
+    except (asyncio.TimeoutError, ConnectionError, OSError, ValueError) as e:
+        log.error(f"Connection test error device={device_id}: {e}", exc_info=True)
         return {
             "success": False,
             "message": f"Connection test error: {str(e)}",

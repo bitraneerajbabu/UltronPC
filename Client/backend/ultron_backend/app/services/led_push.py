@@ -45,28 +45,33 @@ async def build_led_response(db, channel_ids: list[int]) -> list[dict]:
     Returns:
         List of {"listchannelData": [{...}]} dicts — one entry per parameter.
     """
-    # Fetch all active LED servers matching the requested channel IDs
+    # Fetch all active LED servers
     stmt = select(ServerConfig).filter(
         ServerConfig.is_active == True,
         ServerConfig.protocol == "led",
     )
-    if channel_ids:
-        stmt = stmt.filter(ServerConfig.led_channel_id.in_(channel_ids))
 
     result = await db.execute(stmt)
     led_servers: list[ServerConfig] = result.scalars().all()
 
     if not led_servers:
-        log.debug(f"[LED] No active LED servers found for channel_ids={channel_ids}")
+        log.debug("[LED] No active LED servers found")
         return []
 
     server_ids = [s.id for s in led_servers]
     server_by_id = {s.id: s for s in led_servers}
 
     # Fetch all active parameter mappings for those servers
+    from app.models.parameter import Parameter
+    from app.models.device import Device
+
     map_stmt = (
         select(ServerParameterMapping)
-        .options(selectinload(ServerParameterMapping.parameter))
+        .options(
+            selectinload(ServerParameterMapping.parameter)
+            .selectinload(Parameter.device)
+            .selectinload(Device.station)
+        )
         .filter(
             ServerParameterMapping.server_id.in_(server_ids),
             ServerParameterMapping.is_active == True,
@@ -79,6 +84,21 @@ async def build_led_response(db, channel_ids: list[int]) -> list[dict]:
         log.debug(f"[LED] No active mappings for LED servers {server_ids}")
         return []
 
+    # Filter mappings if specific channel_ids are requested (PCB parameter)
+    if channel_ids:
+        mappings = [m for m in mappings if m.parameter and m.parameter.id in channel_ids]
+
+    if not mappings:
+        log.debug(f"[LED] No active mappings matching channel_ids={channel_ids}")
+        return []
+
+    # Batch load all LiveData at once to avoid N+1 queries
+    live_param_ids = [m.parameter_id for m in mappings]
+    live_result = await db.execute(
+        select(LiveData).where(LiveData.parameter_id.in_(live_param_ids))
+    )
+    live_by_param_id = {ld.parameter_id: ld for ld in live_result.scalars().all()}
+
     payload = []
 
     for mapping in mappings:
@@ -89,13 +109,7 @@ async def build_led_response(db, channel_ids: list[int]) -> list[dict]:
         param = mapping.parameter
 
         # ── Channel ID ────────────────────────────────────────────
-        channel_id = server.led_channel_id
-        if channel_id is None:
-            # Fall back to api_id if led_channel_id not set
-            try:
-                channel_id = int(mapping.api_id or 0)
-            except (ValueError, TypeError):
-                channel_id = 0
+        channel_id = param.id if param else 0
 
         # ── Channel Name (parameter label on LED display) ─────────
         channel_name = (
@@ -106,13 +120,9 @@ async def build_led_response(db, channel_ids: list[int]) -> list[dict]:
 
         # ── Station Name ──────────────────────────────────────────
         station_name = (
-            server.led_station_name
-            or mapping.api_id
-            or (
-                param.device.station.name
-                if param and hasattr(param, "device") and param.device and param.device.station
-                else "Station"
-            )
+            param.device.station.name
+            if param and hasattr(param, "device") and param.device and param.device.station
+            else "Station"
         )
 
         # ── Unit ─────────────────────────────────────────────────
@@ -124,10 +134,7 @@ async def build_led_response(db, channel_ids: list[int]) -> list[dict]:
         )
 
         # ── Live Value ────────────────────────────────────────────
-        ld_res = await db.execute(
-            select(LiveData).where(LiveData.parameter_id == mapping.parameter_id)
-        )
-        live = ld_res.scalars().first()
+        live = live_by_param_id.get(mapping.parameter_id)
 
         if live and live.value is not None:
             try:

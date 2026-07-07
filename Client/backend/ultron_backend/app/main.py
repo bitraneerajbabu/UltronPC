@@ -6,8 +6,9 @@ CORS for the frontend, and APScheduler for averaging + heartbeat.
 
 import asyncio
 import os
+import threading
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,8 +16,8 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 
-from app.config import settings
-from app.database import init_db
+from app.config import settings, APP_DIR
+from app.database import init_db, AsyncSessionLocal
 
 from app.websocket_manager import ws_manager
 from app.services import polling_engine
@@ -30,6 +31,7 @@ from app.api import users as users_api
 from app.api import led as led_api
 from app.api import broadcasts as broadcasts_api
 from app.api import cpcb as cpcb_api
+from app.api import calibration as calibration_api
 
 log = get_logger("ultron.main")
 
@@ -103,7 +105,7 @@ async def _start_led_http_server(port: int):
         log.info(f"LED board HTTP server starting on port {port} — "
                  f"Card URL: http://<PC-LAN-IP>/api/v1/led?auth=<token>&PCB=...")
         await server.serve()
-    except OSError as e:
+    except (OSError, SystemExit) as e:
         # Port 80 might need admin rights on Windows — log clearly and continue
         log.warning(
             f"LED HTTP server could not bind to port {port}: {e}. "
@@ -125,15 +127,30 @@ async def lifespan(app: FastAPI):
     # 1. Create storage dirs
     settings.ensure_dirs()
 
+    # 1.5 Copy pre-seeded DB from bundle on first run
+    try:
+        import sys
+        if getattr(sys, "frozen", False):
+            import shutil
+            from pathlib import Path
+            bundle_db = Path(sys._MEIPASS) / "ultron.db"
+            app_db = APP_DIR / "ultron.db"
+            if bundle_db.is_file() and not app_db.is_file():
+                shutil.copy2(str(bundle_db), str(app_db))
+                log.info(f"Copied pre-seeded database from bundle to {app_db}")
+    except Exception as e:
+        log.warning(f"Could not copy bundled database: {e}")
+
     # 2. Init DB tables
     await init_db()
 
+    # 2.5 Restore tracked active alarms from DB into in-memory engine
+    from app.services.alarm_engine import alarm_engine
+    async with AsyncSessionLocal() as restore_db:
+        await alarm_engine.load_active_from_db(restore_db)
+
     # 3. Start polling engine
     await polling_engine.start_polling()
-
-    # 3.5 Start RajAPI MQTT client
-    from app.services.remote_control import start_mqtt_client
-    asyncio.create_task(start_mqtt_client())
 
     # 4. Seed default admin user if no users exist
     await _seed_admin()
@@ -172,7 +189,7 @@ async def lifespan(app: FastAPI):
         run_server_push,
         args=["live"],
         trigger="interval",
-        minutes=1,
+        seconds=5,
         id="server_push_live",
         replace_existing=True,
     )
@@ -180,24 +197,32 @@ async def lifespan(app: FastAPI):
         run_server_push,
         args=["delay"],
         trigger="interval",
-        minutes=15,
+        seconds=5,
         id="server_push_delay",
         replace_existing=True,
     )
-    # RajAPI Central Sync — silently push live data every minute (if API key is configured)
+    # RajAPI Autopilot — lightweight heartbeat every 60 seconds
     scheduler.add_job(
         push_to_rajapi,
         trigger="interval",
-        minutes=1,
+        seconds=60,
         id="rajapi_sync",
         replace_existing=True,
     )
-    # CPCB CAAQM Legacy Export — run every 15 minutes at 0,15,30,45
+    # Heartbeat monitor for device and station connectivity — run every 60 seconds
+    scheduler.add_job(
+        polling_engine.check_heartbeats,
+        trigger="interval",
+        seconds=60,
+        id="heartbeat_monitor",
+        replace_existing=True,
+    )
+    # CPCB CAAQM Legacy Export — run every 5 seconds
     from app.services.cpcb.scheduler_service import run_cpcb_pipeline
     scheduler.add_job(
         run_cpcb_pipeline,
-        trigger="cron",
-        minute="0,15,30,45",
+        trigger="interval",
+        seconds=5,
         id="cpcb_export",
         replace_existing=True,
     )
@@ -239,9 +264,32 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allow_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
+
+# ─── CSP Headers ──────────────────────────────────────────────────────────────
+from starlette.middleware.base import BaseHTTPMiddleware
+
+CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ws:; frame-ancestors 'none'; form-action 'self'"
+
+class CSPMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        resp = await call_next(request)
+        if "Content-Security-Policy" not in resp.headers:
+            resp.headers["Content-Security-Policy"] = CSP
+        return resp
+
+app.add_middleware(CSPMiddleware)
+
+# ─── Rate Limiting (slowapi) ─────────────────────────────────────────────────
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+_app_limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = _app_limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ─── API Routes ───────────────────────────────────────────────────────────────
 PREFIX = "/api/v1"
@@ -261,39 +309,60 @@ app.include_router(license.router,      prefix=PREFIX)
 app.include_router(led_api.router,      prefix=PREFIX)  # LED Board LAN endpoint
 app.include_router(broadcasts_api.router, prefix=PREFIX)
 app.include_router(cpcb_api.router, prefix=PREFIX)
+app.include_router(calibration_api.router, prefix=PREFIX)
+
+# ─── Public Version Endpoint ──────────────────────────────────────────────────
+@app.get("/api/v1/version")
+async def get_app_version():
+    return {"version": settings.APP_VERSION, "app_name": settings.APP_NAME}
+
 
 # ─── WebSocket Live Push ──────────────────────────────────────────────────────
 @app.websocket("/ws/live")
 async def websocket_live(
     websocket: WebSocket,
+    token: str = Query(default=""),
     station_ids: str = Query(default=""),
 ):
     """
     WebSocket endpoint for live dashboard data.
 
-    Connect: ws://localhost:8000/ws/live?station_ids=1,2,3
+    Connect: ws://localhost:8000/ws/live?token=JWT_TOKEN&station_ids=1,2,3
     Messages received:
       - {"type": "live_data", "device_id": ..., "data": [...], "ts": "..."}
       - {"type": "alarm", "alarm_id": ..., "severity": ..., ...}
       - {"type": "heartbeat", "ts": ..., "clients": ...}
     """
+    if not token:
+        await websocket.close(code=4001, reason="Missing auth token")
+        return
+    try:
+        from app.core.security import decode_token
+        payload = decode_token(token)
+        if not payload.get("sub"):
+            await websocket.close(code=4001, reason="Invalid token")
+            return
+    except Exception:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+
     sids = [int(x) for x in station_ids.split(",") if x.strip().isdigit()] if station_ids else []
     await ws_manager.connect(websocket, sids)
-    log.info(f"WS client connected. Subscribed stations: {sids or 'all'}")
+    log.info(f"WS client connected (user={payload.get('sub')}). Subscribed stations: {sids or 'all'}")
 
     try:
         # Send welcome message
         await websocket.send_json({
             "type": "connected",
             "message": f"Connected to {settings.APP_NAME} live stream",
-            "ts": datetime.utcnow().isoformat(),
+            "ts": datetime.now(timezone.utc).isoformat(),
             "subscribed_stations": sids,
         })
         # Keep connection open — just drain incoming (clients can send ping)
         while True:
             data = await websocket.receive_text()
             if data == "ping":
-                await websocket.send_json({"type": "pong", "ts": datetime.utcnow().isoformat()})
+                await websocket.send_json({"type": "pong", "ts": datetime.now(timezone.utc).isoformat()})
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
         log.info("WS client disconnected")
@@ -318,7 +387,44 @@ async def root():
 
 @app.get("/health", include_in_schema=False)
 async def health():
-    return {"status": "ok", "ts": datetime.utcnow().isoformat()}
+    return {"status": "ok", "ts": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/show-window", include_in_schema=False)
+async def show_window():
+    import sys
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            hwnd = ctypes.windll.user32.FindWindowW(None, "UltrON Industrial Monitoring Platform")
+            if hwnd:
+                # SW_RESTORE = 9
+                ctypes.windll.user32.ShowWindow(hwnd, 9)
+                ctypes.windll.user32.SetForegroundWindow(hwnd)
+                return {"status": "restored_win32"}
+        except Exception as e:
+            log.error(f"Failed to restore window via ctypes in show_window: {e}")
+
+    window = getattr(app.state, "window", None)
+    if window:
+        try:
+            window.show()
+            window.restore()
+            return {"status": "restored"}
+        except Exception as e:
+            log.error(f"Failed to show window: {e}")
+            return {"status": "error", "message": str(e)}
+    return {"status": "no_window"}
+
+
+@app.post("/shutdown", include_in_schema=False)
+async def shutdown_server():
+    """Fully stop UltrON server and process."""
+    import os
+    log.warning("Shutdown requested via API — exiting.")
+    thread = threading.Thread(target=lambda: os._exit(0), daemon=True)
+    thread.start()
+    return {"status": "shutting_down"}
 
 
 # ─── Serve Built Frontend (SPA) ───────────────────────────────────────────────

@@ -2,11 +2,10 @@ import React, { createContext, useState, useEffect, useCallback, useRef } from '
 
 export const AppContext = createContext(null);
 
-// When served by FastAPI (python run.py), use same-origin relative URLs.
-// When running via `npm run dev` (Vite dev server on :5173), proxy handles /api → :8000.
-const _isDevServer = window.location.port === '5173';
-const API_BASE = _isDevServer ? 'http://localhost:8000/api/v1' : '/api/v1';
-const WS_BASE  = _isDevServer ? 'ws://localhost:8000/ws/live'  : `ws://${window.location.host}/ws/live`;
+// When running via `npm run dev` (Vite dev server on :5173) or production, proxy/server handles routing.
+// Using relative/same-origin URLs makes it dynamically compatible with any local port (8000, 8765, etc.).
+const API_BASE = '/api/v1';
+const WS_BASE  = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/live`;
 
 
 export const AppProvider = ({ children }) => {
@@ -22,9 +21,9 @@ export const AppProvider = ({ children }) => {
     activeAlarms: 0,
   });
   const [activeScreen, setActiveScreen] = useState('dashboardScreen');
-  const [currentUser, setCurrentUser] = useState(sessionStorage.getItem('ultron_user') || null);
-  const [currentUserRole, setCurrentUserRole] = useState(sessionStorage.getItem('ultron_role') || null);
-  const [authToken, setAuthToken] = useState(sessionStorage.getItem('ultron_token') || null);
+  const [currentUser, setCurrentUser] = useState(localStorage.getItem('ultron_user') || null);
+  const [currentUserRole, setCurrentUserRole] = useState(localStorage.getItem('ultron_role') || null);
+  const [authToken, setAuthToken] = useState(localStorage.getItem('ultron_token') || null);
   const [loading, setLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [broadcasts, setBroadcasts] = useState<any[]>([]);
@@ -50,6 +49,33 @@ export const AppProvider = ({ children }) => {
     parametersRef.current = parameters;
   }, [parameters]);
 
+  // ─── Startup token validation ───────────────────────────────────────────────
+  // On first load, if we have a stored token, verify it is still valid against
+  // the server. If the server returns 401 (e.g. server was restarted with a
+  // different key), silently clear localStorage and force re-login.
+  useEffect(() => {
+    const storedToken = localStorage.getItem('ultron_token');
+    const storedUser  = localStorage.getItem('ultron_user');
+    if (!storedToken || !storedUser) return; // nothing to validate
+    fetch(`${API_BASE}/auth/me`, {
+      headers: { 'Authorization': `Bearer ${storedToken}` },
+    })
+      .then(res => {
+        if (res.status === 401) {
+          // Token rejected by server — clear everything and go to login
+          localStorage.removeItem('ultron_token');
+          localStorage.removeItem('ultron_user');
+          localStorage.removeItem('ultron_role');
+          setAuthToken(null);
+          setCurrentUser(null);
+          setCurrentUserRole(null);
+        }
+        // If ok, state is already hydrated from localStorage — no action needed
+      })
+      .catch(() => { /* server unreachable — leave as-is, user can retry */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount only
+
   // Show dynamic toast notifications
   const showToast = useCallback((msg, type = 'success') => {
     const c = document.getElementById('toastContainer');
@@ -67,7 +93,7 @@ export const AppProvider = ({ children }) => {
 
   // ─── Authenticated fetch helper ────────────────────────────────────────────
   const authFetch = useCallback(async (url: string, options: any = {}) => {
-    const token = sessionStorage.getItem('ultron_token');
+    const token = localStorage.getItem('ultron_token');
     const headers = {
       'Content-Type': 'application/json',
       ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
@@ -75,15 +101,14 @@ export const AppProvider = ({ children }) => {
     };
     try {
       const res = await fetch(url, { ...options, headers });
+      // Auto-logout on 401 — stale/invalid/expired token
       if (res.status === 401) {
-        sessionStorage.removeItem('ultron_token');
-        sessionStorage.removeItem('ultron_user');
-        sessionStorage.removeItem('ultron_role');
+        localStorage.removeItem('ultron_token');
+        localStorage.removeItem('ultron_user');
+        localStorage.removeItem('ultron_role');
         setAuthToken(null);
         setCurrentUser(null);
         setCurrentUserRole(null);
-        if (wsRef.current) wsRef.current.close();
-        showToast('Session expired. Please log in again.', 'error');
       }
       return res;
     } catch (err) {
@@ -172,12 +197,13 @@ export const AppProvider = ({ children }) => {
         setLiveData(prev => {
           const newLiveData = { ...prev };
           telemetryData.forEach(p => {
-            const param = activeParams.find(paramObj => paramObj.id === p.parameter_id);
+            const param = activeParams.find(paramObj => paramObj.id == p.parameter_id);
             if (param) {
               newLiveData[param.tag_name] = {
                 value: p.value,
+                raw_value: p.raw_value,
                 unit: param.unit || '',
-                status: (p.quality === 'good' || p.quality === 'out_of_range' || p.quality === 'uncertain') ? 'online' : 'offline',
+                status: (p.quality === 'good' || p.quality === 'out_of_range' || p.quality === 'uncertain' || p.quality === 'U' || p.quality === 'O' || p.quality === 'N') ? 'online' : 'offline',
                 timestamp: formatTimestamp(parseUtcDate(p.timestamp))
               };
             }
@@ -230,15 +256,31 @@ export const AppProvider = ({ children }) => {
       }
 
       // Stations, devices
-      const stationsData = stationsRes.ok ? await stationsRes.json() : [];
-      setStations(stationsData || []);
+      if (stationsRes.ok) {
+        const stationsData = await stationsRes.json();
+        setStations(stationsData || []);
+      } else {
+        const errText = await extractApiError(stationsRes, 'Failed to load stations.');
+        showToast(`Stations: ${errText}`, 'error');
+      }
 
-      const devicesData = devicesRes.ok ? await devicesRes.json() : [];
-      setDevices(devicesData || []);
+      if (devicesRes.ok) {
+        const devicesData = await devicesRes.json();
+        setDevices(devicesData || []);
+      } else {
+        const errText = await extractApiError(devicesRes, 'Failed to load devices.');
+        showToast(`Devices: ${errText}`, 'error');
+      }
 
       // Parameters — must resolve before telemetry fetch (needs param IDs)
-      const parametersData = parametersRes.ok ? await parametersRes.json() : [];
-      setParameters(parametersData || []);
+      let parametersData = [];
+      if (parametersRes.ok) {
+        parametersData = await parametersRes.json();
+        setParameters(parametersData || []);
+      } else {
+        const errText = await extractApiError(parametersRes, 'Failed to load parameters.');
+        showToast(`Parameters: ${errText}`, 'error');
+      }
 
       // Logs
       if (logsRes.ok) {
@@ -252,6 +294,9 @@ export const AppProvider = ({ children }) => {
           status: l.level === 'WARNING' ? 'WARN' : l.level === 'INFO' ? 'INFO' : l.level === 'ERROR' ? 'ERROR' : 'SUCCESS'
         }));
         setLogs(formattedLogs);
+      } else {
+        const errText = await extractApiError(logsRes, 'Failed to load logs.');
+        showToast(`Logs: ${errText}`, 'error');
       }
 
       // Telemetry + KPIs — depends on parametersData so runs after above, but
@@ -294,7 +339,8 @@ export const AppProvider = ({ children }) => {
     }
 
     wsIsClosing.current = false;
-    const ws = new WebSocket(WS_BASE);
+    const token = localStorage.getItem('ultron_token');
+    const ws = new WebSocket(`${WS_BASE}?token=${encodeURIComponent(token || '')}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -309,7 +355,7 @@ export const AppProvider = ({ children }) => {
           setLiveData(prev => {
             const next = { ...prev };
           points.forEach(pt => {
-              const isOnline = pt.quality === 'good' || pt.quality === 'out_of_range' || pt.quality === 'uncertain';
+              const isOnline = pt.quality === 'good' || pt.quality === 'out_of_range' || pt.quality === 'uncertain' || pt.quality === 'U' || pt.quality === 'O' || pt.quality === 'N';
               const prevPoint = prev[pt.tag_name];
               let ts = formatTimestamp(parseUtcDate(pt.timestamp));
               if (!isOnline && prevPoint && prevPoint.timestamp) {
@@ -317,6 +363,7 @@ export const AppProvider = ({ children }) => {
               }
               next[pt.tag_name] = {
                 value: pt.value,
+                raw_value: pt.raw_value,
                 unit: pt.unit,
                 status: isOnline ? 'online' : 'offline',
                 timestamp: ts
@@ -424,10 +471,13 @@ export const AppProvider = ({ children }) => {
       }
 
       const data = await res.json();
-      // Persist token + role
-      sessionStorage.setItem('ultron_token', data.access_token);
-      sessionStorage.setItem('ultron_user', data.username);
-      sessionStorage.setItem('ultron_role', data.role);
+      if (!data.access_token) {
+        showToast('Login failed: no access token received.', 'error');
+        return false;
+      }
+      localStorage.setItem('ultron_token', data.access_token);
+      localStorage.setItem('ultron_user', data.username);
+      localStorage.setItem('ultron_role', data.role);
       setAuthToken(data.access_token);
       setCurrentUser(data.username);
       setCurrentUserRole(data.role);
@@ -446,7 +496,7 @@ export const AppProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      const token = sessionStorage.getItem('ultron_token');
+      const token = localStorage.getItem('ultron_token');
       if (token) {
         await fetch(`${API_BASE}/auth/logout`, {
           method: 'POST',
@@ -456,9 +506,9 @@ export const AppProvider = ({ children }) => {
     } catch (e) {
       // Ignore network errors on logout
     }
-    sessionStorage.removeItem('ultron_token');
-    sessionStorage.removeItem('ultron_user');
-    sessionStorage.removeItem('ultron_role');
+    localStorage.removeItem('ultron_token');
+    localStorage.removeItem('ultron_user');
+    localStorage.removeItem('ultron_role');
     setAuthToken(null);
     setCurrentUser(null);
     setCurrentUserRole(null);
@@ -561,15 +611,14 @@ export const AppProvider = ({ children }) => {
     if (!res.ok) { showToast(await extractApiError(res, 'Failed to create device.'), 'error'); return false; }
     const newDevice = await res.json();
     setDevices(prev => [...prev, newDevice]);
-    showToast('Device added successfully.');
-    loadAllData(); return true;
+    showToast('Device added successfully.'); return newDevice;
   };
 
   const editDevice = async (id, payload) => {
     const res = await authFetch(`${API_BASE}/devices/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
     if (!res.ok) { showToast(await extractApiError(res, 'Failed to update device.'), 'error'); return false; }
     const updated = await res.json();
-    setDevices(prev => prev.map(d => d.id === id ? updated : d));
+    setDevices(prev => prev.map(d => d.id == id ? updated : d));
     showToast('Device updated successfully.');
     loadAllData(); return true;
   };
@@ -577,7 +626,7 @@ export const AppProvider = ({ children }) => {
   const deleteDevice = async (id) => {
     const res = await authFetch(`${API_BASE}/devices/${id}`, { method: 'DELETE' });
     if (!res.ok) { showToast(await extractApiError(res, 'Failed to delete device.'), 'error'); return false; }
-    setDevices(prev => prev.filter(d => d.id !== id));
+    setDevices(prev => prev.filter(d => d.id != id));
     showToast('Device deleted.'); loadAllData(); return true;
   };
 
@@ -595,14 +644,14 @@ export const AppProvider = ({ children }) => {
     const res = await authFetch(`${API_BASE}/parameters/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
     if (!res.ok) { showToast(await extractApiError(res, 'Failed to update parameter.'), 'error'); return false; }
     const updated = await res.json();
-    setParameters(prev => prev.map(p => p.id === id ? updated : p));
+      setParameters(prev => prev.map(p => p.id == id ? updated : p));
     showToast('Parameter updated.'); loadAllData(); return true;
   };
 
   const deleteParameter = async (id) => {
     const res = await authFetch(`${API_BASE}/parameters/${id}`, { method: 'DELETE' });
     if (!res.ok) { showToast(await extractApiError(res, 'Failed to delete parameter.'), 'error'); return false; }
-    setParameters(prev => prev.filter(p => p.id !== id));
+      setParameters(prev => prev.filter(p => p.id != id));
     showToast('Parameter mapping deleted.'); loadAllData(); return true;
   };
 

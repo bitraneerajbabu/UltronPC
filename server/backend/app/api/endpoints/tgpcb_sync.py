@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Any
 from pydantic import BaseModel
 from app.db.database import get_db
-from app.models.core import IndustrySite, TelemetryData, Parameter, Device
+from app.models.core import IndustrySite, TelemetryData, Parameter, Device, Broadcast
 
 router = APIRouter()
 
@@ -86,20 +86,40 @@ def tgpcb_sync(payload: TgpcbPayload, db: Session = Depends(get_db)):
     if not api_key:
         raise HTTPException(status_code=403, detail="Missing API key: set 'api_name' to your RajAPI site key")
 
+    # Try site-level key first, then device-level key
     site = db.query(IndustrySite).filter(IndustrySite.api_key == api_key).first()
+    if not site:
+        device = db.query(Device).filter(Device.api_key == api_key).first()
+        if device and device.site:
+            site = device.site
     if not site:
         raise HTTPException(status_code=403, detail="Invalid API key — site not found on RajAPI")
     if not site.is_active:
+        site.last_error = "Site is inactive"
+        site.last_error_at = datetime.now(timezone.utc)
+        db.commit()
         raise HTTPException(status_code=401, detail="Site is inactive")
 
     now = datetime.now(timezone.utc)
 
     # Check AMC expiry
     if site.amc_expiry and site.amc_expiry.replace(tzinfo=timezone.utc) < now:
+        site.last_error = "AMC expired"
+        site.last_error_at = now
+        db.commit()
         raise HTTPException(status_code=401, detail="AMC expired. Please contact support.")
 
-    # Stamp last_sync
+    # Stamp last_sync and clear any previous error
     site.last_sync = now
+    if site.last_error:
+        site.last_error = None
+        site.last_error_at = None
+
+    # Extract client version from additionalInfo
+    if payload.additionalInfo and isinstance(payload.additionalInfo, dict):
+        ver = payload.additionalInfo.get("SoftwareVersion")
+        if ver:
+            site.client_version = str(ver)
 
     # Parse timestamp from payload
     ts = now
@@ -132,4 +152,22 @@ def tgpcb_sync(payload: TgpcbPayload, db: Session = Depends(get_db)):
         synced += 1
 
     db.commit()
-    return {"status": "success", "synced_points": synced, "site": site.name}
+
+    # Return active broadcasts targeted at this site
+    active_bcasts = db.query(Broadcast).filter(
+        Broadcast.is_active.is_(True),
+        (Broadcast.expires_at.is_(None)) | (Broadcast.expires_at > now),
+        (Broadcast.target_all.is_(True)) | (Broadcast.target_site_id == site.id)
+    ).all()
+
+    return {
+        "status": "success",
+        "synced_points": synced,
+        "site": site.name,
+        "broadcasts": [
+            {"id": b.id, "message": b.message, "message_type": b.message_type, "expires_at": b.expires_at.isoformat() if b.expires_at else None}
+            for b in active_bcasts
+        ],
+        "lock_status": site.lock_status or "unlocked",
+        "lock_reason": site.lock_reason,
+    }

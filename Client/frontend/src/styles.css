@@ -1,12 +1,12 @@
-﻿/* ============================================================
+/* ============================================================
 
-   UltrON Industrial Monitoring Platform â€” Modern Glass UI
+   UltrON Industrial Monitoring Platform — Modern Glass UI
 
    ============================================================ */
 
 
 
-/* â”€â”€â”€ Inter â€” Locally hosted for 100% offline use â”€â”€â”€ */
+/* --- Inter - Locally hosted for 100% offline use --- */
 @font-face {
   font-family: 'Inter';
   font-style: normal;
@@ -69,17 +69,17 @@ body {
 
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-  background: radial-gradient(at 0% 0%, rgba(204, 229, 230, 0.45) 0, transparent 45%),
+  background: radial-gradient(at 0% 0%, rgba(245, 230, 200, 0.45) 0, transparent 45%),
 
-              radial-gradient(at 50% 0%, rgba(220, 241, 235, 0.5) 0, transparent 40%),
+              radial-gradient(at 50% 0%, rgba(253, 244, 215, 0.5) 0, transparent 40%),
 
-              radial-gradient(at 100% 0%, rgba(200, 224, 241, 0.45) 0, transparent 45%),
+              radial-gradient(at 100% 0%, rgba(240, 225, 195, 0.45) 0, transparent 45%),
 
-              radial-gradient(at 0% 100%, rgba(224, 236, 242, 0.4) 0, transparent 50%),
+              radial-gradient(at 0% 100%, rgba(245, 235, 210, 0.4) 0, transparent 50%),
 
-              radial-gradient(at 100% 100%, rgba(210, 240, 230, 0.5) 0, transparent 50%),
+              radial-gradient(at 100% 100%, rgba(250, 240, 220, 0.5) 0, transparent 50%),
 
-              #f8fafc;
+              #faf6ee;
 
   color: #334155;
 
@@ -100,15 +100,15 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 10% 20%, rgba(221, 240, 237, 0.8) 0%, rgba(230, 244, 245, 0.7) 90%);
+  background: radial-gradient(circle at 10% 20%, rgba(250, 240, 220, 0.85) 0%, rgba(245, 232, 205, 0.75) 90%);
 }
 
 .login-card {
   width: 460px;
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(253, 250, 242, 0.75);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(235, 225, 205, 0.8);
   border-radius: 20px;
   padding: 48px 44px;
   box-shadow: 0 20px 50px rgba(15, 118, 110, 0.08),
@@ -125,14 +125,14 @@ body {
 
 /* Center both logos within the login card */
 .login-logo {
-  width: 200px;
+  width: 260px;
   display: block;
   margin: 0 auto 20px auto;
   filter: drop-shadow(0 4px 6px rgba(15, 118, 110, 0.06));
 }
 
 .brand-logo {
-  width: 170px;
+  width: 220px;
   display: block;
   margin: 32px auto 0 auto;
   opacity: 0.85;
@@ -182,7 +182,7 @@ body {
 
   border-radius: 10px;
 
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(253, 250, 242, 0.7);
 
   font-size: 14px;
 
@@ -202,7 +202,7 @@ body {
 
   outline: none;
 
-  background: #ffffff;
+  background: #fdfcf7;
 
   border-color: #0f766e;
 
@@ -276,13 +276,13 @@ body {
 
   height: 80px;
 
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(253, 250, 242, 0.55);
 
   backdrop-filter: blur(20px);
 
   -webkit-backdrop-filter: blur(20px);
 
-  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+  border-bottom: 1px solid rgba(235, 225, 205, 0.6);
 
   display: flex;
 
@@ -336,20 +336,6 @@ body {
 
 .sidebar {
 
-  width: 250px;
-
-  background: rgba(255, 255, 255, 0.35);
-
-  backdrop-filter: blur(20px);
-
-  -webkit-backdrop-filter: blur(20px);
-
-  border-right: 1px solid rgba(255, 255, 255, 0.5);
-
-  padding: 0;
-
-  overflow-y: auto;
-
   flex-shrink: 0;
 
   display: flex;
@@ -357,6 +343,230 @@ body {
   flex-direction: column;
 
   gap: 0;
+
+}
+
+/* ─── Navigation Rail ──────────────────────────────────────── */
+
+.nav-rail {
+
+  width: 90px;
+
+  background: rgba(253, 250, 242, 0.65);
+
+  backdrop-filter: blur(20px);
+
+  -webkit-backdrop-filter: blur(20px);
+
+  border-right: 1px solid rgba(235, 225, 205, 0.6);
+
+  align-items: center;
+
+  padding: 12px 0;
+
+  overflow-y: auto;
+
+}
+
+.nav-rail-logo {
+
+  display: flex;
+
+  justify-content: center;
+
+  align-items: center;
+
+  padding: 8px 0 14px;
+
+  border-bottom: 1px solid rgba(235, 225, 205, 0.6);
+
+  margin-bottom: 8px;
+
+  width: 100%;
+
+}
+
+.nav-rail-logo-img {
+    opacity: .85;
+    width: 96px;
+    height: auto;
+    transition: opacity .2s;
+    display: block;
+}
+
+.nav-rail-logo button:hover .nav-rail-logo-img {
+
+  opacity: 1;
+
+}
+
+.nav-rail-items {
+
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 4px;
+
+  flex: 1;
+
+  padding: 0 6px;
+
+  width: 100%;
+
+}
+
+.nav-rail-btn {
+
+  width: 100%;
+
+  height: 60px;
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+
+  justify-content: center;
+
+  gap: 3px;
+
+  background: transparent;
+
+  border: none;
+
+  border-radius: 10px;
+
+  cursor: pointer;
+
+  color: #64748b;
+
+  transition: all 0.2s ease;
+
+  font-family: inherit;
+
+  padding: 4px 0;
+
+  position: relative;
+
+}
+
+.nav-rail-btn svg {
+
+  width: 20px;
+
+  height: 20px;
+
+  stroke: #94a3b8;
+
+  transition: stroke 0.2s;
+
+}
+
+.nav-rail-btn:hover {
+
+  background: rgba(15, 118, 110, 0.06);
+
+}
+
+.nav-rail-btn:hover svg {
+
+  stroke: #0f766e;
+
+}
+
+.nav-rail-btn.active {
+
+  background: rgba(15, 118, 110, 0.1);
+
+}
+
+.nav-rail-btn.active svg {
+
+  stroke: #0f766e;
+
+}
+
+.nav-rail-btn.active::before {
+
+  content: '';
+
+  position: absolute;
+
+  left: -6px;
+
+  top: 50%;
+
+  transform: translateY(-50%);
+
+  width: 3px;
+
+  height: 28px;
+
+  background: #0f766e;
+
+  border-radius: 0 3px 3px 0;
+
+}
+
+.nav-rail-label {
+
+  font-size: 9px;
+
+  font-weight: 600;
+
+  line-height: 1.2;
+
+  text-align: center;
+
+  color: inherit;
+
+  letter-spacing: 0.02em;
+
+}
+
+.nav-rail-btn.active .nav-rail-label {
+
+  color: #0f766e;
+
+  font-weight: 700;
+
+}
+
+.nav-rail-footer {
+
+  width: 100%;
+
+  padding: 12px 6px 4px;
+
+  border-top: 1px solid rgba(235, 225, 205, 0.6);
+
+  margin-top: 8px;
+
+  display: flex;
+
+  justify-content: center;
+
+}
+
+.nav-rail-user {
+
+  font-size: 10px;
+
+  font-weight: 700;
+
+  color: #0f766e;
+
+  text-align: center;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  max-width: 66px;
 
 }
 
@@ -402,9 +612,9 @@ body {
 
 .nav-button:hover {
 
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(253, 250, 242, 0.7);
 
-  border-color: rgba(255, 255, 255, 0.7);
+  border-color: rgba(235, 225, 205, 0.7);
 
   color: #0f766e;
 
@@ -512,15 +722,15 @@ body {
 
 .card {
 
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(253, 250, 242, 0.65);
 
   backdrop-filter: blur(16px);
 
   -webkit-backdrop-filter: blur(16px);
 
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(235, 225, 205, 0.6);
 
-  border-radius: 16px;
+  border-radius: 18px;
 
   padding: 24px 28px;
 
@@ -630,42 +840,45 @@ body {
 
 
 .kpi-card {
-
-  background: rgba(255, 255, 255, 0.65);
-
-  backdrop-filter: blur(12px);
-
-  -webkit-backdrop-filter: blur(12px);
-
-  border: 1px solid rgba(255, 255, 255, 0.7);
-
-  border-left: 5px solid #0f766e;
-
+  background: rgba(253, 250, 242, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-radius: 14px;
-
-  padding: 22px;
-
-  box-shadow: 0 6px 20px rgba(15, 118, 110, 0.02),
-
-              inset 0 1px 1px rgba(255, 255, 255, 0.9);
-
+  padding: 18px 20px 20px;
+  border: 1px solid rgba(235, 225, 205, 0.4);
+  border-left: 5px solid #0f766e;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
 }
-
-
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: -40%;
+  right: -40%;
+  width: 80%;
+  height: 80%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(15,118,110,0.07) 0%, transparent 70%);
+  pointer-events: none;
+}
 
 .kpi-card:hover {
-
   transform: translateY(-3px);
-
-  box-shadow: 0 10px 25px rgba(15, 118, 110, 0.08),
-
-              inset 0 1px 1px rgba(255, 255, 255, 1);
-
-  border-left-color: #14b8a6;
-
+  box-shadow: 0 12px 32px rgba(0,0,0,0.06);
 }
+
+.kpi-green { border-left-color: #10b981; }
+.kpi-green::before { background: radial-gradient(circle, rgba(16,185,129,0.09) 0%, transparent 70%); }
+.kpi-red   { border-left-color: #ef4444; }
+.kpi-red::before { background: radial-gradient(circle, rgba(239,68,68,0.09) 0%, transparent 70%); }
+.kpi-amber { border-left-color: #f59e0b; }
+.kpi-amber::before { background: radial-gradient(circle, rgba(245,158,11,0.09) 0%, transparent 70%); }
+.kpi-blue  { border-left-color: #38bdf8; }
+.kpi-blue::before { background: radial-gradient(circle, rgba(56,189,248,0.09) 0%, transparent 70%); }
 
 
 
@@ -709,13 +922,13 @@ body {
 
 .sensor-card {
 
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(252, 248, 238, 0.7);
 
   backdrop-filter: blur(12px);
 
   -webkit-backdrop-filter: blur(12px);
 
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(235, 225, 205, 0.7);
 
   border-top: 5px solid #0f766e;
 
@@ -1107,7 +1320,7 @@ body {
 
   border: 1px solid rgba(15, 118, 110, 0.25);
 
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(253, 250, 242, 0.65);
 
   border-radius: 10px;
 
@@ -1283,7 +1496,7 @@ body {
 
   font-size: 13px;
 
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(253, 250, 242, 0.4);
 
 }
 
@@ -1291,7 +1504,7 @@ body {
 
 .table th {
 
-  background: rgba(241, 245, 249, 0.7);
+  background: rgba(245, 238, 224, 0.7);
 
   color: #475569;
 
@@ -1425,7 +1638,7 @@ body {
 
   border-radius: 6px;
 
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(253, 250, 242, 0.7);
 
   font-family: inherit;
 
@@ -1503,7 +1716,7 @@ body {
 
   color: #0f172a;
 
-  background: rgba(255, 255, 255, 0.65);
+  background: rgba(253, 250, 242, 0.65);
 
 }
 
@@ -1513,7 +1726,7 @@ body {
 
   outline: none;
 
-  background: #ffffff;
+  background: #fdfcf7;
 
   border-color: #0f766e;
 
@@ -1559,13 +1772,13 @@ body {
 
 .modal-container {
 
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(253, 250, 242, 0.9);
 
   backdrop-filter: blur(30px);
 
   -webkit-backdrop-filter: blur(30px);
 
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(235, 225, 205, 0.8);
 
   border-radius: 20px;
 
@@ -1929,13 +2142,13 @@ body {
 
 .live-status-item {
 
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(253, 250, 242, 0.5);
 
   padding: 14px 18px;
 
   border-radius: 10px;
 
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(235, 225, 205, 0.5);
 
 }
 
@@ -2370,10 +2583,10 @@ body {
 /* Scrolling Copyright Marquee */
 .copyright-footer {
   width: 100%;
-  background: rgba(255, 255, 255, 0.4) !important;
+  background: rgba(253, 250, 242, 0.5) !important;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border-top: 1px solid rgba(255, 255, 255, 0.6) !important;
+  border-top: 1px solid rgba(235, 225, 205, 0.6) !important;
   overflow: hidden;
   padding: 12px 0;
 }
@@ -2404,7 +2617,7 @@ body {
 }
 
 .marquee-content span::after {
-  content: 'âœ¦';
+  content: '\2726';
   margin-left: 20px;
   margin-right: 20px;
   color: #14b8a6 !important;
@@ -2437,10 +2650,10 @@ body {
 }
 
 .modal-wrapper {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(253, 250, 242, 0.95);
   backdrop-filter: blur(25px);
   -webkit-backdrop-filter: blur(25px);
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(235, 225, 205, 0.9);
   width: 100%;
   max-width: 800px;
   border-radius: 16px;

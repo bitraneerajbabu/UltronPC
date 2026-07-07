@@ -1,6 +1,6 @@
 """UltrON — Pydantic Schemas for Station"""
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 from datetime import datetime
 from typing import Optional
 from app.models.station import StationStatus, StationType
@@ -79,7 +79,7 @@ class StationUpdate(BaseModel):
 
 class StationOut(StationBase):
     id: int
-    status: StationStatus
+    status: StationStatus = StationStatus.offline
     last_seen: Optional[datetime] = None
     last_error: Optional[str] = None
     created_at: datetime
@@ -87,3 +87,8 @@ class StationOut(StationBase):
 
     class Config:
         from_attributes = True
+
+    @field_validator('status', mode='before')
+    @classmethod
+    def default_status(cls, v):
+        return v if v is not None else StationStatus.offline

@@ -21,7 +21,7 @@ def _decode_registers(registers: list[int], data_type: str, byte_order: str) -> 
 
     Modbus word order options:
       - "big"          : Big-endian word order, big-endian bytes    (AB CD)
-      - "big_swap"     : Big-endian word order, bytes swapped       (BA DC)
+      - "big_swap"     : Little-endian word order, big-endian bytes (CD AB) (Swapped Float/Long/Double)
       - "little"       : Little-endian word order, big-endian bytes (CD AB)
       - "little_swap"  : Little-endian word order, bytes swapped    (DC BA)
     """
@@ -30,8 +30,8 @@ def _decode_registers(registers: list[int], data_type: str, byte_order: str) -> 
             if len(registers) < 2:
                 return None
 
-            # Apply word order: 'little' or 'little_swap' reverses the register order
-            if byte_order in ("little", "little_swap"):
+            # Apply word order: 'little', 'little_swap', or 'big_swap' reverses the register order
+            if byte_order in ("little", "little_swap", "big_swap"):
                 w0, w1 = registers[1], registers[0]   # swap word positions
             else:
                 w0, w1 = registers[0], registers[1]   # big: first register is MSW
@@ -40,7 +40,7 @@ def _decode_registers(registers: list[int], data_type: str, byte_order: str) -> 
             raw = struct.pack(">HH", w0, w1)
 
             # Apply byte swap within each word if requested
-            if byte_order in ("big_swap", "little_swap"):
+            if byte_order in ("little_swap",):
                 raw = bytes([raw[1], raw[0], raw[3], raw[2]])
 
             if data_type == "float32":
@@ -60,12 +60,12 @@ def _decode_registers(registers: list[int], data_type: str, byte_order: str) -> 
         elif data_type == "int64":
             if len(registers) < 4:
                 return None
-            if byte_order in ("little", "little_swap"):
+            if byte_order in ("little", "little_swap", "big_swap"):
                 regs = list(reversed(registers[:4]))
             else:
                 regs = list(registers[:4])
             raw = struct.pack(">HHHH", *regs)
-            if byte_order in ("big_swap", "little_swap"):
+            if byte_order in ("little_swap",):
                 raw = bytes([raw[1], raw[0], raw[3], raw[2], raw[5], raw[4], raw[7], raw[6]])
             return float(struct.unpack(">q", raw)[0])
 
@@ -137,11 +137,24 @@ class ModbusTCPReader:
     ) -> tuple[Optional[float], str]:
         """
         Read one parameter.
-        Returns (value, quality) where quality is: 'good' | 'comms_fail' | 'sensor_fail'
+        Returns (value, quality) where quality is: 'U' | 'E'
         """
         target_host = host if host else self.host
         target_port = port if port else self.port
         target_slave = slave_id if slave_id is not None else self.slave_id
+        if scale_factor is None or scale_factor == 0:
+            scale_factor = 1.0
+        if offset is None:
+            offset = 0.0
+
+        # ModScan address translation (e.g. 40005 -> 4 for holding registers)
+        target_address = register_address
+        if register_type == "holding" and target_address >= 40001:
+            target_address -= 40001
+        elif register_type == "input_reg" and target_address >= 30001:
+            target_address -= 30001
+        elif register_type == "discrete_input" and target_address >= 10001:
+            target_address -= 10001
 
         has_override = (host is not None or port is not None)
         client = None
@@ -157,44 +170,44 @@ class ModbusTCPReader:
                 connected = await client.connect()
                 if not connected:
                     log.warning(f"Parameter-level Modbus TCP connect failed to {target_host}:{target_port}")
-                    return None, "comms_fail"
+                    return None, "E"
                 cleanup_client = True
             except Exception as e:
                 log.error(f"Parameter-level Modbus TCP connect exception {target_host}:{target_port}: {e}")
-                return None, "comms_fail"
+                return None, "E"
         else:
             if not await self._ensure_connected():
-                return None, "comms_fail"
+                return None, "E"
             client = self._client
 
         try:
             if register_type == "holding":
                 result = await client.read_holding_registers(
-                    register_address, count=register_count, device_id=target_slave
+                    target_address, count=register_count, device_id=target_slave
                 )
             elif register_type == "input_reg":
                 result = await client.read_input_registers(
-                    register_address, count=register_count, device_id=target_slave
+                    target_address, count=register_count, device_id=target_slave
                 )
             elif register_type == "coil":
                 result = await client.read_coils(
-                    register_address, count=register_count, device_id=target_slave
+                    target_address, count=register_count, device_id=target_slave
                 )
             elif register_type == "discrete_input":
                 result = await client.read_discrete_inputs(
-                    register_address, count=register_count, device_id=target_slave
+                    target_address, count=register_count, device_id=target_slave
                 )
             else:
                 log.warning(f"Unknown register_type '{register_type}'")
                 if cleanup_client:
                     client.close()
-                return None, "bad"
+                return None, "U"
 
             if result.isError():
                 log.warning(f"Modbus error response at addr {register_address}: {result}")
                 if cleanup_client:
                     client.close()
-                return None, "sensor_fail"
+                return None, "E"
 
             # Coils/discrete inputs use result.bits; registers use result.registers
             if hasattr(result, "registers") and result.registers is not None:
@@ -204,7 +217,7 @@ class ModbusTCPReader:
             else:
                 if cleanup_client:
                     client.close()
-                return None, "sensor_fail"
+                return None, "E"
 
             raw_val = _decode_registers(regs, data_type, byte_order)
 
@@ -212,10 +225,13 @@ class ModbusTCPReader:
                 client.close()
 
             if raw_val is None:
-                return None, "sensor_fail"
+                return None, "E"
 
-            value = (raw_val * scale_factor) + offset
-            return value, "good"
+            if data_type == "bool":
+                value = raw_val
+            else:
+                value = (raw_val * scale_factor) + offset
+            return value, "U"
 
         except ModbusException as e:
             log.error(f"Modbus TCP read error (addr={register_address}): {e}")
@@ -223,14 +239,14 @@ class ModbusTCPReader:
                 client.close()
             else:
                 await self.close()   # force reconnect on next call
-            return None, "comms_fail"
+            return None, "E"
         except Exception as e:
             log.error(f"Unexpected error reading Modbus TCP (addr={register_address}): {e}")
             if cleanup_client:
                 client.close()
             else:
                 await self.close()
-            return None, "comms_fail"
+            return None, "E"
 
     async def read_all_parameters(self, parameters: list[dict]) -> list[dict]:
         """
@@ -251,9 +267,15 @@ class ModbusTCPReader:
                 port=p.get("port"),
                 slave_id=p.get("slave_id"),
             )
+            sf = p.get("scale_factor", 1.0) or 1.0
+            off = p.get("offset", 0.0) or 0.0
+            dt = p.get("data_type", "float32")
             raw_value = None
-            if value is not None and p["scale_factor"] not in (0, 0.0):
-                raw_value = (value - p["offset"]) / p["scale_factor"]
+            if value is not None and sf not in (0, 0.0):
+                if dt == "bool":
+                    raw_value = value
+                else:
+                    raw_value = (value - off) / sf
 
             results.append({
                 "parameter_id": p["id"],

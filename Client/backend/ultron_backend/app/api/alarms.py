@@ -25,7 +25,8 @@ async def list_alarms(
     parameter_id: Optional[int] = None,
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
-    limit: int = Query(200, le=5000),
+    limit: int = Query(100, le=1000),
+    offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Alarm).order_by(Alarm.triggered_at.desc())
@@ -41,7 +42,7 @@ async def list_alarms(
     if end:
         query = query.where(Alarm.triggered_at <= end)
 
-    query = query.limit(limit)
+    query = query.offset(offset).limit(limit)
     result = await db.execute(query)
     return result.scalars().all()
 

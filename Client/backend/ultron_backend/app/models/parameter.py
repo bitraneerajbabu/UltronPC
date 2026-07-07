@@ -75,6 +75,10 @@ class Parameter(Base):
     alarm_enabled = Column(Boolean, default=True)
     alarm_deadband = Column(Float, default=0.0)                  # hysteresis
 
+    # TCP Custom parsing
+    parse_method = Column(String(30), default="csv_col")  # "csv_col", "position", "regex", "delimiter_split"
+    parse_config = Column(Text, nullable=True)             # JSON config for the parse method
+
     # Connection overrides (allows individual parameters to connect differently)
     host = Column(String(100), nullable=True)
     port = Column(Integer, nullable=True)

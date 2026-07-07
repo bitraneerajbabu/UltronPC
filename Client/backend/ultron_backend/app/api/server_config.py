@@ -20,7 +20,7 @@ from app.core.logger import get_logger
 log = get_logger("ultron.api.server_config")
 router = APIRouter(prefix="/server-config", tags=["Server Config"])
 
-@router.get("/", response_model=List[ServerConfigResponse])
+@router.get("/", response_model=List[ServerConfigResponse], dependencies=[Depends(require_admin)])
 async def get_all_servers(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(ServerConfig).order_by(ServerConfig.id))
     return result.scalars().all()
@@ -38,7 +38,7 @@ async def create_server(config_in: ServerConfigCreate, db: AsyncSession = Depend
     await db.refresh(server)
     return server
 
-@router.get("/mappings", response_model=List[ParameterMappingResponse])
+@router.get("/mappings", response_model=List[ParameterMappingResponse], dependencies=[Depends(require_admin)])
 async def get_mappings(db: AsyncSession = Depends(get_db)):
     # Fetch all active parameters with device and station
     stmt = (
@@ -47,7 +47,7 @@ async def get_mappings(db: AsyncSession = Depends(get_db)):
             joinedload(Parameter.device).joinedload(Device.station),
             joinedload(Parameter.server_mappings)
         )
-        .join(Parameter.device)
+        .outerjoin(Parameter.device)
         .filter(Parameter.is_active == True)
         .order_by(Device.station_id, Device.id, Parameter.id)
     )
@@ -67,16 +67,18 @@ async def get_mappings(db: AsyncSession = Depends(get_db)):
                 api_vname=m.api_vname,
                 api_unit=m.api_unit,
                 cpcb_station_name=m.cpcb_station_name,
-                cpcb_parameter=m.cpcb_parameter
+                cpcb_parameter=m.cpcb_parameter,
+                led_channel_name=m.led_channel_name,
+                led_unit=m.led_unit,
             )
             
-        station_name = p.device.station.name if p.device.station else "Unknown Station"
+        station_name = p.device.station.name if p.device and p.device.station else "Unknown Station"
         
         response.append(ParameterMappingResponse(
             parameter_id=p.id,
             parameter_name=p.tag_name,
             station_name=station_name,
-            channel_no=p.id, # Using ID as channel number for simplicity
+            channel_no=p.display_order,
             mappings=mappings_dict
         ))
     return response
@@ -257,7 +259,7 @@ async def test_server_delay_push(server_id: int, db: AsyncSession = Depends(get_
 
 # ─── Pending Uploads ──────────────────────────────────────────────────────────
 
-@router.get("/{server_id}/pending-count")
+@router.get("/{server_id}/pending-count", dependencies=[Depends(require_admin)])
 async def get_pending_count(server_id: int, db: AsyncSession = Depends(get_db)):
     """Return count of pending uploads for a given server config."""
     result = await db.execute(
@@ -267,7 +269,7 @@ async def get_pending_count(server_id: int, db: AsyncSession = Depends(get_db)):
     return {"server_id": server_id, "pending_count": count}
 
 
-@router.get("/pending-counts")
+@router.get("/pending-counts", dependencies=[Depends(require_admin)])
 async def get_all_pending_counts(db: AsyncSession = Depends(get_db)):
     """Return pending counts grouped by server config."""
     rows = await db.execute(

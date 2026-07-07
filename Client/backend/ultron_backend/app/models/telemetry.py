@@ -12,13 +12,14 @@ import enum
 
 # ─── Data Quality ─────────────────────────────────────────────────────────────
 class DataQuality(str, enum.Enum):
-    good = "good"
-    bad = "bad"
-    uncertain = "uncertain"
-    out_of_range = "out_of_range"
-    comms_fail = "comms_fail"
-    sensor_fail = "sensor_fail"
-    maintenance = "maintenance"
+    good = "U"
+    bad = "B"
+    uncertain = "I"
+    out_of_range = "O"
+    comms_fail = "E"
+    sensor_fail = "F"
+    maintenance = "M"
+    negative = "N"
 
 
 # ─── Average Types ────────────────────────────────────────────────────────────
@@ -99,6 +100,7 @@ class HistoricalData(Base):
     __table_args__ = (
         Index("ix_historical_data_param_time", "parameter_id", "timestamp"),
         Index("ix_historical_data_timestamp", "timestamp"),
+        Index("ix_historical_data_ts_quality", "timestamp", "quality"),
     )
 
     def __repr__(self):
