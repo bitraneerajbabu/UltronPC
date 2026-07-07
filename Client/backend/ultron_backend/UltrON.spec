@@ -154,6 +154,8 @@ hidden = [
     "app.models",
     "app.schemas",
     "app.services",
+    # psutil — system monitoring (used by rajapi_sync)
+    "psutil",
     # pywebview (desktop native window wrapper)
     "webview",
     "webview.platforms",
