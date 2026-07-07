@@ -6,6 +6,7 @@ Persists telemetry, runs data quality, triggers alarm checks, and live pushes.
 """
 
 import asyncio
+import random
 from datetime import datetime
 from typing import Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +35,9 @@ log = get_logger("ultron.polling_engine")
 
 # ─── Valid DataQuality values ─────────────────────────────────────────────────
 _VALID_QUALITIES = {q.value for q in DataQuality}
+
+# ─── Concurrency guard for SQLite write contention ──────────────────────────────
+_device_semaphore = asyncio.Semaphore(2)
 
 # ─── Reader Pool ──────────────────────────────────────────────────────────────
 # Keep one reader instance per device to maintain persistent connections
@@ -379,7 +383,8 @@ async def _device_poll_loop(device_id: int, interval: int):
                 break
 
             active_params = [p for p in device.parameters if p.is_active]
-            await _poll_device(device, active_params)
+            async with _device_semaphore:
+                await _poll_device(device, active_params)
             consecutive_errors = 0  # reset on success
 
         except asyncio.CancelledError:
@@ -388,8 +393,8 @@ async def _device_poll_loop(device_id: int, interval: int):
         except Exception as e:
             err_str = str(e)
             consecutive_errors += 1
-            # Transient errors (stale DB pool during startup/restart) back off briefly
-            if "no active connection" in err_str:
+            # Transient errors (stale DB pool, SQLite locked) back off briefly
+            if any(word in err_str for word in ["no active connection", "database is locked", "database disk image"]):
                 backoff = min(5 * consecutive_errors, 30)
                 log.warning(f"Device loop transient error device={device_id} (retry #{consecutive_errors}, backoff {backoff}s): {err_str.splitlines()[0]}")
                 await asyncio.sleep(backoff)
@@ -397,7 +402,9 @@ async def _device_poll_loop(device_id: int, interval: int):
             else:
                 log.error(f"Device loop error device={device_id}: {e}")
 
-        await asyncio.sleep(interval)
+        # Add jitter (±10%) to prevent thundering herd
+        jitter = interval * random.uniform(-0.1, 0.1)
+        await asyncio.sleep(interval + jitter)
 
 
 async def _central_sync_worker():

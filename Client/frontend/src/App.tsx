@@ -417,7 +417,6 @@ function App() {
         {/* Top Header Bar */}
         <header className="top-bar">
           <div className="top-left" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <img src="/assets/Ultron_logo.png?t=1" alt="UltrON" style={{ height: '42px', width: 'auto', display: 'block' }} />
             {/* System Live Clock */}
             <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f766e', background: 'rgba(15,118,110,0.06)', padding: '6px 14px', borderRadius: '6px', border: '1px solid rgba(15,118,110,0.15)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
               {timeStr}

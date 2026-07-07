@@ -99,3 +99,31 @@ class Alarm(Base):
     status = Column(String(20), default="active")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     acknowledged_at = Column(DateTime, nullable=True)
+
+class SoftwareVersion(Base):
+    __tablename__ = "software_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    version = Column(String, unique=True, index=True, nullable=False)
+    description = Column(Text, nullable=True)
+    file_path = Column(String, nullable=True)
+    checksum = Column(String, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    deployments = relationship("OTADeployment", back_populates="version", cascade="all, delete-orphan")
+
+class OTADeployment(Base):
+    __tablename__ = "ota_deployments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    site_id = Column(Integer, ForeignKey("industry_sites.id"), nullable=False)
+    version_id = Column(Integer, ForeignKey("software_versions.id"), nullable=False)
+    status = Column(String, default="pending")  # pending, in_progress, success, failed
+    progress = Column(Integer, default=0)        # 0-100
+    logs = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    site = relationship("IndustrySite")
+    version = relationship("SoftwareVersion", back_populates="deployments")
+
