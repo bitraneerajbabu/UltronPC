@@ -23,6 +23,15 @@ DB_FILE = HERE / "ultron.db"
 # ── Hidden imports ────────────────────────────────────────────────────────────
 # Modules discovered via dynamic import / entry_points that PyInstaller misses.
 hidden = [
+    # Python 3.14 compat — built-in C extensions not auto-detected by PyInstaller
+    "select",
+    "selectors",
+    # pydantic_settings — BaseSettings moved out of pydantic in v2
+    "pydantic_settings",
+    "pydantic_settings.sources",
+    # bcrypt — password hashing
+    "bcrypt",
+    "bcrypt._bcrypt",
     # uvicorn internals loaded by string at runtime
     "uvicorn.logging",
     "uvicorn.loops",
@@ -48,9 +57,16 @@ hidden = [
     "sqlalchemy.dialects.postgresql.asyncpg",
     "sqlalchemy.pool",
     "sqlalchemy.pool.impl",
-    # Database async drivers
+    # Database async drivers — aiosqlite is imported via __import__() by SQLAlchemy
+    # so PyInstaller must be forced to bundle it
     "aiosqlite",
+    "aiosqlite.core",
+    "aiosqlite.cursor",
+    "aiosqlite.context",
+    "aiosqlite.__version__",
     "asyncpg",
+    # sqlite3 sub-modules used at runtime by aiosqlite
+    "sqlite3",
 
     # APScheduler
     "apscheduler.schedulers.asyncio",
@@ -105,6 +121,24 @@ hidden = [
     "aiofiles",
     # python-dotenv
     "dotenv",
+    # Rate limiting (slowapi) & dependencies
+    "slowapi",
+    "slowapi.util",
+    "slowapi.errors",
+    "limits",
+    "limits.storage",
+    "limits.strategies",
+    "packaging",
+    "deprecated",
+    # httpx (async HTTP client for license, poll, push, rajapi)
+    "httpx",
+    "httpx._transports.asgi",
+    "httpx._transports.wsgi",
+    "h2",
+    "httpcore",
+    "httpcore._backends.asyncio",
+    "httpcore._backends.sync",
+    "sniffio",
     # tzdata / tzlocal needed by APScheduler
     "tzdata",
     "tzlocal",
@@ -120,8 +154,15 @@ hidden = [
     "app.models",
     "app.schemas",
     "app.services",
-    # pywebview (desktop wrapper)
+    # pywebview (desktop native window wrapper)
     "webview",
+    "webview.platforms",
+    "webview.platforms.winforms",
+    "webview.platforms.winforms_edge",
+    "pythonnet",
+    "clr",
+    "clr_loader",
+    "app.desktop_app",
 ]
 
 # ── Collect data files ────────────────────────────────────────────────────────
@@ -133,12 +174,14 @@ if UI_DIST.is_dir():
 else:
     print("WARNING: ui_dist/ not found — run 'npm run build' before packaging!")
 
-# 2. Config files (.env.enc or fallback to .env)
-ENV_ENC_FILE = HERE / ".env.enc"
-if ENV_ENC_FILE.is_file():
-    datas.append((str(ENV_ENC_FILE), "."))
-elif ENV_FILE.is_file():
-    datas.append((str(ENV_FILE), "."))
+# 2. Pre-seeded SQLite DB (stations, devices, parameters for KTPP)
+if DB_FILE.is_file():
+    datas.append((str(DB_FILE), "."))
+
+# 3. Config template (bundle .env.template — actual .env with secrets is NOT shipped)
+ENV_TEMPLATE = HERE / ".env.template"
+if ENV_TEMPLATE.is_file():
+    datas.append((str(ENV_TEMPLATE), "."))
 
 # 3. fpdf2 ships font & image data inside its package
 datas += collect_data_files("fpdf")
@@ -152,13 +195,23 @@ datas += collect_data_files("tzdata")
 # 6. pydantic_core has Rust extension wheels with embedded resources
 datas += collect_data_files("pydantic_core")
 
+# 7. aiosqlite — ensure all sub-modules are bundled for PyInstaller
+datas += collect_data_files("aiosqlite")
+datas += collect_data_files("sqlite3")
+
 # 7. Mako templates used by alembic (not needed at runtime but safe to include)
 # datas += collect_data_files("mako")
 
 # ── Binaries ──────────────────────────────────────────────────────────────────
 # PyInstaller usually finds .pyd/.dll files automatically via Analysis.
-# If cryptography fails at runtime, explicitly list its _rust.pyd here.
-binaries = []
+# Python 3.14 moves some C extensions to DLLs/ that PyInstaller misses —
+# explicitly bundle them here.
+import sys
+_BUNDLE_BINARIES = [
+    (os.path.join(sys.base_prefix, "DLLs", "select.pyd"), "."),         # asyncio.selector_events
+    (os.path.join(sys.base_prefix, "DLLs", "_overlapped.pyd"), "."),    # asyncio.windows_events
+]
+binaries = _BUNDLE_BINARIES
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
 a = Analysis(
@@ -193,12 +246,13 @@ exe = EXE(
     a.binaries,
     a.zipfiles,
     a.datas,
-    exclude_binaries=False,   # one-file mode (self-contained executable)
+    exclude_binaries=False,
     name="UltrON",
     debug=False,              # no debug console
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
+    upx_exclude=[],
     console=False,            # NO terminal window — runs silently in background
     disable_windowed_traceback=False,
     argv_emulation=False,

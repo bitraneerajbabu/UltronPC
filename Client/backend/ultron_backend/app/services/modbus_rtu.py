@@ -87,6 +87,20 @@ class ModbusRTUReader:
         stop_bits: Optional[int] = None,
     ) -> tuple[Optional[float], str]:
         """Thread-safe read (via async lock) for RS485 shared bus."""
+        if scale_factor is None or scale_factor == 0:
+            scale_factor = 1.0
+        if offset is None:
+            offset = 0.0
+
+        # ModScan address translation (e.g. 40005 -> 4 for holding registers)
+        target_address = register_address
+        if register_type == "holding" and target_address >= 40001:
+            target_address -= 40001
+        elif register_type == "input_reg" and target_address >= 30001:
+            target_address -= 30001
+        elif register_type == "discrete_input" and target_address >= 10001:
+            target_address -= 10001
+
         target_port = serial_port if serial_port else self.port
         target_baud = baud_rate if baud_rate else self.baudrate
         target_dbits = data_bits if data_bits else self.data_bits
@@ -94,11 +108,11 @@ class ModbusRTUReader:
         target_sbits = stop_bits if stop_bits else self.stop_bits
 
         has_override = (
-            serial_port is not None
-            or baud_rate is not None
-            or data_bits is not None
-            or parity is not None
-            or stop_bits is not None
+            (serial_port is not None and serial_port != self.port)
+            or (baud_rate is not None and baud_rate != self.baudrate)
+            or (data_bits is not None and data_bits != self.data_bits)
+            or (parity is not None and parity != self.parity)
+            or (stop_bits is not None and stop_bits != self.stop_bits)
         )
 
         if has_override:
@@ -115,103 +129,109 @@ class ModbusRTUReader:
                 connected = await client.connect()
                 if not connected:
                     log.warning(f"Parameter-level Modbus RTU connect failed to {target_port}")
-                    return None, "comms_fail"
+                    return None, "E"
                 
                 if register_type == "holding":
                     result = await client.read_holding_registers(
-                        register_address, count=register_count, device_id=slave_id
+                        target_address, count=register_count, device_id=slave_id
                     )
                 elif register_type == "input_reg":
                     result = await client.read_input_registers(
-                        register_address, count=register_count, device_id=slave_id
+                        target_address, count=register_count, device_id=slave_id
                     )
                 elif register_type == "coil":
                     result = await client.read_coils(
-                        register_address, count=register_count, device_id=slave_id
+                        target_address, count=register_count, device_id=slave_id
                     )
                 elif register_type == "discrete_input":
                     result = await client.read_discrete_inputs(
-                        register_address, count=register_count, device_id=slave_id
+                        target_address, count=register_count, device_id=slave_id
                     )
                 else:
                     client.close()
-                    return None, "bad"
+                    return None, "U"
 
                 client.close()
 
                 if result.isError():
-                    return None, "sensor_fail"
+                    return None, "E"
 
                 if hasattr(result, "registers") and result.registers is not None:
                     regs = list(result.registers)
                 elif hasattr(result, "bits") and result.bits is not None:
                     regs = [int(b) for b in result.bits]
                 else:
-                    return None, "sensor_fail"
+                    return None, "E"
 
                 raw_val = _decode_registers(regs, data_type, byte_order)
                 if raw_val is None:
-                    return None, "sensor_fail"
+                    return None, "E"
 
-                value = (raw_val * scale_factor) + offset
-                return value, "good"
+                if data_type == "bool":
+                    value = raw_val
+                else:
+                    value = (raw_val * scale_factor) + offset
+                return value, "U"
 
             except Exception as e:
                 log.error(f"Parameter-level RTU error on port {target_port}: {e}")
                 if client:
                     client.close()
-                return None, "comms_fail"
+                return None, "E"
         else:
             async with self._lock:
                 if not await self._ensure_connected():
-                    return None, "comms_fail"
+                    return None, "E"
 
                 try:
                     if register_type == "holding":
                         result = await self._client.read_holding_registers(
-                            register_address, count=register_count, device_id=slave_id
+                            target_address, count=register_count, device_id=slave_id
                         )
                     elif register_type == "input_reg":
                         result = await self._client.read_input_registers(
-                            register_address, count=register_count, device_id=slave_id
+                            target_address, count=register_count, device_id=slave_id
                         )
                     elif register_type == "coil":
                         result = await self._client.read_coils(
-                            register_address, count=register_count, device_id=slave_id
+                            target_address, count=register_count, device_id=slave_id
                         )
                     elif register_type == "discrete_input":
                         result = await self._client.read_discrete_inputs(
-                            register_address, count=register_count, device_id=slave_id
+                            target_address, count=register_count, device_id=slave_id
                         )
                     else:
                         log.warning(f"Unknown register_type '{register_type}'")
-                        return None, "bad"
+                        return None, "U"
 
                     if result.isError():
-                        return None, "sensor_fail"
+                        return None, "E"
 
                     if hasattr(result, "registers") and result.registers is not None:
                         regs = list(result.registers)
                     elif hasattr(result, "bits") and result.bits is not None:
                         regs = [int(b) for b in result.bits]
                     else:
-                        return None, "sensor_fail"
+                        return None, "E"
 
                     raw_val = _decode_registers(regs, data_type, byte_order)
                     if raw_val is None:
-                        return None, "sensor_fail"
+                        return None, "E"
 
-                    value = (raw_val * scale_factor) + offset
-                    return value, "good"
+                    if data_type == "bool":
+                        value = raw_val
+                    else:
+                        value = (raw_val * scale_factor) + offset
+                    return value, "U"
 
                 except ModbusException as e:
                     log.error(f"Modbus RTU read error (slave={slave_id}, addr={register_address}): {e}")
                     await self.close()
-                    return None, "comms_fail"
+                    return None, "E"
                 except Exception as e:
                     log.error(f"Unexpected RTU error (slave={slave_id}, addr={register_address}): {e}")
                     await self.close()
-                    return None, "comms_fail"
+                    return None, "E"
                 finally:
                     # Give the RS485 bus a small inter-frame gap (3.5 character times minimum)
                     await asyncio.sleep(0.1)
@@ -235,9 +255,15 @@ class ModbusRTUReader:
                 parity=p.get("parity"),
                 stop_bits=p.get("stop_bits"),
             )
+            sf = p.get("scale_factor", 1.0) or 1.0
+            off = p.get("offset", 0.0) or 0.0
+            dt = p.get("data_type", "float32")
             raw_value = None
-            if value is not None and p["scale_factor"] not in (0, 0.0):
-                raw_value = (value - p["offset"]) / p["scale_factor"]
+            if value is not None and sf not in (0, 0.0):
+                if dt == "bool":
+                    raw_value = value
+                else:
+                    raw_value = (value - off) / sf
 
             results.append({
                 "parameter_id": p["id"],

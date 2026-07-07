@@ -24,6 +24,9 @@ class CPCBStationConfig(Base):
     timezone = Column(String(50), default="Asia/Kolkata")
     retention_count = Column(Integer, default=97)
 
+    calibration_mode = Column(Boolean, default=False)
+    maintenance_mode = Column(Boolean, default=False)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

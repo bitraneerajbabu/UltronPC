@@ -57,8 +57,8 @@ def sync_telemetry(
 
     now = datetime.now(timezone.utc)
     active_broadcasts = db.query(Broadcast).filter(
-        Broadcast.is_active == True,
-        (Broadcast.expires_at == None) | (Broadcast.expires_at > now)
+        Broadcast.is_active.is_(True),
+        (Broadcast.expires_at.is_(None)) | (Broadcast.expires_at > now)
     ).all()
 
     amc_expired = False

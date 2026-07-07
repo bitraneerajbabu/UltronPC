@@ -34,15 +34,21 @@ async def compute_15min_averages_for_station(
     )
     mappings = mappings_result.scalars().all()
 
+    # Batch load all Parameters at once to avoid N+1 queries
+    from app.models.parameter import Parameter
+    internal_tags = [m.internal_parameter for m in mappings if m.internal_parameter]
+    if not internal_tags:
+        return 0
+    params_result = await db.execute(
+        select(Parameter).where(Parameter.tag_name.in_(internal_tags))
+    )
+    all_params = {p.tag_name: p for p in params_result.scalars().all()}
+
     for mapping in mappings:
         internal_param = mapping.internal_parameter
         cpcb_param = mapping.cpcb_parameter
 
-        from app.models.parameter import Parameter
-        param_result = await db.execute(
-            select(Parameter).where(Parameter.tag_name == internal_param)
-        )
-        param = param_result.scalar_one_or_none()
+        param = all_params.get(internal_param)
         if not param:
             continue
 
@@ -54,7 +60,7 @@ async def compute_15min_averages_for_station(
                     Averages.avg_type == AverageType.avg_1min,
                     Averages.timestamp >= window_start,
                     Averages.timestamp < window_end,
-                    Averages.quality.in_(["good", "out_of_range", "uncertain"]),
+                    Averages.quality.in_(["U"]),
                 )
             )
         )
@@ -78,15 +84,19 @@ async def compute_15min_averages_for_station(
             log.debug(f"Duplicate skipped: {station_config.station_name}/{cpcb_param} @ {window_start}")
             continue
 
+        cal_flag = 1 if station_config.calibration_mode else 0
+        maint_flag = 1 if station_config.maintenance_mode else 0
+        remark = "Calibration" if cal_flag else ("Maintenance" if maint_flag else "")
+
         db.add(CPCBExportRecord(
             station_name=station_config.station_name,
             parameter=cpcb_param,
             date_from=window_start,
             date_to=window_end,
             value=converted_val,
-            calibration_flag=0,
-            maintenance_flag=0,
-            remark="Normal",
+            calibration_flag=cal_flag,
+            maintenance_flag=maint_flag,
+            remark=remark,
         ))
         records_created += 1
 

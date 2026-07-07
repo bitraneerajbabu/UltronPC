@@ -1,13 +1,15 @@
 """UltrON — Settings API (app-level configuration, user management, DB utilities)"""
 
 from fastapi import APIRouter, Depends, HTTPException
-from app.core.security import get_current_user, require_admin
+from app.core.security import get_current_user, require_admin, hash_password
+from app.models.user import User
+from app.models.plant_settings import PlantSettings
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text, delete
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
-from app.database import get_db, engine, Base
+from app.database import get_db, engine, Base, AsyncSessionLocal
 from app.models.station import Station, StationStatus, StationType
 from app.models.device import Device, DeviceProtocol, DeviceType
 from app.models.parameter import Parameter, RegisterType, DataType, ByteOrder, AlarmSeverity
@@ -65,13 +67,12 @@ async def _get_lan_ip() -> str:
 async def _check_internet() -> bool:
     try:
         import urllib.request
-        import ssl
-        ctx = ssl.create_default_context()
+        from app.core.ssl_utils import urlopen_with_ssl_fallback
         req = urllib.request.Request(
             "https://clients3.google.com/generate_204",
             method="GET",
         )
-        with urllib.request.urlopen(req, context=ctx, timeout=5) as resp:
+        with urlopen_with_ssl_fallback(req, timeout=5) as resp:
             return resp.status == 204
     except Exception:
         return False
@@ -107,18 +108,84 @@ async def reset_telemetry(db: AsyncSession = Depends(get_db)):
 
 
 # ─── Full DB Reset (wipe everything) ──────────────────────────────────────────
-@router.post("/reset-all", dependencies=[Depends(require_admin)])
-async def reset_all_data(db: AsyncSession = Depends(get_db)):
+
+async def factory_reset_core(*, restart: bool = True):
     """
-    Drop and recreate all tables — full factory reset.
-    WARNING: destroys ALL data including station/device/parameter config.
+    Core factory reset logic — stops background tasks, drops all tables,
+    recreates schema, re-seeds default admin user.
+
+    Can be called from:
+      - POST /settings/reset-all  (local UI button)
+      - Remote command polling     (admin panel → factory_reset)
+
+    If restart=True and running as a frozen PyInstaller EXE, spawns a new process
+    and exits the current one (after a short delay for the HTTP response to flush).
     """
-    audit.warning("Full database reset initiated via /settings/reset-all")
+    import sys, os
+
+    # 1. Gracefully stop background tasks to prevent DB conflicts
+    try:
+        from app.services.polling_engine import stop_polling
+        await stop_polling()
+        log.info("Polling engine stopped for factory reset")
+    except Exception as e:
+        log.warning(f"Could not stop polling engine: {e}")
+
+    # 2. Drop and recreate all tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    log.warning("Full database reset complete — all tables recreated")
-    return {"message": "Full database reset complete. All data removed.", "success": True}
+
+    # 3. Re-seed default admin user (dropped with all other tables)
+    async with AsyncSessionLocal() as seed_db:
+        admin = User(
+            username=settings.ADMIN_USERNAME,
+            hashed_password=hash_password(settings.ADMIN_PASSWORD),
+            role="admin",
+            full_name="System Administrator",
+            is_active=True,
+            created_by="system",
+        )
+        seed_db.add(admin)
+        await seed_db.commit()
+
+    log.warning("Full database reset complete — all tables recreated, admin re-seeded")
+
+    # 4. Auto-restart the process so background jobs start fresh
+    if restart:
+        try:
+            if getattr(sys, "frozen", False):
+                import threading, subprocess, time
+                def _do_restart():
+                    time.sleep(2)
+                    try:
+                        startup_info = None
+                        if sys.platform == "win32":
+                            startup_info = subprocess.STARTUPINFO()
+                            startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                        subprocess.Popen(
+                            [sys.executable],
+                            startupinfo=startup_info,
+                            close_fds=True,
+                        )
+                    except Exception as e:
+                        log.error(f"Restart spawn failed: {e}")
+                    os._exit(0)
+                threading.Thread(target=_do_restart, daemon=True).start()
+        except Exception as e:
+            log.error(f"Restart setup failed: {e}")
+
+
+@router.post("/reset-all", dependencies=[Depends(require_admin)])
+async def reset_all_data():
+    """
+    Drop and recreate all tables — full factory reset.
+    WARNING: destroys ALL data including station/device/parameter config.
+    The server auto-restarts after the reset to pick up the fresh DB.
+    """
+    audit.warning("Full database reset initiated via /settings/reset-all")
+    await factory_reset_core(restart=True)
+    return {"message": "Factory reset complete. Server restarting...", "success": True}
 
 
 # ─── System Health ────────────────────────────────────────────────────────────
@@ -153,6 +220,36 @@ async def polling_status():
     }
 
 
+# ─── Restart UltrON Application ────────────────────────────────────────────────
+@router.post("/restart-app", dependencies=[Depends(require_admin)])
+async def restart_app():
+    """
+    Restart the UltrON desktop application (frozen PyInstaller exe only).
+    Spawns a new process in the background, then exits the current one.
+    """
+    import sys, os, subprocess, threading
+
+    if not getattr(sys, "frozen", False):
+        raise HTTPException(status_code=400, detail="Restart is only supported in desktop (frozen) mode")
+
+    def _do_restart():
+        import time
+        time.sleep(2)
+        try:
+            startup_info = None
+            if sys.platform == "win32":
+                startup_info = subprocess.STARTUPINFO()
+                startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            subprocess.Popen([sys.executable], startupinfo=startup_info, close_fds=True)
+        except Exception as e:
+            log.error(f"Restart spawn failed: {e}")
+        os._exit(0)
+
+    threading.Thread(target=_do_restart, daemon=True).start()
+    audit.info("App restart initiated via /settings/restart-app")
+    return {"success": True, "message": "Restarting UltrON…"}
+
+
 # ─── Reload Polling Engine ────────────────────────────────────────────────────
 @router.post("/reload-polling", dependencies=[Depends(require_admin)])
 async def reload_polling():
@@ -167,23 +264,22 @@ async def reload_polling():
     }
 
 
-# ─── Plant Settings (Permanent) ───────────────────────────────────────────────
+# ─── Plant Settings (DB-backed) ──────────────────────────────────────────────
 class PlantSettingsSchema(BaseModel):
     plantName: str
     plantAddress: str
     plantLogo: str
 
 @router.get("/plant")
-async def get_plant_settings():
-    import json
-    settings_file = APP_DIR / "plant_settings.json"
-    if settings_file.exists():
-        try:
-            with open(settings_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            log.error(f"Error reading plant settings: {e}")
-    # Default fallback settings
+async def get_plant_settings(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(PlantSettings).limit(1))
+    row = result.scalar_one_or_none()
+    if row:
+        return {
+            "plantName": row.plant_name,
+            "plantAddress": row.plant_address,
+            "plantLogo": row.plant_logo,
+        }
     return {
         "plantName": "UltrON Industrial Plant",
         "plantAddress": "Industrial Zone, Block A",
@@ -191,13 +287,21 @@ async def get_plant_settings():
     }
 
 @router.post("/plant", dependencies=[Depends(require_admin)])
-async def save_plant_settings(payload: PlantSettingsSchema):
-    import json
+async def save_plant_settings(payload: PlantSettingsSchema, db: AsyncSession = Depends(get_db)):
     try:
-        settings_file = APP_DIR / "plant_settings.json"
-        APP_DIR.mkdir(parents=True, exist_ok=True)
-        with open(settings_file, "w", encoding="utf-8") as f:
-            json.dump(payload.model_dump(), f, ensure_ascii=False, indent=2)
+        result = await db.execute(select(PlantSettings).limit(1))
+        row = result.scalar_one_or_none()
+        if row:
+            row.plant_name = payload.plantName
+            row.plant_address = payload.plantAddress
+            row.plant_logo = payload.plantLogo
+        else:
+            db.add(PlantSettings(
+                plant_name=payload.plantName,
+                plant_address=payload.plantAddress,
+                plant_logo=payload.plantLogo,
+            ))
+        await db.flush()
         return {"success": True, "data": payload.model_dump()}
     except Exception as e:
         log.error(f"Error saving plant settings: {e}")
@@ -281,7 +385,7 @@ async def check_firmware():
     current_version = settings.APP_VERSION
 
     try:
-        ctx = ssl.create_default_context()
+        from app.core.ssl_utils import urlopen_with_ssl_fallback
         url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
         req = urllib.request.Request(
             url,
@@ -290,7 +394,7 @@ async def check_firmware():
                 "Accept": "application/vnd.github.v3+json",
             }
         )
-        with urllib.request.urlopen(req, context=ctx, timeout=10) as resp:
+        with urlopen_with_ssl_fallback(req, timeout=10) as resp:
             data = _json.loads(resp.read().decode("utf-8"))
 
         latest_tag = data.get("tag_name", "").lstrip("v")
@@ -299,11 +403,17 @@ async def check_firmware():
         published_at = data.get("published_at", "")
         html_url = data.get("html_url", "")
 
-        # Find UltrON.exe download URL from assets
+        import sys
+        import os
+        current_exe_name = "UltrON.exe"
+        if getattr(sys, "frozen", False):
+            current_exe_name = os.path.basename(sys.executable)
+
+        # Find the correct executable download URL from assets
         download_url = ""
         asset_size = 0
         for asset in data.get("assets", []):
-            if asset.get("name") == "UltrON.exe":
+            if asset.get("name") == current_exe_name:
                 download_url = asset.get("browser_download_url", "")
                 asset_size = asset.get("size", 0)
                 break
@@ -367,54 +477,72 @@ _fw_download_state: dict = {
 }
 
 
-def _do_firmware_download():
-    """Run in a background thread: download latest UltrON.exe from GitHub."""
+def _do_firmware_download(custom_url=None):
+    """Run in a background thread: download UltrON.exe from GitHub or a custom URL."""
     global _fw_download_state
     import urllib.request
-    import json as _json
     import ssl
     import sys
     import os
-    import shutil
 
     _fw_download_state = {"state": "downloading", "percent": 0, "message": "Fetching release info…", "restart_required": False}
 
     try:
-        ctx = ssl.create_default_context()
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-        req = urllib.request.Request(url, headers={"User-Agent": "UltrON-Updater/1.0", "Accept": "application/vnd.github.v3+json"})
-        with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
-            data = _json.loads(resp.read().decode("utf-8"))
+        from app.core.ssl_utils import urlopen_with_ssl_fallback
 
-        download_url = ""
-        for asset in data.get("assets", []):
-            if asset.get("name") == "UltrON.exe":
-                download_url = asset["browser_download_url"]
-                break
+        if custom_url:
+            download_url = custom_url
+            tag_name = "custom"
+            _fw_download_state["message"] = "Downloading from custom URL…"
+        else:
+            import json as _json
+            url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+            req = urllib.request.Request(url, headers={"User-Agent": "UltrON-Updater/1.0", "Accept": "application/vnd.github.v3+json"})
+            with urlopen_with_ssl_fallback(req, timeout=15) as resp:
+                data = _json.loads(resp.read().decode("utf-8"))
 
-        if not download_url:
-            _fw_download_state = {"state": "error", "percent": 0, "message": "UltrON.exe not found in latest release assets.", "restart_required": False}
-            return
+            current_exe_name = "UltrON.exe"
+            if getattr(sys, "frozen", False):
+                current_exe_name = os.path.basename(sys.executable)
 
-        _fw_download_state["message"] = f"Downloading UltrON.exe…"
+            download_url = ""
+            for asset in data.get("assets", []):
+                if asset.get("name") == current_exe_name:
+                    download_url = asset["browser_download_url"]
+                    break
+
+            if not download_url:
+                _fw_download_state = {"state": "error", "percent": 0, "message": f"{current_exe_name} not found in latest release assets.", "restart_required": False}
+                return
+            tag_name = data.get("tag_name", "unknown")
+            _fw_download_state["message"] = f"Downloading {current_exe_name}…"
+
         _fw_download_state["percent"] = 10
 
-        # Resolve install directory (next to running exe or cwd)
         if getattr(sys, "frozen", False):
             install_dir = os.path.dirname(sys.executable)
         else:
             install_dir = os.getcwd()
 
-        new_exe_path = os.path.join(install_dir, "UltrON_new.exe")
+        new_exe_name = "UltrON_new.exe"
+        if getattr(sys, "frozen", False):
+            base, ext = os.path.splitext(current_exe_name)
+            new_exe_name = f"{base}_new{ext}"
+
+        new_exe_path = os.path.join(install_dir, new_exe_name)
         flag_path = os.path.join(install_dir, "update_pending.flag")
 
         download_req = urllib.request.Request(download_url, headers={"User-Agent": "UltrON-Updater/1.0"})
-        with urllib.request.urlopen(download_req, context=ctx) as resp:
+        with urlopen_with_ssl_fallback(download_req, timeout=120) as resp:
             total = int(resp.getheader("Content-Length") or 0)
             downloaded = 0
             chunk_size = 65536
-            with open(new_exe_path, "wb") as out:
+            with open(new_exe_path + ".part", "wb") as out:
                 while True:
+                    if _fw_download_state.get("state") == "cancelled":
+                        _fw_download_state = {"state": "idle", "percent": 0, "message": "Download cancelled.", "restart_required": False}
+                        os.remove(new_exe_path + ".part")
+                        return
                     chunk = resp.read(chunk_size)
                     if not chunk:
                         break
@@ -425,14 +553,18 @@ def _do_firmware_download():
                         _fw_download_state["percent"] = pct
                         _fw_download_state["message"] = f"Downloading… {downloaded // 1024}KB / {total // 1024}KB"
 
-        # Write pending flag
+        # Move .part → final (atomic)
+        if os.path.exists(new_exe_path):
+            os.remove(new_exe_path)
+        os.rename(new_exe_path + ".part", new_exe_path)
+
         with open(flag_path, "w") as f:
-            f.write(data.get("tag_name", "unknown"))
+            f.write(tag_name)
 
         _fw_download_state = {
             "state": "done",
             "percent": 100,
-            "message": f"Download complete. Restart UltrON to apply the update.",
+            "message": "Download complete. Restart UltrON to apply the update.",
             "restart_required": True,
         }
 
@@ -455,7 +587,36 @@ async def start_firmware_download():
     return {"state": "downloading", "percent": 0, "message": "Download started…", "restart_required": False}
 
 
+@router.post("/firmware/download-url", dependencies=[Depends(require_admin)])
+async def start_firmware_download_url(payload: dict):
+    """
+    Start a background download of UltrON.exe from a custom URL.
+    Body: { "url": "https://..." }
+    """
+    global _fw_download_state
+    custom_url = (payload.get("url") or "").strip()
+    if not custom_url:
+        raise HTTPException(status_code=400, detail="URL is required")
+    if _fw_download_state.get("state") == "downloading":
+        raise HTTPException(status_code=400, detail="A download is already in progress")
+    t = _threading.Thread(target=_do_firmware_download, args=(custom_url,), daemon=True)
+    t.start()
+    audit.info(f"Firmware custom URL download started: {custom_url[:80]}")
+    return {"state": "downloading", "percent": 0, "message": "Download started…", "restart_required": False}
+
+
 @router.get("/firmware/download-status")
 async def get_firmware_download_status():
     """Return current background firmware download state."""
     return _fw_download_state
+
+
+@router.post("/firmware/cancel", dependencies=[Depends(require_admin)])
+async def cancel_firmware_download():
+    """Cancel an in-progress firmware download."""
+    global _fw_download_state
+    if _fw_download_state.get("state") != "downloading":
+        return {"state": "idle", "message": "No download in progress."}
+    _fw_download_state["state"] = "cancelled"
+    audit.info("Firmware download cancelled by user")
+    return {"state": "cancelled", "message": "Download cancelled."}

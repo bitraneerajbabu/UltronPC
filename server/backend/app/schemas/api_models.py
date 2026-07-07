@@ -17,6 +17,20 @@ class SiteCreate(BaseModel):
     location: Optional[str] = None
     amc_expiry: Optional[datetime] = None
 
+class DeviceResponse(BaseModel):
+    id: int
+    site_id: int
+    name: str
+    status: str = "offline"
+    api_key: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class DeviceCreate(BaseModel):
+    name: str
+    status: str = "offline"
+
 class SiteResponse(BaseModel):
     id: int
     name: str
@@ -28,11 +42,17 @@ class SiteResponse(BaseModel):
     lock_status: str = "unlocked"
     lock_reason: Optional[str] = None
     lock_updated_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+    last_error_at: Optional[datetime] = None
+    client_version: Optional[str] = None
+    notes: Optional[str] = None
+    devices: List[DeviceResponse] = []
 
     class Config:
         from_attributes = True
 
 class LatestTelemetryPoint(BaseModel):
+    id: int
     tag_name: str
     name: str
     unit: Optional[str] = None
@@ -47,6 +67,8 @@ class BroadcastCreate(BaseModel):
     message: str
     message_type: str = "info"
     expires_at: Optional[datetime] = None
+    target_all: bool = True
+    target_site_id: Optional[int] = None
 
 class BroadcastResponse(BaseModel):
     id: int
@@ -55,6 +77,8 @@ class BroadcastResponse(BaseModel):
     is_active: bool
     created_at: datetime
     expires_at: Optional[datetime] = None
+    target_all: bool = True
+    target_site_id: Optional[int] = None
 
     class Config:
         from_attributes = True

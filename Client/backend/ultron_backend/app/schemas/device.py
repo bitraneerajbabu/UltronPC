@@ -1,6 +1,6 @@
 """UltrON — Pydantic Schemas for Device"""
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 from datetime import datetime
 from typing import Optional, List
 from app.models.device import DeviceType, DeviceProtocol
@@ -32,6 +32,8 @@ class ParameterCreateNested(BaseModel):
     alarm_deadband: float = 0.0
     display_order: int = 0
     is_active: bool = True
+    parse_method: Optional[str] = "csv_col"
+    parse_config: Optional[str] = None
 
     # Connection overrides
     host: Optional[str] = None
@@ -93,7 +95,9 @@ class DeviceBase(BaseModel):
     csv_filename_pattern: Optional[str] = None
     csv_delimiter: Optional[str] = ","
     csv_timestamp_col: Optional[int] = None
-    poll_interval: int = 60
+    request_hex: Optional[str] = None
+    response_delimiter: Optional[str] = "newline"
+    poll_interval: int = 5
     timeout: int = 5
     retry_count: int = 3
     is_active: bool = True
@@ -116,7 +120,7 @@ class DeviceBase(BaseModel):
                 "baud_rate": 9600,
                 "data_bits": 8,
                 "stop_bits": 1,
-                "poll_interval": 60,
+                "poll_interval": 5,
                 "timeout": 5,
                 "retry_count": 3
             }
@@ -157,6 +161,8 @@ class DeviceUpdate(BaseModel):
     csv_filename_pattern: Optional[str] = None
     csv_delimiter: Optional[str] = None
     csv_timestamp_col: Optional[int] = None
+    request_hex: Optional[str] = None
+    response_delimiter: Optional[str] = None
     parameters: Optional[List[ParameterCreateNested]] = None
 
     @model_validator(mode="before")
@@ -168,7 +174,7 @@ class DeviceUpdate(BaseModel):
                 "firmware_version", "host", "port", "slave_id", "serial_port",
                 "baud_rate", "data_bits", "stop_bits", "csv_path", "csv_folder",
                 "csv_filename_pattern", "csv_delimiter", "csv_timestamp_col",
-                "poll_interval", "timeout", "retry_count"
+                "poll_interval", "timeout", "retry_count", "request_hex"
             ]
             for f in fields:
                 if data.get(f) == "":
@@ -178,7 +184,7 @@ class DeviceUpdate(BaseModel):
 
 class DeviceOut(DeviceBase):
     id: int
-    status: str
+    status: str = "offline"
     last_poll: Optional[datetime] = None
     last_error: Optional[str] = None
     created_at: datetime
@@ -187,3 +193,8 @@ class DeviceOut(DeviceBase):
 
     class Config:
         from_attributes = True
+
+    @field_validator('status', mode='before')
+    @classmethod
+    def default_status(cls, v):
+        return v if v is not None else "offline"

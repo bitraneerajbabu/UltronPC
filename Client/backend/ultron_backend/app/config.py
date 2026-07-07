@@ -8,7 +8,7 @@ Never store the service_role key or other true secrets.
 """
 
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
 from typing import Optional
 import os
 import sys
@@ -34,15 +34,113 @@ ENV_ENC_FILE = APP_DIR / ".env.enc"
 if IS_FROZEN:
     BUNDLE_DIR = Path(sys._MEIPASS).resolve()
     BUNDLE_ENV_ENC = BUNDLE_DIR / ".env.enc"
+    BUNDLE_ENV = BUNDLE_DIR / ".env"
+    BUNDLE_ENV_TEMPLATE = BUNDLE_DIR / ".env.template"
+    BUNDLE_DB = BUNDLE_DIR / "ultron.db"
+    DB_FILE = APP_DIR / "ultron.db"
     
     # If no config files exist next to the executable, copy the bundled one as default
-    if not ENV_ENC_FILE.is_file() and not ENV_FILE.is_file() and BUNDLE_ENV_ENC.is_file():
+    if not ENV_ENC_FILE.is_file() and not ENV_FILE.is_file():
+        for src, dst in [(BUNDLE_ENV, ENV_FILE), (BUNDLE_ENV_ENC, ENV_ENC_FILE)]:
+            if src.is_file() and not dst.is_file():
+                try:
+                    import shutil
+                    shutil.copy2(str(src), str(dst))
+                    print(f"[UltrON] Copied default template configuration to {dst.name}", file=sys.stderr)
+                except Exception as copy_err:
+                    print(f"[UltrON] Failed to copy template configuration: {copy_err}", file=sys.stderr)
+        # Fallback: use .env.template if no .env was bundled (keeps secrets out of build)
+        if not ENV_FILE.is_file() and BUNDLE_ENV_TEMPLATE.is_file():
+            try:
+                import shutil
+                shutil.copy2(str(BUNDLE_ENV_TEMPLATE), str(ENV_FILE))
+                print(f"[UltrON] Copied .env.template as default configuration (set RAJAPI_API_KEY before use)", file=sys.stderr)
+            except Exception as copy_err:
+                print(f"[UltrON] Failed to copy .env.template: {copy_err}", file=sys.stderr)
+    
+    # Copy bundled DB template to APP_DIR on first run (fresh install)
+    if not DB_FILE.is_file() and BUNDLE_DB.is_file():
         try:
             import shutil
-            shutil.copy2(str(BUNDLE_ENV_ENC), str(ENV_ENC_FILE))
-            print(f"[UltrON] Copied default template configuration to {ENV_ENC_FILE.name}", file=sys.stderr)
+            shutil.copy2(str(BUNDLE_DB), str(DB_FILE))
+            print(f"[UltrON] Extracted bundled database to {DB_FILE.name}", file=sys.stderr)
         except Exception as copy_err:
-            print(f"[UltrON] Failed to copy template configuration: {copy_err}", file=sys.stderr)
+            print(f"[UltrON] Failed to extract bundled database: {copy_err}", file=sys.stderr)
+
+
+def _recover_config(is_frozen: bool, env_file: Path, env_enc_file: Path, app_dir: Path, bundled_env_enc: Path | None, bundled_env: Path | None = None) -> None:
+    """Attempt to recover configuration when .env.enc is missing or corrupted.
+
+    Tries bundled copy (frozen mode), then plain .env, then .env.bak,
+    then bundled plain .env.
+    If a plain config is found, it re-encrypts to .env.enc for next boot.
+    """
+    recovered = False
+    # 1. Frozen mode: try bundled .env.enc from _MEIPASS
+    if is_frozen and bundled_env_enc is not None and bundled_env_enc.is_file():
+        try:
+            import shutil
+            shutil.copy2(str(bundled_env_enc), str(env_enc_file))
+            print(f"[UltrON] Replaced missing/corrupted .env.enc with bundled version.", file=sys.stderr)
+            from app.core.config_crypt import decrypt_file_to_string
+            decrypted_content = decrypt_file_to_string(str(env_enc_file))
+            config_dict = dotenv.dotenv_values(stream=io.StringIO(decrypted_content))
+            for k, v in config_dict.items():
+                if v is not None:
+                    os.environ[k] = v
+            recovered = True
+        except Exception as retry_err:
+            print(f"[UltrON] Bundled .env.enc recovery failed: {retry_err}", file=sys.stderr)
+    # 2. Fallback to plain config file and re-encrypt
+    if not recovered:
+        for fallback in (env_file, app_dir / ".env.bak"):
+            if fallback.is_file():
+                try:
+                    config_dict = dotenv.dotenv_values(str(fallback))
+                    for k, v in config_dict.items():
+                        if v is not None:
+                            os.environ[k] = v
+                    try:
+                        from app.core.config_crypt import encrypt_file, secure_delete_file
+                        encrypt_file(str(fallback), str(env_enc_file))
+                        if is_frozen:
+                            secure_delete_file(str(fallback))
+                        print(f"[UltrON] Re-encrypted config from {fallback.name} -> .env.enc", file=sys.stderr)
+                    except Exception as enc_err:
+                        print(f"[UltrON] Could not re-encrypt config: {enc_err}", file=sys.stderr)
+                    recovered = True
+                    break
+                except Exception as fb_err:
+                    print(f"[UltrON] Fallback {fallback.name} failed: {fb_err}", file=sys.stderr)
+    # 3. Frozen fallback: try bundled plain .env or .env.template (portable across machines)
+    if not recovered and is_frozen:
+        bundled_sources = [bundled_env]
+        if bundled_env and bundled_env.parent:
+            bundled_sources.append(bundled_env.parent / ".env.template")
+        for bundled_cfg in bundled_sources:
+            if bundled_cfg is not None and bundled_cfg.is_file():
+                try:
+                    import shutil
+                    shutil.copy2(str(bundled_cfg), str(env_file))
+                    print(f"[UltrON] Copied bundled {bundled_cfg.name} to APP_DIR.", file=sys.stderr)
+                    config_dict = dotenv.dotenv_values(str(env_file))
+                    for k, v in config_dict.items():
+                        if v is not None:
+                            os.environ[k] = v
+                    try:
+                        from app.core.config_crypt import encrypt_file, secure_delete_file
+                        encrypt_file(str(env_file), str(env_enc_file))
+                        secure_delete_file(str(env_file))
+                        print(f"[UltrON] Re-encrypted config from bundled {bundled_cfg.name} -> .env.enc", file=sys.stderr)
+                    except Exception as enc_err:
+                        print(f"[UltrON] Could not re-encrypt: {enc_err}", file=sys.stderr)
+                    recovered = True
+                    break
+                except Exception as fb_err:
+                    print(f"[UltrON] Bundled {bundled_cfg.name} fallback failed: {fb_err}", file=sys.stderr)
+    if not recovered:
+        print("[UltrON] WARNING: No valid configuration found. Using defaults.", file=sys.stderr)
+
 
 if ENV_FILE.is_file() and IS_FROZEN:
     # Auto-encrypt unencrypted .env in packaged mode for security
@@ -75,13 +173,16 @@ elif ENV_ENC_FILE.is_file():
     try:
         from app.core.config_crypt import decrypt_file_to_string
         decrypted_content = decrypt_file_to_string(str(ENV_ENC_FILE))
-        # Parse and inject into os.environ
         config_dict = dotenv.dotenv_values(stream=io.StringIO(decrypted_content))
         for k, v in config_dict.items():
             if v is not None:
                 os.environ[k] = v
     except Exception as e:
         print(f"[UltrON] Error loading/decrypting .env.enc: {e}", file=sys.stderr)
+        _recover_config(IS_FROZEN, ENV_FILE, ENV_ENC_FILE, APP_DIR, BUNDLE_ENV_ENC if IS_FROZEN else None, BUNDLE_ENV if IS_FROZEN else None)
+else:
+    # No .env.enc — try plain .env or .env.bak, then re-encrypt
+    _recover_config(IS_FROZEN, ENV_FILE, ENV_ENC_FILE, APP_DIR, BUNDLE_ENV_ENC if IS_FROZEN else None, BUNDLE_ENV if IS_FROZEN else None)
 
 
 
@@ -118,7 +219,7 @@ class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.9"
+    APP_VERSION: str = "1.0.69"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -151,25 +252,34 @@ class Settings(BaseSettings):
     # ─── Security ─────────────────────────────────────────────
     SECRET_KEY: str = Field(default_factory=lambda: _load_or_create_secret_key())
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
-    ADMIN_USERNAME: str = "Master"
-    ADMIN_PASSWORD: str = "Ultron123.0"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 5256000  # 10 years — effectively never expires
+    ADMIN_USERNAME: str = Field(default="Master")
+    ADMIN_PASSWORD: str = Field(default="")
+
+    @field_validator("SECRET_KEY", mode="before")
+    @classmethod
+    def validate_secret_key(cls, v):
+        if not v or str(v).strip() == "":
+            return _load_or_create_secret_key()
+        return v
+
+    @field_validator("APP_VERSION", mode="before")
+    @classmethod
+    def validate_app_version(cls, v):
+        return cls.model_fields["APP_VERSION"].default
 
     # ─── WebSocket ────────────────────────────────────────────
     WS_LIVE_PUSH_INTERVAL: int = 5
 
     # ─── RajAPI Central Sync (background, invisible to user) ────
-    RAJAPI_API_KEY: str = ""                  # Site API key from rajapi.com — set per client
-    RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/tgpcb/"
+    RAJAPI_API_KEY: str = ""                  # Legacy API key — kept for backward compatibility
     RAJAPI_SYNC_ENABLED: bool = True
 
-    # ─── RajAPI MQTT Remote Control ───────────────────────────
-    RAJAPI_MQTT_ENABLED: bool = True
-    RAJAPI_MQTT_HOST: str = "rajapi.com"
-    RAJAPI_MQTT_PORT: int = 1883
-    RAJAPI_MQTT_USER: str = ""
-    RAJAPI_MQTT_PASSWORD: str = ""
-    RAJAPI_STATION_ID: str = "default_station"
+    RAJAPI_STATION_ID: str = "default_station"  # Legacy station ID — kept for backward compatibility
+
+    # Gateway ID + Device Secret (new auth model, preferred over RAJAPI_API_KEY)
+    GATEWAY_ID: str = ""
+    DEVICE_SECRET: str = ""
 
     # ─── Polling Engine ───────────────────────────────────────
     POLLING_DEFAULT_INTERVAL: int = 60
@@ -214,6 +324,16 @@ class Settings(BaseSettings):
         env_file = None if os.path.exists(str(APP_DIR / ".env.enc")) else str(APP_DIR / ".env")
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"
+
+    def model_post_init(self, __context):
+        if not self.ADMIN_PASSWORD:
+            print(
+                "[UltrON] FATAL: ADMIN_PASSWORD is not set in .env! "
+                "Set a strong password before starting the server.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     def ensure_dirs(self):
         """Create all required storage directories on startup."""
@@ -232,3 +352,10 @@ class Settings(BaseSettings):
 
 # Singleton instance — import this everywhere
 settings = Settings()
+
+# ─── Immutable RajAPI Server URL ──────────────────────────────
+# Hardcoded — cannot be overridden by .env. All UltrON clients
+# past, present, and future connect here.
+RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/heartbeat"
+RAJAPI_COMMANDS_URL: str = "https://rajapi.com/api/v1/commands/pending"
+CENTRAL_API_URL: str = "https://rajapi.com/api/v1/sync/"

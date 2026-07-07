@@ -1,5 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from './context/AppContext';
+import './App.css';
 
 // Import Screens
 import { DashboardScreen } from './screens/DashboardScreen';
@@ -8,12 +9,11 @@ import { TrendsScreen } from './screens/TrendsScreen';
 import { ReportsScreen } from './screens/ReportsScreen';
 import { LogsScreen } from './screens/LogsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { ApiMappingsScreen } from './screens/ApiMappingsScreen';
 import { UsersScreen } from './screens/UsersScreen';
-import { CPCBSettingsScreen } from './screens/CPCBSettingsScreen';
-import { CPCBMappingScreen } from './screens/CPCBMappingScreen';
-import { CPCBLogsScreen } from './screens/CPCBLogsScreen';
-import { CPCBExportScreen } from './screens/CPCBExportScreen';
+import { CPCB } from './screens/CPCB';
+import { CalibrationScreen } from './screens/CalibrationScreen';
+import { ContactScreen } from './screens/ContactScreen';
+
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 const DashboardIcon = () => (
@@ -89,17 +89,6 @@ const EyeOffIcon = () => (
   </svg>
 );
 
-const MappingsIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <path d="M8 6h13" />
-    <path d="M8 12h13" />
-    <path d="M8 18h13" />
-    <path d="M3 6h.01" />
-    <path d="M3 12h.01" />
-    <path d="M3 18h.01" />
-  </svg>
-);
-
 const CPCBIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -111,20 +100,32 @@ const CPCBIcon = () => (
 );
 
 
+const CalibrationIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    <polyline points="9 12 11 14 15 10" />
+  </svg>
+);
+
+const ContactIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
+    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+    <polyline points="22,6 12,13 2,6" />
+  </svg>
+);
+
 // ─── Nav definitions ──────────────────────────────────────────────────────────
 const ALL_NAV = [
   { key: 'dashboardScreen', label: 'Dashboard Overview', Icon: DashboardIcon, roles: ['admin', 'client'] },
   { key: 'devicesScreen', label: 'Devices & Config', Icon: DevicesIcon, roles: ['admin'] },
-  { key: 'apiMappingsScreen', label: 'API Mappings', Icon: MappingsIcon, roles: ['admin'] },
   { key: 'trendsScreen', label: 'Trends Analysis', Icon: TrendsIcon, roles: ['admin', 'client'] },
   { key: 'reportsScreen', label: 'Reports Generator', Icon: ReportsIcon, roles: ['admin', 'client'] },
   { key: 'logsScreen', label: 'System Logs', Icon: LogsIcon, roles: ['admin'] },
   { key: 'settingsScreen', label: 'System Settings', Icon: SettingsIcon, roles: ['admin'] },
   { key: 'usersScreen', label: 'User Management', Icon: UsersIcon, roles: ['admin'] },
-  { key: 'cpcbSettingsScreen', label: 'CPCB Config', Icon: CPCBIcon, roles: ['admin'] },
-  { key: 'cpcbMappingScreen', label: 'CPCB Mappings', Icon: CPCBIcon, roles: ['admin'] },
-  { key: 'cpcbExportScreen', label: 'CPCB Export', Icon: CPCBIcon, roles: ['admin'] },
-  { key: 'cpcbLogsScreen', label: 'CPCB Logs', Icon: CPCBIcon, roles: ['admin'] },
+  { key: 'cpcbScreen', label: 'Server Management', Icon: CPCBIcon, roles: ['admin'] },
+  { key: 'calibrationScreen', label: 'Calibration', Icon: CalibrationIcon, roles: ['admin'] },
+  { key: 'contactScreen', label: 'Contact', Icon: ContactIcon, roles: ['admin', 'client'] },
 ];
 
 
@@ -143,35 +144,30 @@ function App() {
     showToast,
     broadcasts,
     amcExpiry,
+    API_BASE,
   } = useContext(AppContext);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [localVersion, setLocalVersion] = useState('');
 
-  // License / Setup state
-  const [hasLicense, setHasLicense] = useState<boolean | null>(null);
-  const [showSetupLogin, setShowSetupLogin] = useState(false);
-  const [setupUsername, setSetupUsername] = useState('');
-  const [setupPassword, setSetupPassword] = useState('');
-  const [setupAuthError, setSetupAuthError] = useState('');
-  const [isSetupAuthenticated, setIsSetupAuthenticated] = useState(false);
-  
-  const [setupApiUrl, setSetupApiUrl] = useState('https://rajapi.com/api/v1/sync/');
-  const [setupApiKey, setSetupApiKey] = useState('');
-  const [setupTesting, setSetupTesting] = useState(false);
-  const [setupResult, setSetupResult] = useState('');
-
-  // Check License on mount
   useEffect(() => {
-    fetch('/api/v1/license/status')
-      .then(res => res.json())
-      .then(data => {
-        setHasLicense(data.licensed);
-      })
-      .catch(err => {
-        console.error("Failed to check license status:", err);
-        setHasLicense(false);
-      });
-  }, []);
+    const fetchVersion = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/version`);
+        if (res.ok) {
+          const data = await res.json();
+          setLocalVersion(data.version);
+        }
+      } catch (err) {
+        console.error("Failed to fetch app version:", err);
+      }
+    };
+    if (API_BASE) {
+      fetchVersion();
+    }
+  }, [API_BASE]);
+
+  // License check removed — AMC block bypassed. Goes straight to Master login.
 
   const handleLogoClick = async () => {
     if (refreshing) return;
@@ -260,146 +256,12 @@ function App() {
   // Ensure active screen is accessible by this role
   useEffect(() => {
     if (currentUserRole === 'client') {
-      const allowedScreens = ['dashboardScreen', 'trendsScreen', 'reportsScreen'];
+      const allowedScreens = ['dashboardScreen', 'trendsScreen', 'reportsScreen', 'calibrationScreen', 'contactScreen'];
       if (!allowedScreens.includes(activeScreen)) {
         setActiveScreen('dashboardScreen');
       }
     }
   }, [currentUserRole, activeScreen, setActiveScreen]);
-
-  // ─── License / Setup Screen ──────────────────────────────────────────────────
-  if (hasLicense === false) {
-    if (!isSetupAuthenticated) {
-      return (
-        <div className="login-screen">
-          <div className="login-card">
-            <img 
-              src="/assets/Ultron_logo.png" 
-              className="login-logo cursor-pointer" 
-              alt="UltrON Logo" 
-              onClick={() => setShowSetupLogin(true)}
-              title="Click here to authenticate setup"
-            />
-            <h2 className="login-title login-title-error">Access Denied</h2>
-            <p className="access-denied-description">
-              AMC Token is expired or not configured. Please contact Sunshine Technologies.
-            </p>
-
-            {showSetupLogin && (
-              <form onSubmit={(e) => {
-                e.preventDefault();
-                if (setupUsername === 'token' && setupPassword === 'Ultron123.0') {
-                  setIsSetupAuthenticated(true);
-                  setSetupAuthError('');
-                } else {
-                  setSetupAuthError('Invalid setup credentials.');
-                }
-              }} className="override-form">
-                <h3 className="override-form-title">AMC Token Renewal Override</h3>
-                <div className="form-group">
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={setupUsername}
-                    onChange={e => setSetupUsername(e.target.value)}
-                    placeholder="Username"
-                  />
-                </div>
-                <div className="form-group">
-                  <input
-                    type="password"
-                    className="form-input"
-                    value={setupPassword}
-                    onChange={e => setSetupPassword(e.target.value)}
-                    placeholder="Password"
-                  />
-                </div>
-                {setupAuthError && <div className="auth-error-message">{setupAuthError}</div>}
-                <button type="submit" className="btn btn-primary full-width">Authenticate</button>
-              </form>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    // Setup configuration screen (isSetupAuthenticated === true)
-    return (
-      <div className="login-screen">
-        <div className="login-card setup-card">
-          <h2 className="login-title">License & AMC Setup</h2>
-          <p className="setup-description">
-            Paste the AMC Token from rajapi.com to unlock UltrON.
-          </p>
-
-          <form onSubmit={async (e) => {
-            e.preventDefault();
-            setSetupTesting(true);
-            setSetupResult('');
-            try {
-              const res = await fetch('/api/v1/license/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ api_url: setupApiUrl, api_key: setupApiKey })
-              });
-              if (res.ok) {
-                setSetupResult("Success! Configuration saved.");
-                setTimeout(() => {
-                  setHasLicense(true);
-                }, 1500);
-              } else {
-                const data = await res.json();
-                setSetupResult(`Failed: ${data.detail || 'Unknown error'}`);
-              }
-            } catch (err) {
-              setSetupResult(`Error connecting to server.`);
-            } finally {
-              setSetupTesting(false);
-            }
-          }}>
-            <div className="form-group">
-              <label htmlFor="setupApiUrl" className="form-label">Central API URL</label>
-              <input
-                id="setupApiUrl"
-                type="text"
-                className="form-input"
-                value={setupApiUrl}
-                onChange={e => setSetupApiUrl(e.target.value)}
-                required
-                placeholder="https://api.example.com"
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="setupApiKey" className="form-label">AMC Token</label>
-              <input
-                id="setupApiKey"
-                type="text"
-                className="form-input"
-                value={setupApiKey}
-                onChange={e => setSetupApiKey(e.target.value)}
-                required
-                placeholder="uk_..."
-              />
-            </div>
-            
-            {setupResult && (
-              <div className={`setup-result-msg ${setupResult.startsWith('Success') ? 'msg-success' : 'msg-error'}`}>
-                {setupResult}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              className="btn btn-primary full-width btn-tall"
-              disabled={setupTesting}
-            >
-              {setupTesting ? 'Testing Connection...' : 'Test & Activate'}
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
 
   // ─── Login Screen ──────────────────────────────────────────────────────────
   if (!currentUser) {
@@ -407,7 +269,23 @@ function App() {
       <div className="login-screen">
         <div className="login-card">
           <img src="/assets/Ultron_logo.png" className="login-logo" alt="UltrON Logo" />
-          <h2 className="login-title">Industrial Monitoring Platform</h2>
+          <h2 className="login-title" style={{ marginBottom: localVersion ? '2px' : '8px' }}>Industrial Monitoring Platform</h2>
+          {localVersion && (
+            <div style={{
+              fontSize: '11px',
+              fontWeight: '800',
+              color: '#0f766e',
+              background: 'rgba(15,118,110,0.08)',
+              padding: '3px 10px',
+              borderRadius: '99px',
+              display: 'inline-block',
+              marginBottom: '12px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              Version {localVersion}
+            </div>
+          )}
           <p className="login-description">
             Sign in with your credentials to access the system
           </p>
@@ -489,88 +367,47 @@ function App() {
     switch (activeScreen) {
       case 'dashboardScreen': return <DashboardScreen />;
       case 'devicesScreen': return currentUserRole === 'admin' ? <DevicesScreen /> : <DashboardScreen />;
-      case 'apiMappingsScreen': return currentUserRole === 'admin' ? <ApiMappingsScreen /> : <DashboardScreen />;
       case 'trendsScreen': return <TrendsScreen />;
       case 'reportsScreen': return <ReportsScreen />;
       case 'logsScreen': return currentUserRole === 'admin' ? <LogsScreen /> : <DashboardScreen />;
       case 'settingsScreen': return currentUserRole === 'admin' ? <SettingsScreen /> : <DashboardScreen />;
       case 'usersScreen': return currentUserRole === 'admin' ? <UsersScreen /> : <DashboardScreen />;
-      case 'cpcbSettingsScreen': return currentUserRole === 'admin' ? <CPCBSettingsScreen /> : <DashboardScreen />;
-      case 'cpcbMappingScreen': return currentUserRole === 'admin' ? <CPCBMappingScreen /> : <DashboardScreen />;
-      case 'cpcbExportScreen': return currentUserRole === 'admin' ? <CPCBExportScreen /> : <DashboardScreen />;
-      case 'cpcbLogsScreen': return currentUserRole === 'admin' ? <CPCBLogsScreen /> : <DashboardScreen />;
+      case 'cpcbScreen': return currentUserRole === 'admin' ? <CPCB /> : <DashboardScreen />;
+      case 'calibrationScreen': return currentUserRole === 'admin' ? <CalibrationScreen /> : <DashboardScreen />;
+      case 'contactScreen': return <ContactScreen />;
       default: return <DashboardScreen />;
     }
   };
 
   return (
     <div className="app-shell">
-      {/* Sidebar Nav — Full Height */}
-      <aside className="sidebar" style={{ display: 'flex', flexDirection: 'column', padding: 0 }}>
-        {/* Logo Section */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '24px 16px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.3)',
-          marginBottom: '16px',
-        }}>
-          <button
-            onClick={handleLogoClick}
-            disabled={refreshing}
-            title="Click to refresh dashboard values"
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: refreshing ? 'not-allowed' : 'pointer',
-              padding: 0,
-              display: 'block',
-              transition: 'transform 0.2s ease',
-              outline: 'none'
-            }}
-            onMouseEnter={e => {
-              if (!refreshing) {
-                e.currentTarget.style.transform = 'scale(1.05)';
-              }
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'scale(1)';
-            }}
-          >
-            <img
-              src="/assets/Ultron_logo.png"
-              alt="UltrON logo"
-              style={{
-                width: '160px',
-                height: 'auto',
-                display: 'block',
-                filter: 'drop-shadow(0 2px 8px rgba(15,118,110,0.15))'
-              }}
-            />
+      {/* Navigation Rail */}
+      <aside className="sidebar nav-rail">
+        <div className="nav-rail-logo">
+          <button onClick={handleHardRefresh} title="Click to hard refresh page"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', outline: 'none' }}
+            onMouseEnter={e => { e.currentTarget.style.opacity = '0.75'; }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}>
+            <img src="/assets/Ultron_logo.png?t=1" alt="UltrON" className="nav-rail-logo-img" />
           </button>
         </div>
 
-        {/* Welcome Section */}
-        <div style={{ margin: '0 16px 24px 16px', padding: '16px 20px', background: 'linear-gradient(135deg, #0f766e 0%, #0d9488 100%)', borderRadius: '12px', color: '#fff', position: 'relative', boxShadow: '0 8px 20px rgba(15, 118, 110, 0.15)' }}>
-          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '5px', background: '#34d399', borderTopLeftRadius: '12px', borderBottomLeftRadius: '12px' }}></div>
-          <div style={{ fontSize: '16px', fontWeight: '800', letterSpacing: '-0.02em', display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '13px', fontWeight: '500', opacity: 0.9 }}>Welcome,</span>
-            {currentUser}!
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '0 16px', flex: 1, overflowY: 'auto' }}>
+        <div className="nav-rail-items">
           {visibleNav.map(({ key, label, Icon }) => (
             <button
               key={key}
-              className={`nav-button ${activeScreen === key ? 'active' : ''}`}
+              className={`nav-rail-btn ${activeScreen === key ? 'active' : ''}`}
               onClick={() => setActiveScreen(key)}
+              title={label}
             >
-              <Icon /> {label}
+              <Icon />
+              <span className="nav-rail-label">{label}</span>
             </button>
           ))}
+        </div>
+
+        <div className="nav-rail-footer">
+          <div className="nav-rail-user">{currentUser}</div>
         </div>
       </aside>
 
@@ -579,7 +416,7 @@ function App() {
 
         {/* Top Header Bar */}
         <header className="top-bar">
-          <div className="top-left" style={{ display: 'flex', alignItems: 'center' }}>
+          <div className="top-left" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {/* System Live Clock */}
             <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f766e', background: 'rgba(15,118,110,0.06)', padding: '6px 14px', borderRadius: '6px', border: '1px solid rgba(15,118,110,0.15)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
               {timeStr}
@@ -630,10 +467,9 @@ function App() {
                 </span>
               </div>
             </div>
-            <button className="btn btn-sm btn-danger" onClick={logout}>Sign Out</button>
             <button
-              onClick={handleHardRefresh}
-              title="Perform Hard Refresh (Ctrl+Shift+R equivalent)"
+              onClick={logout}
+              title="Sign out"
               style={{
                 background: 'none',
                 border: 'none',
@@ -641,14 +477,14 @@ function App() {
                 padding: 0,
                 display: 'flex',
                 alignItems: 'center',
-                transition: 'transform 0.2s ease',
+                transition: 'transform 0.2s ease, opacity 0.2s ease',
                 marginLeft: '4px',
                 outline: 'none'
               }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.opacity = '0.8'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.opacity = '1'; }}
             >
-              <img src="/assets/sunshine_logo.png" alt="Sunshine logo" style={{ display: 'block' }} />
+              <img src="/assets/sunshine_logo.png" alt="Sign Out" style={{ display: 'block', height: '40px', width: 'auto' }} />
             </button>
           </div>
         </header>
@@ -687,16 +523,18 @@ function App() {
             </div>
           </div>
           <div className="marquee-container" style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-            <div className="marquee-content" style={{ animationDuration: broadcasts && broadcasts.length > 0 ? '25s' : '35s' }}>
-              {broadcasts && broadcasts.length > 0 ? (
-                broadcasts.map((b, i) => (
-                  <span key={b.id} style={{ color: b.severity === 'critical' ? '#ef4444' : b.severity === 'warn' ? '#f59e0b' : 'inherit' }}>
-                    {b.message}{i < broadcasts.length - 1 ? '  ◆  ' : ''}
-                  </span>
-                ))
-              ) : (
-                <span>Data available at this portal is as per CPCB prescribed procedure published at cpcb.nic.in!</span>
-              )}
+            <div style={{ width: '100%', overflow: 'hidden' }}>
+              <div className="marquee-content" style={{ animationDuration: broadcasts && broadcasts.length > 0 ? '25s' : '35s' }}>
+                {broadcasts && broadcasts.length > 0 ? (
+                  broadcasts.map((b, i) => (
+                    <span key={b.id} style={{ color: b.severity === 'critical' ? '#ef4444' : b.severity === 'warn' ? '#f59e0b' : 'inherit' }}>
+                      {b.message}{i < broadcasts.length - 1 ? '  ◆  ' : ''}
+                    </span>
+                  ))
+                ) : (
+                  <span>Data available at this portal is as per CPCB prescribed procedure published at cpcb.nic.in!</span>
+                )}
+              </div>
             </div>
           </div>
         </footer>

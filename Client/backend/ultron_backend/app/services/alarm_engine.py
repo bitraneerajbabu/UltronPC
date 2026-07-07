@@ -4,6 +4,7 @@ Evaluates parameter values against thresholds,
 creates/clears alarm records in the DB, and pushes alarm events via WebSocket.
 """
 
+import asyncio
 from datetime import datetime
 from typing import Optional
 # pyrefly: ignore [missing-import]
@@ -28,6 +29,7 @@ class AlarmEngine:
 
     # Track active alarm IDs per (parameter_id, threshold_type)
     _active: dict[tuple, int] = {}
+    _lock = asyncio.Lock()
 
     @classmethod
     async def evaluate(
@@ -64,7 +66,8 @@ class AlarmEngine:
                 breached = value <= threshold
                 cleared = value > (threshold + db_band)
 
-            existing_id = cls._active.get(key)
+            async with cls._lock:
+                existing_id = cls._active.get(key)
 
             if breached and not existing_id:
                 # New alarm
@@ -81,7 +84,8 @@ class AlarmEngine:
                 )
                 db.add(alarm)
                 await db.flush()
-                cls._active[key] = alarm.id
+                async with cls._lock:
+                    cls._active[key] = alarm.id
 
                 alarm_log.warning(msg)
 
@@ -107,7 +111,8 @@ class AlarmEngine:
                 if alarm and alarm.state != AlarmState.cleared:
                     alarm.state = AlarmState.cleared
                     alarm.cleared_at = datetime.utcnow()
-                    cls._active.pop(key, None)
+                    async with cls._lock:
+                        cls._active.pop(key, None)
                     log.info(f"Alarm cleared: {parameter.tag_name} ({thresh_type})")
 
     @classmethod
@@ -132,6 +137,18 @@ class AlarmEngine:
                 alarm.notes = notes
                 count += 1
         return count
+
+    @classmethod
+    async def load_active_from_db(cls, db: AsyncSession):
+        """Populate _active dict from DB on engine start to prevent duplicate alarms after restart."""
+        result = await db.execute(
+            select(Alarm).where(Alarm.state == AlarmState.active)
+        )
+        alarms = result.scalars().all()
+        async with cls._lock:
+            for alarm in alarms:
+                cls._active[(alarm.parameter_id, alarm.threshold_type)] = alarm.id
+        log.info(f"Loaded {len(alarms)} active alarm(s) into engine tracker")
 
     @classmethod
     async def get_active_count(cls, db: AsyncSession) -> int:

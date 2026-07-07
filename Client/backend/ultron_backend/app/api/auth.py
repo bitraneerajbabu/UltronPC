@@ -1,14 +1,18 @@
 """
 UltrON — Auth API
 Provides login, logout, and current-user endpoints.
-Supports Master token (hardcoded) for always-working access.
 """
 
-from datetime import datetime
+import hmac
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.models.user import User
@@ -21,37 +25,42 @@ from app.core.security import (
     oauth2_scheme,
 )
 from app.core.logger import get_logger, get_audit_logger
+from app.config import settings
 
 log = get_logger("ultron.auth")
 audit = get_audit_logger()
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-# ─── Master Token ─────────────────────────────────────────────────────────────
-MASTER_USERNAME = "Master"
-MASTER_PASSWORD = "Master"
+
+# ─── Setup Override ────────────────────────────────────────────────────────────
+class SetupOverrideRequest(BaseModel):
+    username: str
+    password: str
+
+
+@router.post("/setup-override")
+@limiter.limit("5/minute")
+async def setup_override(request: Request, payload: SetupOverrideRequest):
+    """Validate setup override credentials server-side against ADMIN_PASSWORD."""
+    expected_password = settings.ADMIN_PASSWORD.encode("utf-8")
+    provided_password = payload.password.encode("utf-8")
+    password_match = hmac.compare_digest(provided_password, expected_password)
+    username_match = payload.username == "token" or payload.username == settings.ADMIN_USERNAME
+    if username_match and password_match:
+        audit.info(f"Setup override successful: username='{payload.username}'")
+        return {"success": True}
+    audit.warning(f"Failed setup override attempt: username='{payload.username}'")
+    return JSONResponse(
+        {"success": False, "detail": "Invalid setup credentials."},
+        status_code=401,
+    )
 
 
 # ─── Login ────────────────────────────────────────────────────────────────────
 @router.post("/login", response_model=Token)
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
-    """
-    Authenticate with username + password.
-    Supports Master/Master as a hardcoded always-working token for every EXE.
-    Returns a JWT access token and the user's role.
-    """
-    # Master token check — always works, grants admin role
-    if payload.username == MASTER_USERNAME and payload.password == MASTER_PASSWORD:
-        token = create_access_token({"sub": MASTER_USERNAME, "role": "admin"})
-        audit.info(f"Login success: username='{MASTER_USERNAME}' role='admin' (Master Token)")
-        log.info(f"Master token login")
-        return Token(
-            access_token=token,
-            token_type="bearer",
-            role="admin",
-            username=MASTER_USERNAME,
-            full_name="Master Administrator",
-        )
-
+@limiter.limit("5/minute")
+async def login(request: Request, payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.username == payload.username))
     user = result.scalar_one_or_none()
 
@@ -70,7 +79,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
         )
 
     # Update last_login
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(timezone.utc)
     await db.commit()
 
     token = create_access_token({"sub": user.username, "role": user.role})

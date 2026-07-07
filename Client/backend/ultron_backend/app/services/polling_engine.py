@@ -6,6 +6,7 @@ Persists telemetry, runs data quality, triggers alarm checks, and live pushes.
 """
 
 import asyncio
+import random
 from datetime import datetime
 from typing import Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,14 +16,15 @@ import httpx
 
 from app.database import AsyncSessionLocal
 from app.models.station import Station, StationStatus
-from app.models.device import Device
+from app.models.device import Device, DeviceProtocol
 from app.models.parameter import Parameter
 from app.models.telemetry import LiveData, HistoricalData, AverageType, DataQuality, SystemLog
 
 from app.services.modbus_tcp import ModbusTCPReader
 from app.services.modbus_rtu import ModbusRTUReader
 from app.services.tcp_custom import TCPCustomReader
-from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher
+from app.services.udp_custom import UDPCustomReader
+from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher, SmartWatcher, DailySmartWatcher
 from app.services.data_quality import dq_engine
 from app.services.alarm_engine import alarm_engine
 from app.websocket_manager import ws_manager
@@ -34,12 +36,16 @@ log = get_logger("ultron.polling_engine")
 # ─── Valid DataQuality values ─────────────────────────────────────────────────
 _VALID_QUALITIES = {q.value for q in DataQuality}
 
+# ─── Concurrency guard for SQLite write contention ──────────────────────────────
+_device_semaphore = asyncio.Semaphore(2)
+
 # ─── Reader Pool ──────────────────────────────────────────────────────────────
 # Keep one reader instance per device to maintain persistent connections
-_tcp_readers:  Dict[int, ModbusTCPReader] = {}
-_rtu_readers:  Dict[str, ModbusRTUReader] = {}   # key = serial_port
-_tcp_custom:   Dict[int, TCPCustomReader] = {}
-_csv_watchers: Dict[int, CSVWatcher] = {}
+_tcp_readers:    Dict[int, ModbusTCPReader] = {}
+_rtu_readers:    Dict[str, ModbusRTUReader] = {}   # key = serial_port
+_tcp_custom:     Dict[int, TCPCustomReader] = {}
+_udp_custom:     Dict[int, UDPCustomReader] = {}
+_csv_watchers:   Dict[int, CSVWatcher] = {}
 
 
 def _get_modbus_tcp(device: Device) -> ModbusTCPReader:
@@ -67,9 +73,25 @@ def _get_modbus_rtu(device: Device) -> ModbusRTUReader:
 def _get_tcp_custom(device: Device) -> TCPCustomReader:
     if device.id not in _tcp_custom:
         _tcp_custom[device.id] = TCPCustomReader(
-            host=device.host or "", port=device.port or 4001, timeout=device.timeout or 5
+            host=device.host or "",
+            port=device.port or 4001,
+            timeout=device.timeout or 5,
+            request_hex=device.request_hex,
+            response_delimiter=device.response_delimiter or "newline",
         )
     return _tcp_custom[device.id]
+
+
+def _get_udp_custom(device: Device) -> UDPCustomReader:
+    if device.id not in _udp_custom:
+        _udp_custom[device.id] = UDPCustomReader(
+            host=device.host or "",
+            port=device.port or 4001,
+            timeout=device.timeout or 5,
+            request_hex=device.request_hex,
+            response_delimiter=device.response_delimiter or "newline",
+        )
+    return _udp_custom[device.id]
 
 
 def _get_csv_watcher(device: Device) -> Optional[CSVWatcher]:
@@ -77,18 +99,20 @@ def _get_csv_watcher(device: Device) -> Optional[CSVWatcher]:
         return None
     if device.id not in _csv_watchers:
         if device.csv_folder:
-            _csv_watchers[device.id] = DailyCSVWatcher(
+            # DailySmartWatcher auto-detects .csv vs .xlsx from the filename pattern
+            _csv_watchers[device.id] = DailySmartWatcher(
                 device.csv_folder,
                 device.csv_filename_pattern or "{YYYYMMDD}.csv",
                 device.csv_delimiter or ",",
-                device.poll_interval or 60,
+                device.poll_interval or 5,
                 device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
             )
         else:
-            _csv_watchers[device.id] = CSVWatcher(
+            # SmartWatcher auto-detects .csv vs .xlsx from the file path extension
+            _csv_watchers[device.id] = SmartWatcher(
                 device.csv_path,
                 device.csv_delimiter or ",",
-                device.poll_interval or 60,
+                device.poll_interval or 5,
                 device.csv_timestamp_col,
             )
     return _csv_watchers[device.id]
@@ -98,6 +122,7 @@ def _cleanup_reader(device_id: int, protocol: str, device: Device = None):
     """Remove stale reader instances from pool so fresh connections are made."""
     _tcp_readers.pop(device_id, None)
     _tcp_custom.pop(device_id, None)
+    _udp_custom.pop(device_id, None)
     # RS485 RTU: shared by port key — also evict if the device's port is known
     if device and device.serial_port:
         old_reader = _rtu_readers.pop(device.serial_port, None)
@@ -136,6 +161,8 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             "parity":           p.parity,
             "stop_bits":        p.stop_bits,
             "slave_id":         p.slave_id,
+            "parse_method":     p.parse_method,
+            "parse_config":     p.parse_config,
         }
         for p in parameters
     ]
@@ -154,9 +181,14 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
         elif protocol == "modbus_rtu":
             reader = _get_modbus_rtu(device)
             readings = await reader.read_all_parameters(device.slave_id or 1, param_dicts)
+            await reader.close()  # close RS485 after each poll — devices don't stream continuously
 
         elif protocol == "tcp_custom":
             reader = _get_tcp_custom(device)
+            readings = await reader.poll_parameters(param_dicts)
+
+        elif protocol == "udp_custom":
+            reader = _get_udp_custom(device)
             readings = await reader.poll_parameters(param_dicts)
 
         elif protocol == "csv":
@@ -166,15 +198,15 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             else:
                 log.warning(f"Device {device.id}: CSV protocol but no CSV source configured")
                 readings = [
-                    {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "comms_fail"}
+                    {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "E"}
                     for p in param_dicts
                 ]
 
         elif protocol == "opc_ua":
-            # OPC-UA not yet implemented — mark all as comms_fail
+            # OPC-UA not yet implemented — mark all as E
             log.warning(f"Device {device.id} ({device.name}): OPC-UA protocol not yet implemented")
             readings = [
-                {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "comms_fail"}
+                {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "E"}
                 for p in param_dicts
             ]
 
@@ -187,7 +219,7 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
         # Force reconnect next cycle by clearing the reader from pool
         _cleanup_reader(device.id, protocol, device)
         readings = [
-            {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "comms_fail"}
+            {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "E"}
             for p in param_dicts
         ]
 
@@ -209,7 +241,7 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
     live_points = []
 
     async with AsyncSessionLocal() as db:
-        # Resolve station name safely from the db to prevent lazy-loading/detached session issues on device.station
+        # Resolve station name safely from the db
         station_name = ""
         if device.station_id:
             st_res = await db.execute(
@@ -217,46 +249,43 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             )
             station_name = st_res.scalar() or ""
 
-        # Delete old live records for all these parameters in a single batch query
+        # Batch delete-then-insert live records
         param_ids = [r["parameter_id"] for r in readings]
+        hist_rows = []
+        live_rows = []
+        alarm_tasks = []
+
         if param_ids:
             await db.execute(
                 delete(LiveData).where(LiveData.parameter_id.in_(param_ids))
             )
 
         for r in readings:
-            # Safely map quality string → enum, fall back to 'bad'
-            q_str = r.get("quality", "bad")
-            quality_enum = DataQuality(q_str) if q_str in _VALID_QUALITIES else DataQuality.bad
-
-            # Use parsed CSV timestamp if available, otherwise fall back to now
+            q_str = r.get("quality", "U")
+            quality_enum = DataQuality(q_str) if q_str in _VALID_QUALITIES else DataQuality.good
             ts = r.get("timestamp") if r.get("timestamp") is not None else now
 
-            # Persist raw historical record
-            hist_row = HistoricalData(
+            hist_rows.append(HistoricalData(
                 parameter_id=r["parameter_id"],
                 timestamp=ts,
                 value=r["value"],
                 raw_value=r.get("raw_value"),
                 quality=quality_enum,
                 source="poll",
-            )
-            db.add(hist_row)
+            ))
 
-            # Insert fresh live record (old one deleted in batch above)
-            live_row = LiveData(
+            live_rows.append(LiveData(
                 parameter_id=r["parameter_id"],
                 timestamp=ts,
                 value=r["value"],
                 raw_value=r.get("raw_value"),
                 quality=quality_enum,
                 source="poll",
-            )
-            db.add(live_row)
+            ))
 
             param = param_by_id.get(r["parameter_id"])
             if param:
-                await alarm_engine.evaluate(db, param, r["value"], r.get("quality", "bad"))
+                alarm_tasks.append(alarm_engine.evaluate(db, param, r["value"], r.get("quality", "U")))
                 live_points.append({
                     "parameter_id": param.id,
                     "tag_name":     param.tag_name,
@@ -264,12 +293,22 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
                     "device_name":  device.name,
                     "value":        r["value"],
                     "unit":         param.unit or "",
-                    "quality":      r.get("quality", "bad"),
+                    "quality":      r.get("quality", "U"),
                     "timestamp":    ts.isoformat(),
                 })
 
-        # Update device status based on whether any reading came back good
-        any_good = any(r.get("quality") in ("good", "out_of_range", "uncertain") for r in readings)
+        # Bulk insert historical and live data
+        if hist_rows:
+            db.add_all(hist_rows)
+        if live_rows:
+            db.add_all(live_rows)
+
+        # Evaluate alarms in parallel after bulk writes
+        for task in alarm_tasks:
+            await task
+
+        # Update device status
+        any_good = any(r.get("quality") in ("U", "O") for r in readings)
         new_status = "online" if any_good else "offline"
         await db.execute(
             Device.__table__.update()
@@ -281,32 +320,14 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             )
         )
 
-        # Update station status based on active devices status
+        # Update station status
         if device.station_id:
-            if any_good:
-                await db.execute(
-                    Station.__table__.update()
-                    .where(Station.id == device.station_id)
-                    .values(status="online", last_seen=now)
-                )
-            else:
-                # Check if there are other online devices for this station
-                active_online_result = await db.execute(
-                    select(func.count(Device.id))
-                    .where(
-                        Device.station_id == device.station_id,
-                        Device.id != device.id,
-                        Device.status == "online",
-                        Device.is_active == True
-                    )
-                )
-                other_online = active_online_result.scalar() or 0
-                station_status = "online" if other_online > 0 else "offline"
-                await db.execute(
-                    Station.__table__.update()
-                    .where(Station.id == device.station_id)
-                    .values(status=station_status, last_seen=now)
-                )
+            station_status = "online" if any_good else "offline"
+            await db.execute(
+                Station.__table__.update()
+                .where(Station.id == device.station_id)
+                .values(status=station_status, last_seen=now)
+            )
 
         # ─── SystemLog for device events ─────────────────────────────────────
         if not any_good:
@@ -316,10 +337,10 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             bad_params = []
             for r in readings:
                 q = r.get("quality")
-                if q in ("comms_fail", "bad", "sensor_fail"):
+                if q == "E":
                     p = param_by_id.get(r["parameter_id"])
                     bad_params.append(p.tag_name if p else f"#{r['parameter_id']}")
-                elif q == "out_of_range":
+                elif q == "O":
                     p = param_by_id.get(r["parameter_id"])
                     bad_params.append(f"{p.tag_name if p else '#'+str(r['parameter_id'])}={r.get('value')} OOR")
             if bad_params:
@@ -362,14 +383,18 @@ async def _device_poll_loop(device_id: int, interval: int):
                 break
 
             active_params = [p for p in device.parameters if p.is_active]
-            await _poll_device(device, active_params)
+            async with _device_semaphore:
+                await _poll_device(device, active_params)
             consecutive_errors = 0  # reset on success
 
+        except asyncio.CancelledError:
+            log.info(f"Device poll loop cancelled: device_id={device_id}")
+            break
         except Exception as e:
             err_str = str(e)
             consecutive_errors += 1
-            # Transient errors (stale DB pool during startup/restart) back off briefly
-            if "no active connection" in err_str or "CancelledError" in err_str:
+            # Transient errors (stale DB pool, SQLite locked) back off briefly
+            if any(word in err_str for word in ["no active connection", "database is locked", "database disk image"]):
                 backoff = min(5 * consecutive_errors, 30)
                 log.warning(f"Device loop transient error device={device_id} (retry #{consecutive_errors}, backoff {backoff}s): {err_str.splitlines()[0]}")
                 await asyncio.sleep(backoff)
@@ -377,16 +402,18 @@ async def _device_poll_loop(device_id: int, interval: int):
             else:
                 log.error(f"Device loop error device={device_id}: {e}")
 
-        await asyncio.sleep(interval)
+        # Add jitter (±10%) to prevent thundering herd
+        jitter = interval * random.uniform(-0.1, 0.1)
+        await asyncio.sleep(interval + jitter)
 
 
 async def _central_sync_worker():
     """Background task to push telemetry data to RajAPI.com"""
     log.info("Central Sync Worker started")
     
-    # These would ideally be configured in the UI, but we can load from env for now
+    from app.config import CENTRAL_API_URL
     import os
-    central_url = os.environ.get("CENTRAL_API_URL", "https://rajapi.com/api/v1/sync/")
+    central_url = CENTRAL_API_URL
 
     while _running:
         api_key = os.environ.get("CENTRAL_API_KEY", "")
@@ -432,7 +459,7 @@ async def _central_sync_worker():
                                 from app.config import APP_DIR
                                 from app.core.config_crypt import write_env_enc_from_dict
                                 enc_file = str(APP_DIR / ".env.enc")
-                                write_env_enc_from_dict({"CENTRAL_API_URL": central_url, "CENTRAL_API_KEY": ""}, enc_file)
+                                write_env_enc_from_dict({"CENTRAL_API_KEY": ""}, enc_file)
                         else:
                             log.debug("Successfully synced telemetry to RajAPI")
                             
@@ -464,15 +491,13 @@ async def start_polling():
         return
 
     for device in devices:
-        interval = device.poll_interval or settings.POLLING_DEFAULT_INTERVAL
+        rtu_default = device.poll_interval or 5 if device.protocol == DeviceProtocol.modbus_rtu else None
+        interval = rtu_default or device.poll_interval or settings.POLLING_DEFAULT_INTERVAL
         task = asyncio.create_task(
             _device_poll_loop(device.id, interval),
             name=f"poll-device-{device.id}",
         )
         _device_tasks[device.id] = task
-
-    # Start the central sync worker
-    _device_tasks[-1] = asyncio.create_task(_central_sync_worker(), name="central-sync")
 
     log.info(f"Polling engine started: {len(devices)} device(s)")
 
@@ -498,6 +523,7 @@ async def reload_device(device_id: int):
     # Clear cached readers so fresh connections are made with new config
     _tcp_readers.pop(device_id, None)
     _tcp_custom.pop(device_id, None)
+    _udp_custom.pop(device_id, None)
     _csv_watchers.pop(device_id, None)
 
     async with AsyncSessionLocal() as db:
@@ -505,10 +531,71 @@ async def reload_device(device_id: int):
         device = result.scalar_one_or_none()
 
     if device and device.is_active and _running:
-        interval = device.poll_interval or settings.POLLING_DEFAULT_INTERVAL
+        rtu_default = device.poll_interval or 5 if device.protocol == DeviceProtocol.modbus_rtu else None
+        interval = rtu_default or device.poll_interval or settings.POLLING_DEFAULT_INTERVAL
         task = asyncio.create_task(
             _device_poll_loop(device_id, interval),
             name=f"poll-device-{device_id}",
         )
         _device_tasks[device_id] = task
         log.info(f"Device {device_id} poll loop reloaded (interval={interval}s)")
+
+
+def is_polling_active() -> bool:
+    return _running
+
+
+async def restart_polling():
+    await stop_polling()
+    await asyncio.sleep(1)
+    await start_polling()
+
+
+async def check_heartbeats():
+    """
+    Heartbeat monitor running every minute.
+    Check last heartbeat (last_poll for devices, last_seen for stations).
+    If heartbeat older than 90 seconds, Status = Offline.
+    If heartbeat newer than 90 seconds, Status = Online.
+    No analyzer data.
+    """
+    from datetime import datetime, timedelta
+    from app.models.device import Device
+    from app.models.station import Station, StationStatus
+    from sqlalchemy import update
+    
+    now = datetime.utcnow()
+    cutoff = now - timedelta(seconds=90)
+    
+    async with AsyncSessionLocal() as db:
+        try:
+            # Update devices based on last_poll
+            await db.execute(
+                update(Device)
+                .where((Device.last_poll < cutoff) | (Device.last_poll.is_(None)))
+                .values(status="offline")
+            )
+            await db.execute(
+                update(Device)
+                .where(Device.last_poll >= cutoff)
+                .values(status="online")
+            )
+            
+            # Update stations based on last_seen
+            await db.execute(
+                update(Station)
+                .where((Station.last_seen < cutoff) | (Station.last_seen.is_(None)))
+                .values(status=StationStatus.offline)
+            )
+            await db.execute(
+                update(Station)
+                .where(Station.last_seen >= cutoff)
+                .values(status=StationStatus.online)
+            )
+            
+            await db.commit()
+            log.info("[Heartbeat Monitor] Checked and updated device/station statuses based on 90s cutoff")
+        except Exception as e:
+            log.error(f"[Heartbeat Monitor] Error checking heartbeats: {e}")
+            await db.rollback()
+

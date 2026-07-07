@@ -8,7 +8,9 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.telemetry import Broadcast
+from app.models.user import User
 from app.core.logger import get_logger
+from app.core.security import get_current_user
 
 log = get_logger("ultron.broadcasts")
 router = APIRouter(prefix="/broadcasts", tags=["Broadcasts"])
@@ -32,7 +34,10 @@ class BroadcastCreate(BaseModel):
 
 
 @router.get("/", response_model=List[BroadcastOut])
-async def list_active_broadcasts(db: AsyncSession = Depends(get_db)):
+async def list_active_broadcasts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Return all active, non-expired broadcast messages."""
     now = datetime.utcnow()
     result = await db.execute(
@@ -45,7 +50,11 @@ async def list_active_broadcasts(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/", response_model=BroadcastOut)
-async def create_broadcast(payload: BroadcastCreate, db: AsyncSession = Depends(get_db)):
+async def create_broadcast(
+    payload: BroadcastCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Create a new broadcast message."""
     b = Broadcast(
         message=payload.message,
@@ -60,7 +69,11 @@ async def create_broadcast(payload: BroadcastCreate, db: AsyncSession = Depends(
 
 
 @router.post("/{broadcast_id}/dismiss", response_model=BroadcastOut)
-async def dismiss_broadcast(broadcast_id: int, db: AsyncSession = Depends(get_db)):
+async def dismiss_broadcast(
+    broadcast_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Mark a broadcast as inactive (dismissed by client)."""
     result = await db.execute(select(Broadcast).where(Broadcast.id == broadcast_id))
     b = result.scalar_one_or_none()

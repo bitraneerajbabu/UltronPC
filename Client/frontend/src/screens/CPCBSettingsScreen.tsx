@@ -12,6 +12,8 @@ interface StationConfig {
   cpcb_enabled: boolean;
   timezone: string;
   retention_count: number;
+  calibration_mode: boolean;
+  maintenance_mode: boolean;
 }
 
 export const CPCBSettingsScreen = () => {
@@ -27,6 +29,8 @@ export const CPCBSettingsScreen = () => {
     cpcb_enabled: true,
     timezone: 'Asia/Kolkata',
     retention_count: 97,
+    calibration_mode: false,
+    maintenance_mode: false,
   });
 
   const loadConfigs = async () => {
@@ -79,7 +83,7 @@ export const CPCBSettingsScreen = () => {
           {stations.map(station => {
             const config = configs.find(c => c.station_id === station.id);
             const isEditing = editingId === station.id;
-            const f = isEditing ? form : (config || { station_name: station.name, export_path: 'C:\\Data', retention_count: 97, export_enabled: true, cpcb_enabled: true, timezone: 'Asia/Kolkata' });
+            const f: any = isEditing ? form : (config || { station_name: station.name, export_path: 'C:\\Data', retention_count: 97, export_enabled: true, cpcb_enabled: true, timezone: 'Asia/Kolkata', calibration_mode: false, maintenance_mode: false });
 
             return (
               <div key={station.id} style={{ ...GLASS_CARD, padding: '20px' }}>
@@ -129,6 +133,14 @@ export const CPCBSettingsScreen = () => {
                       <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: T.textLabel, cursor: 'pointer' }}>
                         <input type="checkbox" checked={isEditing ? (f.cpcb_enabled ?? true) : config!.cpcb_enabled} onChange={e => setForm(p => ({ ...p, cpcb_enabled: e.target.checked }))} disabled={!isEditing} />
                         CPCB Enabled
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: T.warning, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={isEditing ? (f.calibration_mode ?? false) : (config?.calibration_mode ?? false)} onChange={e => setForm(p => ({ ...p, calibration_mode: e.target.checked }))} disabled={!isEditing} />
+                        Calibration Mode
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '700', color: T.danger, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={isEditing ? (f.maintenance_mode ?? false) : (config?.maintenance_mode ?? false)} onChange={e => setForm(p => ({ ...p, maintenance_mode: e.target.checked }))} disabled={!isEditing} />
+                        Maintenance Mode
                       </label>
                     </div>
                   </div>

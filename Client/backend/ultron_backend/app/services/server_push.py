@@ -35,23 +35,13 @@ log = get_logger("ultron.server_push")
 # TGPCB — JSON HTTP Push
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _build_tgpcb_payloads(db, server_id: int) -> list:
+async def _build_tgpcb_payloads(db, server_id: int, mode: str = "live") -> list:
     """
     Build TGPCB-style JSON payload list.
     Groups parameters by (api_id, api_name, api_password) → one payload per group.
-
-    Payload format (sent as HTTP POST JSON):
-    {
-      "DeviceID": "<api_id>",
-      "FunctionName": 53,
-      "Datetime": "YYYY-MM-DD HH:MM:SS",
-      "Name": "<api_name>",
-      "Password": "<api_password>",
-      "additionalInfo": { "Longitude": "...", "Lattitude": "...", "SoftwareNameVersion": "Logon" },
-      "Variables": [
-        { "Variablename": "<api_vname>", "Value": <float>, "Unit": "<unit>", "Flags": "" }
-      ]
-    }
+    
+    If mode == "delay", fetches the latest 15-minute average value and sets
+    the payload timestamp to that average's timestamp.
     """
     stmt = (
         select(ServerParameterMapping)
@@ -81,10 +71,26 @@ async def _build_tgpcb_payloads(db, server_id: int) -> list:
         except (ValueError, TypeError):
             device_id_val = api_id
 
+        # Determine payload Datetime based on averages if in delay mode
+        payload_time = datetime.now()
+        if mode == "delay" and maps:
+            # Query the latest 15-minute average timestamp across mapped parameters in this group
+            param_ids = [m.parameter_id for m in maps]
+            time_stmt = (
+                select(Averages.timestamp)
+                .where(Averages.parameter_id.in_(param_ids), Averages.avg_type == AverageType.avg_15min)
+                .order_by(Averages.timestamp.desc())
+                .limit(1)
+            )
+            time_res = await db.execute(time_stmt)
+            latest_time = time_res.scalar_one_or_none()
+            if latest_time:
+                payload_time = latest_time
+
         payload = {
             "DeviceID": device_id_val,
             "FunctionName": 53,
-            "Datetime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Datetime": payload_time.strftime("%Y-%m-%d %H:%M:%S"),
             "Name": api_name or "",
             "Password": api_password or "",
             "additionalInfo": {
@@ -96,18 +102,32 @@ async def _build_tgpcb_payloads(db, server_id: int) -> list:
         }
 
         for m in maps:
-            # LiveData holds exactly one row per parameter (delete-then-insert in polling engine)
-            ld_res = await db.execute(
-                select(LiveData).where(LiveData.parameter_id == m.parameter_id)
-            )
-            ld = ld_res.scalars().first()
-            if ld and ld.value is not None:
-                try:
-                    val = round(float(ld.value), 2)
-                except (ValueError, TypeError):
-                    val = ld.value
+            val = ""
+            if mode == "delay":
+                # Get the latest 15-minute average for this parameter
+                avg_res = await db.execute(
+                    select(Averages)
+                    .where(Averages.parameter_id == m.parameter_id, Averages.avg_type == AverageType.avg_15min)
+                    .order_by(Averages.timestamp.desc())
+                    .limit(1)
+                )
+                avg = avg_res.scalars().first()
+                if avg and avg.value is not None:
+                    try:
+                        val = round(float(avg.value), 2)
+                    except (ValueError, TypeError):
+                        val = avg.value
             else:
-                val = ""
+                # LiveData holds exactly one row per parameter
+                ld_res = await db.execute(
+                    select(LiveData).where(LiveData.parameter_id == m.parameter_id)
+                )
+                ld = ld_res.scalars().first()
+                if ld and ld.value is not None:
+                    try:
+                        val = round(float(ld.value), 2)
+                    except (ValueError, TypeError):
+                        val = ld.value
 
             param = m.parameter
             payload["Variables"].append({
@@ -134,7 +154,7 @@ async def _push_tgpcb(config: ServerConfig, db, mode: str):
         return
 
     try:
-        payloads = await _build_tgpcb_payloads(db, config.id)
+        payloads = await _build_tgpcb_payloads(db, config.id, mode)
         if not payloads:
             log.debug(f"[TGPCB/{mode.upper()}] No active mappings for '{config.name}' — skipping.")
             return
@@ -157,12 +177,12 @@ async def _push_tgpcb(config: ServerConfig, db, mode: str):
                     res = await client.post(target_url, json=payload)
                     if res.status_code < 300:
                         log.info(
-                            f"[TGPCB/{mode.upper()}] ✓ DeviceID={device_id} → '{config.name}' HTTP {res.status_code}. "
+                            f"[TGPCB/{mode.upper()}] [OK] DeviceID={device_id} → '{config.name}' HTTP {res.status_code}. "
                             f"Parameters Posted: [{param_summary}]"
                         )
                     else:
                         log.warning(
-                            f"[TGPCB/{mode.upper()}] ✗ DeviceID={device_id} → '{config.name}' HTTP {res.status_code}: {res.text[:200]}. "
+                            f"[TGPCB/{mode.upper()}] [FAIL] DeviceID={device_id} → '{config.name}' HTTP {res.status_code}: {res.text[:200]}. "
                             f"Parameters Attempted: [{param_summary}]"
                         )
                 except Exception as e:
@@ -272,7 +292,9 @@ async def _push_cpcb(config: ServerConfig, db):
     # Fetch all active mappings for this server
     stmt = (
         select(ServerParameterMapping)
-        .options(selectinload(ServerParameterMapping.parameter))
+        .options(
+            selectinload(ServerParameterMapping.parameter).selectinload(Parameter.device).selectinload(Device.station)
+        )
         .filter(ServerParameterMapping.server_id == config.id)
         .filter(ServerParameterMapping.is_active == True)
     )
@@ -362,9 +384,9 @@ async def _push_cpcb(config: ServerConfig, db):
         calib_flag = 0
         maint_flag = 0
 
-        # Remark: blank when quality is good, otherwise quality string
+        # Remark: blank when quality is U, otherwise quality string
         remark = ""
-        if avg.quality and str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality) != "good":
+        if avg.quality and str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality) != "U":
             remark = str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality)
 
         val_repr = value_str if value_str != "" else "NOT_POSTED (No average)"
@@ -384,7 +406,7 @@ async def _push_cpcb(config: ServerConfig, db):
     
     param_summary = ", ".join(written_summary_items)
     log.info(
-        f"[CPCB] ✓ Wrote {len(new_rows)} new row(s) to '{file_path}'. "
+        f"[CPCB] [OK] Wrote {len(new_rows)} new row(s) to '{file_path}'. "
         f"Parameters Written: [{param_summary}]"
     )
 
@@ -411,7 +433,9 @@ async def generate_historical_cpcb_file(db, config: ServerConfig, date_str: str)
     # Fetch all active mappings
     stmt = (
         select(ServerParameterMapping)
-        .options(selectinload(ServerParameterMapping.parameter))
+        .options(
+            selectinload(ServerParameterMapping.parameter).selectinload(Parameter.device).selectinload(Device.station)
+        )
         .filter(ServerParameterMapping.server_id == config.id)
         .filter(ServerParameterMapping.is_active == True)
     )
@@ -467,7 +491,7 @@ async def generate_historical_cpcb_file(db, config: ServerConfig, date_str: str)
             calib_flag = 0
             maint_flag = 0
             remark = ""
-            if avg.quality and str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality) != "good":
+            if avg.quality and str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality) != "U":
                 remark = str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality)
 
             row = f"{station_name},{param_code},{date_from_str},{date_to_str},{value_str},{calib_flag},{maint_flag},{remark},"
@@ -516,11 +540,11 @@ async def check_connectivity():
         async with httpx.AsyncClient(timeout=5.0) as client:
             await client.get("https://clients3.google.com/generate_204")
         if not _last_net_ok:
-            log.info("[NET] ✓ Internet connectivity restored")
+            log.info("[NET] [OK] Internet connectivity restored")
             _last_net_ok = True
     except Exception:
         if _last_net_ok:
-            log.warning("[NET] ✗ Internet connectivity lost — pushes will be queued as pending")
+            log.warning("[NET] [FAIL] Internet connectivity lost — pushes will be queued as pending")
             _last_net_ok = False
 
 
@@ -562,17 +586,80 @@ async def retry_pending_uploads(db):
                 res = await client.post(target_url, json=p.payload)
                 if res.status_code < 300:
                     await db.delete(p)
-                    log.info(f"[RETRY] ✓ Delivered pending #{p.id} via {target_url}")
+                    log.info(f"[RETRY] [OK] Delivered pending #{p.id} via {target_url}")
                 else:
                     p.retry_count += 1
                     p.last_error = f"HTTP {res.status_code}"
-                    log.warning(f"[RETRY] ✗ Pending #{p.id} HTTP {res.status_code}")
+                    log.warning(f"[RETRY] [FAIL] Pending #{p.id} HTTP {res.status_code}")
             except Exception as e:
                 p.retry_count += 1
                 p.last_error = str(e)[:500]
-                log.warning(f"[RETRY] ✗ Pending #{p.id} failed: {e}")
+                log.warning(f"[RETRY] [FAIL] Pending #{p.id} failed: {e}")
 
     await db.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Remote Command Polling (replaces MQTT)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _poll_remote_commands():
+    """
+    Poll rajapi.com for pending commands for this station.
+    Executes any received commands and acknowledges them.
+
+    Replaces the old MQTT-based remote_control.py.
+    Called every 1 minute from run_server_push("live").
+    """
+    from app.config import settings, RAJAPI_COMMANDS_URL
+    station_id = settings.RAJAPI_STATION_ID
+    api_key = settings.RAJAPI_API_KEY
+    if not station_id or not api_key:
+        return
+
+    url = RAJAPI_COMMANDS_URL
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                url,
+                headers={"X-Admin-Key": api_key, "X-Station-Id": station_id},
+            )
+            if resp.status_code != 200:
+                return
+            commands = resp.json().get("commands", [])
+
+        for cmd in commands:
+            cmd_id = cmd.get("id")
+            action = cmd.get("action", "")
+            log.info(f"[CMD] Executing remote command: {action} (id={cmd_id})")
+
+            if action == "restart_polling":
+                from app.services.polling_engine import stop_polling, start_polling
+                await stop_polling()
+                await start_polling()
+
+            elif action == "reboot_system":
+                log.warning("[CMD] reboot_system command received but is DISABLED (removed for safety)")
+
+            elif action == "factory_reset":
+                log.warning("[CMD] Executing factory_reset via remote command")
+                try:
+                    from app.api.settings import factory_reset_core
+                    await factory_reset_core(restart=True)
+                    log.warning("[CMD] factory_reset executed successfully — process restarting")
+                except Exception as e:
+                    log.error(f"[CMD] factory_reset failed: {e}")
+
+            # Acknowledge command as executed
+            ack_url = f"https://rajapi.com/api/v1/commands/{cmd_id}/ack"
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(
+                    ack_url,
+                    headers={"X-Admin-Key": api_key, "X-Station-Id": station_id},
+                )
+
+    except Exception as e:
+        log.debug(f"[CMD] Poll failed: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -609,7 +696,7 @@ async def run_server_push(mode: str = "live"):
             )
             servers = conf_result.scalars().all()
             for config in servers:
-                payloads = await _build_tgpcb_payloads(db, config.id)
+                payloads = await _build_tgpcb_payloads(db, config.id, "live")
                 for payload in payloads:
                     db.add(PendingUpload(
                         server_config_id=config.id,
@@ -619,7 +706,7 @@ async def run_server_push(mode: str = "live"):
                         last_error="Queued (locked/AMC expired)",
                     ))
             await db.commit()
-            log.info(f"[PUSH] ✓ Queued {len(servers)} server config(s) for delayed push")
+            log.info(f"[PUSH] [OK] Queued {len(servers)} server config(s) for delayed push")
             # Skip live push, still process delay retry
             if mode == "delay":
                 await retry_pending_uploads(db)
@@ -646,36 +733,13 @@ async def run_server_push(mode: str = "live"):
             else:
                 await _push_tgpcb(config, db, mode)
 
-        # Always push latest live telemetry to RajAPI MQTT broker (if enabled)
+        # Poll for pending remote commands from rajapi.com
         if mode == "live":
+            await _poll_remote_commands()
+
             ld_stmt = select(LiveData).options(selectinload(LiveData.parameter))
             ld_res = await db.execute(ld_stmt)
             live_data_list = ld_res.scalars().all()
-
-            from app.services.remote_control import publish_telemetry
-            from app.config import settings
-            if settings.RAJAPI_MQTT_ENABLED:
-                payload = {
-                    "station_id": settings.RAJAPI_STATION_ID,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "data": []
-                }
-                for ld in live_data_list:
-                    if ld.parameter:
-                        val = ld.value
-                        if val is not None:
-                            try:
-                                val = round(float(val), 2)
-                            except (ValueError, TypeError):
-                                pass
-                        payload["data"].append({
-                            "tag": ld.parameter.tag_name,
-                            "value": val,
-                            "unit": ld.parameter.unit
-                        })
-                if payload["data"]:
-                    await publish_telemetry(payload)
-
             param_vals = []
             for ld in live_data_list:
                 if ld.parameter and ld.value is not None:
