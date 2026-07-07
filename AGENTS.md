@@ -35,8 +35,15 @@
 - **API keys:** Static, stored in DB plaintext. No JWTs.
 - **Login:** Returns `admin_key` in response body (plaintext echo)
 
-## Latest Session (2026-06-30) — Edit Gateway Rule Fixes
-- **APP_VERSION:** `1.0.65` — EXE built at `client/backend/ultron_backend/dist/Ultron_1.0.65.exe` (33.7 MB)
+## Latest Session (2026-07-07) — UltrON v1.0.69 Release & Fixes
+- **APP_VERSION:** `1.0.69` — EXE built at `client/backend/ultron_backend/dist/UltrON.exe` (40.0 MB)
+- **PyInstaller Hidden Imports:** Added `psutil` system monitoring library to PyInstaller hidden imports list in `UltrON.spec` to fix `ModuleNotFoundError` on client PC.
+- **SQLite Concurrency & Write Contention:** Integrated semaphores, randomized backoffs, and jitter in the polling engine to prevent database write conflicts.
+- **Header Cleanups:** Removed the duplicate logo in `App.tsx` header (keeping it only in the navigation-rail sidebar).
+- **Server Fleet Monitoring & OTA:** Implemented modern dashboards, fleet tracking, and OTA updates with appropriate fallback routes for legacy clients.
+- **Pi Security Hardening & MQTT Proxy (v1.0.66):** Restricted MQTT listener ports (1883/9001) to loopback `127.0.0.1`, set up Nginx WebSocket reverse-proxy for dashboard connectivity, and fixed `.rajapi_secrets.env` VAPID loading.
+
+## Previous Session (2026-06-30) — Edit Gateway Rule Fixes
 - **Fixed `handleChange` NaN bug in `DevicesScreen.tsx:129-137`:** Number inputs (`scale_factor`, `offset`, etc.) stored raw string value instead of `Number(value)`. `Number("-")` → `NaN` → React renders blank, losing negative sign. Now converts to number only at save time.
 - **Fixed `description` overwrite (`DevicesScreen.tsx:196-207`):** Removed `description: form.station_name` from parameter save payload — no longer corrupts parameter description with station name.
 - **Numeric fields converted on save (`DevicesScreen.tsx:203-208`):** Added explicit `Number()` conversion for 13 numeric fields in `handleSave` payload, with NaN guard.
