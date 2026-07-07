@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import models so they are registered with Base.metadata before create_all
-from app.models.core import IndustrySite, Device, Parameter, TelemetryData, Broadcast, PendingCommand, Alarm
+from app.models.core import IndustrySite, Device, Parameter, TelemetryData, Broadcast, PendingCommand, Alarm, SoftwareVersion, OTADeployment
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -110,6 +110,25 @@ def _run_auto_migrations():
                 logger.info("Auto-migration: added 'target_site_id' to broadcasts")
         except Exception as e:
             logger.warning(f"Auto-migration for broadcast columns skipped: {e}")
+
+        # Remove accidental demo broadcast so clients only see manually-created messages.
+        try:
+            result = conn.execute(
+                text(
+                    "DELETE FROM broadcasts "
+                    "WHERE lower(trim(message)) = :message "
+                    "AND CAST(expires_at AS TEXT) LIKE :expires_at"
+                ),
+                {
+                    "message": "scheduled maintenance tonight at 2 am",
+                    "expires_at": "2026-07-05%",
+                },
+            )
+            conn.commit()
+            if result.rowcount and result.rowcount > 0:
+                logger.info(f"Removed {result.rowcount} accidental placeholder broadcast(s)")
+        except Exception as e:
+            logger.warning(f"Broadcast placeholder cleanup skipped: {e}")
 
         # Add api_key column to devices table if missing
         try:
@@ -243,7 +262,7 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
     return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
 
 
-from app.api.endpoints import sync, sites, downloads, tgpcb_sync, broadcasts, commands, quality, alarms, cpcb
+from app.api.endpoints import sync, sites, downloads, tgpcb_sync, broadcasts, commands, quality, alarms, cpcb, ota
 
 app.include_router(sync.router, prefix=f"{settings.API_V1_STR}/sync", tags=["sync"])
 app.include_router(tgpcb_sync.router, prefix=f"{settings.API_V1_STR}/tgpcb", tags=["tgpcb-sync"])
@@ -254,6 +273,7 @@ app.include_router(commands.router, prefix=f"{settings.API_V1_STR}/commands", ta
 app.include_router(quality.router, prefix=f"{settings.API_V1_STR}/quality", tags=["quality"])
 app.include_router(alarms.router, prefix=f"{settings.API_V1_STR}/alarms", tags=["alarms"])
 app.include_router(cpcb.router, prefix=f"{settings.API_V1_STR}/cpcb", tags=["cpcb"])
+app.include_router(ota.router, prefix=f"{settings.API_V1_STR}/ota", tags=["ota"])
 
 # Serve frontend build if it exists
 _base = os.path.dirname(__file__)
@@ -278,5 +298,38 @@ if os.path.exists(frontend_path):
             return FileResponse(file_path)
         return FileResponse(os.path.join(frontend_path, "index.html"))
 
+# Background heartbeat monitor loop for server
+import asyncio
+from datetime import datetime, timezone, timedelta
+from app.db.database import SessionLocal
+from app.models.core import IndustrySite, Device
+
+async def monitor_heartbeats_loop():
+    logger.info("Server Heartbeat Monitor loop started")
+    while True:
+        try:
+            db = SessionLocal()
+            now = datetime.now(timezone.utc)
+            cutoff = now - timedelta(seconds=90)
+            
+            # Find sites with last_sync older than 90 seconds
+            # And update status of all their devices to offline
+            # sites newer than 90 seconds, update to online
+            sites = db.query(IndustrySite).all()
+            for site in sites:
+                is_online = site.last_sync is not None and site.last_sync.replace(tzinfo=timezone.utc) >= cutoff
+                status_str = "online" if is_online else "offline"
+                db.query(Device).filter(Device.site_id == site.id).update({"status": status_str})
+            db.commit()
+            db.close()
+        except Exception as e:
+            logger.error(f"Error in monitor_heartbeats_loop: {e}")
+        await asyncio.sleep(60)
+
+@app.on_event("startup")
+async def start_heartbeat_monitor():
+    asyncio.create_task(monitor_heartbeats_loop())
+
 # To run locally:
 # uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+

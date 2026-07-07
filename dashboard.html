@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RajAPI — Fleet Command Center</title>
+<style>
+/* ══════════════════════════════════════════════════════════════
+   DESIGN TOKENS
+   ══════════════════════════════════════════════════════════════ */
+:root {
+  --bg-page: #0a0e1a;
+  --bg-surface: #141a2e;
+  --bg-surface-2: #1a2340;
+  --bg-surface-3: #1e2744;
+  --border: #2a3556;
+  --border-light: #354266;
+
+  --primary: #00b4d8;
+  --primary-hover: #48cae4;
+  --primary-subtle: rgba(0, 180, 216, 0.1);
+
+  --success: #06d6a0;
+  --success-bg: rgba(6, 214, 160, 0.12);
+  --warning: #ffd166;
+  --warning-bg: rgba(255, 209, 102, 0.12);
+  --danger: #ef476f;
+  --danger-bg: rgba(239, 71, 111, 0.12);
+  --info: #4cc9f0;
+  --info-bg: rgba(76, 201, 240, 0.12);
+
+  --text-primary: #edf2f4;
+  --text-secondary: #8d99ae;
+  --text-muted: #5a6577;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.45);
+
+  --sidebar-w: 240px;
+  --header-h: 60px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RESET
+   ══════════════════════════════════════════════════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 16px; -webkit-font-smoothing: antialiased; }
+body {
+  font-family: var(--font);
+  background: var(--bg-page);
+  color: var(--text-primary);
+  display: flex;
+  min-height: 100vh;
+  overflow: hidden;
+}
+a { color: var(--primary); text-decoration: none; }
+a:hover { color: var(--primary-hover); }
+ul { list-style: none; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+/* ══════════════════════════════════════════════════════════════
+   SIDEBAR
+   ══════════════════════════════════════════════════════════════ */
+.sidebar {
+  position: fixed;
+  top: 0; left: 0;
+  width: var(--sidebar-w);
+  height: 100vh;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  transition: transform 0.2s ease;
+}
+.sidebar-brand {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--header-h);
+}
+.sidebar-brand .logo {
+  width: 28px; height: 28px;
+  background: var(--primary);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 14px; color: var(--bg-page);
+  flex-shrink: 0;
+}
+.sidebar-brand h1 { font-size: 15px; font-weight: 600; letter-spacing: 0.3px; }
+.sidebar-brand .tag { font-size: 10px; color: var(--text-muted); font-weight: 400; display: block; margin-top: -2px; }
+
+.sidebar-nav { flex: 1; overflow-y: auto; padding: 12px 0; }
+.sidebar-nav .nav-label { padding: 16px 20px 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 600; }
+.sidebar-nav .nav-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 20px;
+  font-size: 13px; font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-right: 3px solid transparent;
+}
+.sidebar-nav .nav-item:hover { color: var(--text-primary); background: var(--bg-surface-2); }
+.sidebar-nav .nav-item.active { color: var(--primary); background: var(--primary-subtle); border-right-color: var(--primary); }
+.sidebar-nav .nav-item .icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+.sidebar-nav .nav-item .badge-count {
+  margin-left: auto;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.sidebar-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.sidebar-footer .avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; color: var(--primary);
+  flex-shrink: 0;
+}
+.sidebar-footer .user-info { flex: 1; overflow: hidden; }
+.sidebar-footer .user-name { font-size: 13px; font-weight: 500; }
+.sidebar-footer .user-role { font-size: 11px; color: var(--text-muted); }
+
+/* ══════════════════════════════════════════════════════════════
+   HEADER
+   ══════════════════════════════════════════════════════════════ */
+.header {
+  position: fixed;
+  top: 0; left: var(--sidebar-w); right: 0;
+  height: var(--header-h);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 16px;
+  z-index: 99;
+}
+.header .menu-toggle {
+  display: none;
+  background: none; border: none; color: var(--text-secondary);
+  font-size: 20px; cursor: pointer; padding: 4px;
+}
+.header .breadcrumb { font-size: 13px; color: var(--text-secondary); }
+.header .breadcrumb span { color: var(--text-primary); font-weight: 500; }
+.header .spacer { flex: 1; }
+.header .search-box {
+  display: flex; align-items: center;
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  gap: 8px;
+}
+.header .search-box input {
+  background: none; border: none; outline: none;
+  color: var(--text-primary); font-size: 13px;
+  padding: 7px 0; width: 200px;
+  font-family: var(--font);
+}
+.header .search-box input::placeholder { color: var(--text-muted); }
+.header .search-box .icon { color: var(--text-muted); font-size: 14px; }
+.header .header-actions { display: flex; align-items: center; gap: 12px; }
+.header .icon-btn {
+  background: none; border: none; color: var(--text-secondary);
+  font-size: 18px; cursor: pointer; padding: 6px;
+  position: relative; border-radius: var(--radius-sm);
+  transition: color 0.15s;
+  line-height: 1;
+}
+.header .icon-btn:hover { color: var(--text-primary); }
+.header .icon-btn .dot {
+  position: absolute; top: 4px; right: 4px;
+  width: 7px; height: 7px;
+  background: var(--danger); border-radius: 50%;
+  border: 2px solid var(--bg-surface);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MAIN CONTENT
+   ══════════════════════════════════════════════════════════════ */
+.main {
+  margin-left: var(--sidebar-w);
+  margin-top: var(--header-h);
+  flex: 1;
+  padding: 20px 24px;
+  overflow-y: auto;
+  height: calc(100vh - var(--header-h));
+}
+
+/* ══════════════════════════════════════════════════════════════
+   DASHBOARD GRID
+   ══════════════════════════════════════════════════════════════ */
+.dashboard { display: flex; flex-direction: column; gap: 20px; }
+
+/* KPI Cards */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
+}
+
+.kpi-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.kpi-card:hover { border-color: var(--border-light); box-shadow: var(--shadow-sm); }
+.kpi-card .kpi-top { display: flex; align-items: center; justify-content: space-between; }
+.kpi-card .kpi-icon {
+  width: 36px; height: 36px;
+  border-radius: var(--radius-md);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.kpi-card .kpi-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500; }
+.kpi-card .kpi-value { font-size: 24px; font-weight: 700; line-height: 1; }
+.kpi-card .kpi-trend { font-size: 11px; display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+.kpi-card .kpi-trend.up { color: var(--success); }
+.kpi-card .kpi-trend.down { color: var(--danger); }
+.kpi-card .kpi-sub { font-size: 11px; color: var(--text-muted); }
+
+/* KPI icon backgrounds */
+.kpi-icon.total { background: var(--primary-subtle); color: var(--primary); }
+.kpi-icon.online { background: var(--success-bg); color: var(--success); }
+.kpi-icon.offline { background: var(--danger-bg); color: var(--danger); }
+.kpi-icon.warning { background: var(--warning-bg); color: var(--warning); }
+.kpi-icon.critical { background: var(--danger-bg); color: var(--danger); }
+.kpi-icon.broadcast { background: var(--info-bg); color: var(--info); }
+
+/* Section */
+.section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.section-header h3 { font-size: 13px; font-weight: 600; }
+.section-header .section-action { font-size: 11px; color: var(--primary); cursor: pointer; font-weight: 500; }
+.section-header .section-action:hover { text-decoration: underline; }
+.section-body { padding: 0; }
+
+/* Grid layout for bottom sections */
+.bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 20px;
+}
+
+.bottom-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   TABLE
+   ══════════════════════════════════════════════════════════════ */
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left;
+  padding: 10px 16px;
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-muted);
+  background: var(--bg-surface-2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  cursor: pointer; user-select: none;
+}
+thead th:hover { color: var(--text-secondary); }
+thead th .sort-icon { margin-left: 4px; font-size: 9px; }
+tbody td {
+  padding: 10px 16px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+tbody tr:hover { background: var(--bg-surface-2); }
+tbody tr:last-child td { border-bottom: none; }
+
+/* ══════════════════════════════════════════════════════════════
+   BADGE
+   ══════════════════════════════════════════════════════════════ */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.badge .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.badge--online { background: var(--success-bg); color: var(--success); }
+.badge--online .dot { background: var(--success); }
+.badge--offline { background: var(--danger-bg); color: var(--danger); }
+.badge--offline .dot { background: var(--danger); }
+.badge--warning { background: var(--warning-bg); color: var(--warning); }
+.badge--warning .dot { background: var(--warning); }
+.badge--critical { background: var(--danger-bg); color: var(--danger); }
+.badge--critical .dot { background: var(--danger); }
+.badge--info { background: var(--info-bg); color: var(--info); }
+.badge--info .dot { background: var(--info); }
+.badge--neutral { background: var(--bg-surface-2); color: var(--text-muted); }
+.badge--neutral .dot { background: var(--text-muted); }
+
+/* ══════════════════════════════════════════════════════════════
+   COMPONENT: List
+   ══════════════════════════════════════════════════════════════ */
+.list-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+  cursor: pointer;
+}
+.list-item:last-child { border-bottom: none; }
+.list-item:hover { background: var(--bg-surface-2); }
+.list-item .list-icon {
+  width: 28px; height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.list-item .list-content { flex: 1; min-width: 0; }
+.list-item .list-title { font-size: 12px; font-weight: 500; color: var(--text-primary); }
+.list-item .list-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.list-item .list-meta { font-size: 10px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+.list-item .list-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+/* ══════════════════════════════════════════════════════════════
+   COMPONENT: Timeline
+   ══════════════════════════════════════════════════════════════ */
+.timeline { padding: 6px 0; }
+.timeline-item {
+  display: flex; gap: 12px;
+  padding: 8px 18px;
+  position: relative;
+}
+.timeline-item .tl-line {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center;
+  width: 12px; flex-shrink: 0;
+}
+.timeline-item .tl-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  z-index: 1;
+  flex-shrink: 0;
+}
+.timeline-item .tl-bar {
+  width: 2px;
+  flex: 1;
+  background: var(--border);
+  margin-top: 2px;
+}
+.timeline-item:last-child .tl-bar { display: none; }
+.timeline-item .tl-content { flex: 1; padding-bottom: 6px; }
+.timeline-item .tl-title { font-size: 12px; font-weight: 500; }
+.timeline-item .tl-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+/* ══════════════════════════════════════════════════════════════
+   COMPONENT: Health Metric
+   ══════════════════════════════════════════════════════════════ */
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+}
+.health-item {
+  background: var(--bg-surface);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.health-item .hl-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+.health-item .hl-value { font-size: 18px; font-weight: 700; }
+.health-item .hl-sub { font-size: 11px; color: var(--text-muted); }
+.health-item .hl-status { font-size: 10px; display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+
+/* ══════════════════════════════════════════════════════════════
+   COMPONENT: Broadcast Card
+   ══════════════════════════════════════════════════════════════ */
+.broadcast-list { padding: 4px 0; }
+.bc-item {
+  padding: 10px 18px;
+  border-left: 3px solid var(--border);
+  margin: 4px 12px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--bg-surface-2);
+}
+.bc-item.bc--info { border-left-color: var(--info); }
+.bc-item.bc--warning { border-left-color: var(--warning); }
+.bc-item.bc--critical { border-left-color: var(--danger); }
+.bc-item .bc-msg { font-size: 12px; margin-bottom: 4px; }
+.bc-item .bc-meta { font-size: 10px; color: var(--text-muted); display: flex; gap: 12px; }
+
+/* ══════════════════════════════════════════════════════════════
+   BAR CHART (Version Distribution)
+   ══════════════════════════════════════════════════════════════ */
+.bar-list { padding: 12px 18px; display: flex; flex-direction: column; gap: 10px; }
+.bar-item { display: flex; align-items: center; gap: 10px; }
+.bar-item .bar-label { font-size: 11px; width: 60px; flex-shrink: 0; color: var(--text-secondary); }
+.bar-item .bar-track { flex: 1; height: 22px; background: var(--bg-surface-2); border-radius: 4px; overflow: hidden; position: relative; }
+.bar-item .bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+.bar-item .bar-fill.primary { background: var(--primary); }
+.bar-item .bar-fill.success { background: var(--success); }
+.bar-item .bar-fill.warning { background: var(--warning); }
+.bar-item .bar-fill.danger { background: var(--danger); }
+.bar-item .bar-count { font-size: 11px; width: 40px; text-align: right; color: var(--text-muted); flex-shrink: 0; }
+
+/* ══════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 1200px) {
+  .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+  .bottom-grid { grid-template-columns: 1fr 1fr; }
+  .bottom-grid-2 { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .header { left: 0; }
+  .header .menu-toggle { display: block; }
+  .main { margin-left: 0; padding: 16px; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .bottom-grid { grid-template-columns: 1fr; }
+  .health-grid { grid-template-columns: repeat(2, 1fr); }
+  .header .search-box { display: none; }
+  .sidebar-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 99;
+    display: none;
+  }
+  .sidebar-overlay.active { display: block; }
+}
+
+@media (max-width: 480px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+  .health-grid { grid-template-columns: 1fr; }
+  .main { padding: 12px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ Overlay ═══ -->
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- ═══ Sidebar ═══ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo">R</div>
+    <div>
+      <h1>RajAPI</h1>
+      <span class="tag">Fleet Command Center</span>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-label">Main</div>
+    <div class="nav-item active" data-page="dashboard"><span class="icon">◉</span> Dashboard</div>
+    <div class="nav-item" data-page="gateways"><span class="icon">⊞</span> Gateways</div>
+    <div class="nav-item" data-page="commands"><span class="icon">⚡</span> Commands</div>
+    <div class="nav-item" data-page="broadcasts"><span class="icon">◉</span> Broadcasts</div>
+
+    <div class="nav-label">Monitoring</div>
+    <div class="nav-item" data-page="activity"><span class="icon">◉</span> Activity Log</div>
+    <div class="nav-item" data-page="health"><span class="icon">◉</span> System Health</div>
+
+    <div class="nav-label">Administration</div>
+    <div class="nav-item" data-page="licenses"><span class="icon">◉</span> Licenses <span class="badge-count">2</span></div>
+    <div class="nav-item" data-page="users"><span class="icon">◉</span> Users</div>
+    <div class="nav-item" data-page="settings"><span class="icon">◉</span> Settings</div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="avatar">AD</div>
+    <div class="user-info">
+      <div class="user-name">Admin</div>
+      <div class="user-role">Super Admin</div>
+    </div>
+    <span style="color:var(--text-muted);cursor:pointer;font-size:14px;" onclick="alert('Sign out')">⏻</span>
+  </div>
+</aside>
+
+<!-- ═══ Header ═══ -->
+<header class="header">
+  <button class="menu-toggle" onclick="toggleSidebar()" aria-label="Toggle sidebar">☰</button>
+  <div class="breadcrumb">Fleet / <span>Dashboard</span></div>
+  <div class="spacer"></div>
+  <div class="search-box">
+    <span class="icon">🔍</span>
+    <input type="text" placeholder="Search gateways, plants..." id="globalSearch" oninput="onSearch(this.value)">
+  </div>
+  <div class="header-actions">
+    <button class="icon-btn" onclick="alert('Notifications')" aria-label="Notifications">
+      🔔 <span class="dot"></span>
+    </button>
+    <button class="icon-btn" onclick="alert('Settings')" aria-label="Settings">⚙</button>
+  </div>
+</header>
+
+<!-- ═══ Main Content ═══ -->
+<main class="main">
+  <div class="dashboard" id="dashboard">
+
+    <!-- ─── KPI Cards ─── -->
+    <section class="kpi-grid" id="kpiGrid"></section>
+
+    <!-- ─── Fleet Status Table ─── -->
+    <section class="section">
+      <div class="section-header">
+        <h3>Fleet Status</h3>
+        <span class="section-action" onclick="alert('View all gateways')">View All →</span>
+      </div>
+      <div class="section-body" id="fleetTableContainer"></div>
+    </section>
+
+    <!-- ─── Bottom Grid Row 1: Recent Offline | Notifications | Recent Activity ─── -->
+    <div class="bottom-grid">
+
+      <!-- Recent Offline -->
+      <section class="section">
+        <div class="section-header">
+          <h3>Recent Offline</h3>
+          <span class="section-action" onclick="alert('View all offline')">View All →</span>
+        </div>
+        <div class="section-body" id="recentOfflineContainer"></div>
+      </section>
+
+      <!-- Notifications -->
+      <section class="section">
+        <div class="section-header">
+          <h3>Notifications <span id="notifCount" style="font-size:10px;color:var(--text-muted);font-weight:400;"></span></h3>
+          <span class="section-action" onclick="alert('Mark all read')">Mark All Read</span>
+        </div>
+        <div class="section-body" id="notificationsContainer"></div>
+      </section>
+
+      <!-- Recent Activity -->
+      <section class="section">
+        <div class="section-header">
+          <h3>Recent Activity</h3>
+          <span class="section-action" onclick="alert('View full activity log')">View All →</span>
+        </div>
+        <div class="section-body" id="activityContainer"></div>
+      </section>
+    </div>
+
+    <!-- ─── Bottom Grid Row 2: System Health | Broadcast Status ─── -->
+    <div class="bottom-grid-2">
+      <section class="section">
+        <div class="section-header">
+          <h3>System Health</h3>
+          <span class="section-action" onclick="alert('Refresh health data')">Refresh</span>
+        </div>
+        <div class="section-body">
+          <div class="health-grid" id="healthContainer"></div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-header">
+          <h3>Broadcast Status</h3>
+          <span class="section-action" onclick="alert('Create broadcast')">+ New Broadcast</span>
+        </div>
+        <div class="section-body" id="broadcastContainer"></div>
+      </section>
+    </div>
+
+  </div>
+</main>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   MOCK DATA
+   ══════════════════════════════════════════════════════════════════ */
+const MOCK = {
+  kpi: [
+    { id: 'total', label: 'Total Gateways', value: '24', icon: '⊞', iconClass: 'total', trend: '+2', trendDir: 'up' },
+    { id: 'online', label: 'Online', value: '18', icon: '●', iconClass: 'online', trend: '75%', trendDir: 'up' },
+    { id: 'offline', label: 'Offline', value: '2', icon: '●', iconClass: 'offline', trend: '-1', trendDir: 'down' },
+    { id: 'warning', label: 'Warning', value: '3', icon: '▲', iconClass: 'warning', trend: '+1', trendDir: 'up' },
+    { id: 'critical', label: 'Critical', value: '1', icon: '!', iconClass: 'critical', trend: '0', trendDir: '' },
+    { id: 'broadcasts', label: 'Active Broadcasts', value: '3', icon: '◉', iconClass: 'broadcast', trend: '2 plants', trendDir: 'up' },
+  ],
+
+  gateways: [
+    { id: 'ULTRON-IND-001', plant: 'Sunshine HQ', location: 'Indore, MP', status: 'online', version: '1.0.67', cpu: 42, ram: 61, disk: 33, internet: true, lastBeat: '12s ago' },
+    { id: 'ULTRON-IND-002', plant: 'Neeraj Industries', location: 'Pithampur, MP', status: 'online', version: '1.0.66', cpu: 28, ram: 44, disk: 55, internet: true, lastBeat: '45s ago' },
+    { id: 'ULTRON-IND-003', plant: 'Beta Chemicals', location: 'Dewas, MP', status: 'warning', version: '1.0.67', cpu: 94, ram: 88, disk: 76, internet: true, lastBeat: '2m ago' },
+    { id: 'ULTRON-IND-004', plant: 'Kamal Mills', location: 'Ujjain, MP', status: 'online', version: '1.0.67', cpu: 34, ram: 52, disk: 41, internet: true, lastBeat: '8s ago' },
+    { id: 'ULTRON-IND-005', plant: 'Greenfield Ltd', location: 'Dhar, MP', status: 'offline', version: '1.0.65', cpu: 0, ram: 0, disk: 0, internet: false, lastBeat: '4h 19m ago' },
+    { id: 'ULTRON-IND-006', plant: 'Shiva Industries', location: 'Ratlam, MP', status: 'online', version: '1.0.67', cpu: 51, ram: 72, disk: 29, internet: true, lastBeat: '22s ago' },
+    { id: 'ULTRON-IND-007', plant: 'Ancient Corp', location: 'Mandsaur, MP', status: 'critical', version: '1.0.64', cpu: 0, ram: 0, disk: 97, internet: false, lastBeat: '2d ago' },
+    { id: 'ULTRON-IND-008', plant: 'Surya Engineers', location: 'Indore, MP', status: 'online', version: '1.0.66', cpu: 18, ram: 35, disk: 22, internet: true, lastBeat: '1m ago' },
+  ],
+
+  offline: [
+    { id: 'ULTRON-IND-005', plant: 'Greenfield Ltd', location: 'Dhar, MP', duration: '4h 19m', lastVersion: '1.0.65' },
+    { id: 'ULTRON-IND-009', plant: 'Ganga Chem', location: 'Bhopal, MP', duration: '1h 5m', lastVersion: '1.0.66' },
+    { id: 'ULTRON-IND-010', plant: 'Malwa Industries', location: 'Ujjain, MP', duration: '35m', lastVersion: '1.0.67' },
+    { id: 'ULTRON-IND-011', plant: 'Narmada Corp', location: 'Jabalpur, MP', duration: '12m', lastVersion: '1.0.66' },
+    { id: 'ULTRON-IND-012', plant: 'Vindhya Pharma', location: 'Mhow, MP', duration: '5m', lastVersion: '1.0.67' },
+  ],
+
+  notifications: [
+    { id: 1, type: 'critical', title: 'ULTRON-IND-007 disk 97%', message: 'Ancient Corp — disk usage critical. Possible data loss risk.', time: '2h ago' },
+    { id: 2, type: 'critical', title: 'ULTRON-IND-003 CPU spike', message: 'Beta Chemicals — CPU at 94% for 15+ minutes.', time: '10m ago' },
+    { id: 3, type: 'warning', title: 'AMC expiring: Kamal Mills', message: 'AMC expires in 16 days (July 20, 2026).', time: '1d ago' },
+    { id: 4, type: 'warning', title: 'ULTRON-IND-005 offline', message: 'No heartbeat for 4+ hours. Check connectivity.', time: '4h ago' },
+    { id: 5, type: 'info', title: 'v1.0.68 available', message: 'New firmware version ready for 12 gateways.', time: '2d ago' },
+  ],
+
+  activities: [
+    { type: 'heartbeat', gateway: 'ULTRON-IND-001', message: 'Heartbeat received — online', time: '12s ago', severity: 'success' },
+    { type: 'offline', gateway: 'ULTRON-IND-009', message: 'Gateway went offline', time: '5m ago', severity: 'danger' },
+    { type: 'command', gateway: 'ULTRON-IND-003', message: "Command 'restart_polling' dispatched", time: '8m ago', severity: 'info' },
+    { type: 'warning', gateway: 'ULTRON-IND-003', message: 'CPU > 90% threshold crossed', time: '10m ago', severity: 'warning' },
+    { type: 'broadcast', gateway: null, message: "Broadcast 'Scheduled maintenance' sent to all", time: '25m ago', severity: 'info' },
+    { type: 'heartbeat', gateway: 'ULTRON-IND-004', message: 'Heartbeat received — online', time: '1m ago', severity: 'success' },
+  ],
+
+  health: [
+    { label: 'Uptime', value: '34d 12h', sub: 'Since Jun 1, 2026', status: 'good' },
+    { label: 'DB Pool', value: '3 / 10', sub: 'Active / Max connections', status: 'good' },
+    { label: 'Requests/hr', value: '3,420', sub: 'Last 60 minutes', status: 'good' },
+    { label: 'Active Gateways', value: '18', sub: 'Heartbeats in last 90s', status: 'good' },
+    { label: 'Server CPU', value: '23%', sub: 'Raspberry Pi 5', status: 'good' },
+    { label: 'Server RAM', value: '42%', sub: '4.2 / 8 GB used', status: 'good' },
+  ],
+
+  broadcasts: [
+    { message: 'Scheduled maintenance tonight 2-4 AM', severity: 'info', time: '25m ago', target: 'All gateways (24)', expires: '5h 35m' },
+    { message: 'Firmware v1.0.68 rollout starting', severity: 'warning', time: '2h ago', target: 'Beta group (4)', expires: '22h' },
+    { message: 'Server downtime confirmed', severity: 'critical', time: '30m ago', target: 'All gateways (24)', expires: '1h 30m' },
+  ],
+
+  versions: [
+    { version: '1.0.67', count: 12, pct: 50, color: 'primary' },
+    { version: '1.0.66', count: 6, pct: 25, color: 'success' },
+    { version: '1.0.65', count: 4, pct: 16.7, color: 'warning' },
+    { version: '1.0.64', count: 1, pct: 4.2, color: 'danger' },
+    { version: 'Unknown', count: 1, pct: 4.2, color: 'neutral' },
+  ],
+};
+
+/* ══════════════════════════════════════════════════════════════════
+   REUSABLE COMPONENTS
+   ══════════════════════════════════════════════════════════════════ */
+
+function Badge(status) {
+  const cls = 'badge badge--' + status;
+  return '<span class="' + cls + '"><span class="dot"></span>' + status + '</span>';
+}
+
+function KpiCard(d) {
+  const trendHtml = d.trend ? '<span class="kpi-trend ' + d.trendDir + '">' + (d.trendDir === 'up' ? '↑' : d.trendDir === 'down' ? '↓' : '') + ' ' + d.trend + '</span>' : '';
+  return '<div class="kpi-card">' +
+    '<div class="kpi-top"><span class="kpi-label">' + d.label + '</span><span class="kpi-icon ' + d.iconClass + '">' + d.icon + '</span></div>' +
+    '<div class="kpi-value">' + d.value + '</div>' +
+    trendHtml +
+  '</div>';
+}
+
+function Table(headers, rows, rowMap) {
+  let h = headers.map(h => '<th>' + h + '</th>').join('');
+  let r = rows.map(row => '<tr>' + rowMap(row) + '</tr>').join('');
+  return '<table><thead><tr>' + h + '</tr></thead><tbody>' + r + '</tbody></table>';
+}
+
+function ListItem(d, iconHtml, title, sub, meta) {
+  return '<div class="list-item">' +
+    (iconHtml || '') +
+    '<div class="list-content"><div class="list-title">' + title + '</div>' + (sub ? '<div class="list-sub">' + sub + '</div>' : '') + '</div>' +
+    (meta ? '<div class="list-meta">' + meta + '</div>' : '') +
+  '</div>';
+}
+
+function TimelineItem(dotColor, title, sub) {
+  return '<div class="timeline-item">' +
+    '<div class="tl-line"><div class="tl-dot" style="background:' + dotColor + '"></div><div class="tl-bar"></div></div>' +
+    '<div class="tl-content"><div class="tl-title">' + title + '</div>' + (sub ? '<div class="tl-sub">' + sub + '</div>' : '') + '</div>' +
+  '</div>';
+}
+
+function HealthItem(d) {
+  const dot = d.status === 'good' ? '<span class="dot" style="background:var(--success);width:6px;height:6px;border-radius:50%;display:inline-block"></span>' : '';
+  return '<div class="health-item">' +
+    '<div class="hl-label">' + d.label + '</div>' +
+    '<div class="hl-value">' + d.value + '</div>' +
+    '<div class="hl-sub">' + d.sub + '</div>' +
+    '<div class="hl-status">' + dot + '</div>' +
+  '</div>';
+}
+
+function BroadcastItem(d) {
+  return '<div class="bc-item bc--' + d.severity + '">' +
+    '<div class="bc-msg">' + d.message + '</div>' +
+    '<div class="bc-meta"><span>' + d.severity.toUpperCase() + '</span><span>' + d.target + '</span><span>Expires: ' + d.expires + '</span></div>' +
+  '</div>';
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   RENDER FUNCTIONS
+   ══════════════════════════════════════════════════════════════════ */
+
+function renderKpi() {
+  document.getElementById('kpiGrid').innerHTML = MOCK.kpi.map(KpiCard).join('');
+}
+
+function renderFleetTable() {
+  const headers = ['Gateway', 'Plant', 'Location', 'Status', 'Version', 'CPU', 'RAM', 'Disk', 'Internet', 'Last Heartbeat'];
+  const rowMap = g => {
+    const s = g.status;
+    const internetHtml = g.internet ? '<span style="color:var(--success)">Yes</span>' : '<span style="color:var(--danger)">No</span>';
+    return '<td><a href="#" style="font-weight:500">' + g.id + '</a></td>' +
+      '<td>' + g.plant + '</td>' +
+      '<td>' + g.location + '</td>' +
+      '<td>' + Badge(s) + '</td>' +
+      '<td>' + g.version + '</td>' +
+      '<td>' + (g.cpu ? g.cpu + '%' : '-') + '</td>' +
+      '<td>' + (g.ram ? g.ram + '%' : '-') + '</td>' +
+      '<td>' + (g.disk ? g.disk + '%' : '-') + '</td>' +
+      '<td>' + internetHtml + '</td>' +
+      '<td>' + g.lastBeat + '</td>';
+  };
+  document.getElementById('fleetTableContainer').innerHTML = Table(headers, MOCK.gateways, rowMap);
+}
+
+function renderOffline() {
+  const items = MOCK.offline.map(g =>
+    ListItem(g,
+      '<div class="list-icon" style="background:var(--danger-bg);color:var(--danger)">●</div>',
+      g.id + ' — ' + g.plant,
+      g.location + ' · v' + g.lastVersion,
+      g.duration
+    )
+  ).join('');
+  document.getElementById('recentOfflineContainer').innerHTML = items || '<div style="padding:14px 18px;color:var(--text-muted);font-size:12px">No offline gateways</div>';
+}
+
+function renderNotifications() {
+  const items = MOCK.notifications.map(n =>
+    ListItem(n,
+      '<div class="list-icon" style="background:var(--' + n.type + '-bg);color:var(--' + (n.type === 'critical' ? 'danger' : n.type) + ')">' +
+        (n.type === 'critical' ? '!' : n.type === 'warning' ? '▲' : 'i') + '</div>',
+      n.title,
+      n.message,
+      n.time
+    )
+  ).join('');
+  document.getElementById('notificationsContainer').innerHTML = items;
+  document.getElementById('notifCount').textContent = '(' + MOCK.notifications.filter(n => n.type === 'critical' || n.type === 'warning').length + ' unread)';
+}
+
+function renderActivity() {
+  const sevColors = { success: 'var(--success)', danger: 'var(--danger)', warning: 'var(--warning)', info: 'var(--info)' };
+  const items = MOCK.activities.map(a =>
+    TimelineItem(sevColors[a.severity] || 'var(--text-muted)',
+      a.message,
+      a.gateway ? a.gateway + ' · ' + a.time : a.time
+    )
+  ).join('');
+  document.getElementById('activityContainer').innerHTML = '<div class="timeline">' + items + '</div>';
+}
+
+function renderHealth() {
+  document.getElementById('healthContainer').innerHTML = MOCK.health.map(HealthItem).join('');
+}
+
+function renderBroadcasts() {
+  const items = MOCK.broadcasts.map(BroadcastItem).join('');
+  document.getElementById('broadcastContainer').innerHTML = '<div class="broadcast-list">' + (items || '<div style="padding:14px 18px;color:var(--text-muted);font-size:12px">No active broadcasts</div>') + '</div>';
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SEARCH
+   ══════════════════════════════════════════════════════════════════ */
+function onSearch(val) {
+  const filtered = MOCK.gateways.filter(g =>
+    g.id.toLowerCase().includes(val.toLowerCase()) ||
+    g.plant.toLowerCase().includes(val.toLowerCase()) ||
+    g.location.toLowerCase().includes(val.toLowerCase())
+  );
+  if (val.trim() === '') {
+    renderFleetTable();
+    return;
+  }
+  const headers = ['Gateway', 'Plant', 'Location', 'Status', 'Version', 'CPU', 'RAM', 'Disk', 'Internet', 'Last Heartbeat'];
+  const rowMap = g => {
+    const s = g.status;
+    const internetHtml = g.internet ? '<span style="color:var(--success)">Yes</span>' : '<span style="color:var(--danger)">No</span>';
+    return '<td><a href="#" style="font-weight:500">' + g.id + '</a></td>' +
+      '<td>' + g.plant + '</td>' +
+      '<td>' + g.location + '</td>' +
+      '<td>' + Badge(s) + '</td>' +
+      '<td>' + g.version + '</td>' +
+      '<td>' + (g.cpu ? g.cpu + '%' : '-') + '</td>' +
+      '<td>' + (g.ram ? g.ram + '%' : '-') + '</td>' +
+      '<td>' + (g.disk ? g.disk + '%' : '-') + '</td>' +
+      '<td>' + internetHtml + '</td>' +
+      '<td>' + g.lastBeat + '</td>';
+  };
+  document.getElementById('fleetTableContainer').innerHTML = Table(headers, filtered, rowMap);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SIDEBAR TOGGLE
+   ══════════════════════════════════════════════════════════════════ */
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').classList.toggle('active');
+}
+document.getElementById('sidebarOverlay').addEventListener('click', toggleSidebar);
+
+/* ══════════════════════════════════════════════════════════════════
+   INIT
+   ══════════════════════════════════════════════════════════════════ */
+renderKpi();
+renderFleetTable();
+renderOffline();
+renderNotifications();
+renderActivity();
+renderHealth();
+renderBroadcasts();
+</script>
+</body>
+</html>
