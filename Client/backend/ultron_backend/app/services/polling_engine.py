@@ -202,14 +202,6 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
                     for p in param_dicts
                 ]
 
-        elif protocol == "opc_ua":
-            # OPC-UA not yet implemented — mark all as E
-            log.warning(f"Device {device.id} ({device.name}): OPC-UA protocol not yet implemented")
-            readings = [
-                {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "E"}
-                for p in param_dicts
-            ]
-
         else:
             log.warning(f"Unknown protocol '{protocol}' for device {device.id}")
             return

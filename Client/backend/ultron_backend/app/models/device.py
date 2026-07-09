@@ -23,7 +23,6 @@ class DeviceProtocol(str, enum.Enum):
     tcp_custom = "tcp_custom"
     udp_custom = "udp_custom"
     csv = "csv"
-    opc_ua = "opc_ua"
 
 
 class Device(Base):

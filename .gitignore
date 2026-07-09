@@ -49,4 +49,10 @@ out.txt
 # Runtime directories (created on first run)
 backups/
 reports/
-uploads/
+uploads/
+client_lock.json
+
+# Frontend boilerplate assets
+react.svg
+vite.svg
+hero.png
