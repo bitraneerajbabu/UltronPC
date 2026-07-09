@@ -188,18 +188,7 @@ function App() {
     if (showToast) {
       showToast('Performing hard refresh...', 'info');
     }
-    // Clear browser caches if available
-    if (window.caches) {
-      window.caches.keys().then((names) => {
-        names.forEach((name) => {
-          window.caches.delete(name);
-        });
-      });
-    }
-    // Force reload bypassing cache after a tiny delay to show the toast
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
+    setTimeout(() => window.location.reload(), 500);
   };
 
   // Login form state

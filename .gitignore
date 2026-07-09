@@ -29,6 +29,10 @@ github_token.txt
 secret.key
 secret.salt
 
+# Alembic migrations (unused — schema evolves in database.py)
+alembic/
+alembic.ini
+
 # Runtime output logs
 ultron_stdout.txt
 ultron_stderr.txt
@@ -40,4 +44,9 @@ out.txt
 *.appdata
 
 # Token blacklist (persisted across restarts)
-.token_blacklist
+.token_blacklist
+
+# Runtime directories (created on first run)
+backups/
+reports/
+uploads/
