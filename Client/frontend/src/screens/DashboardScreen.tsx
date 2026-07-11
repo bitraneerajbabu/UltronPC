@@ -226,7 +226,10 @@ export const DashboardScreen = () => {
   const [isTrendsModalOpen, setIsTrendsModalOpen] = useState(false);
   const [avg15Mins, setAvg15Mins] = useState({});
   const [networkInfo, setNetworkInfo] = useState<{ lan_ip: string; internet_connected: boolean; hostname: string } | null>(null);
-  const [dismissedBroadcast, setDismissedBroadcast] = useState<number | null>(null);
+  const [dismissedBroadcasts, setDismissedBroadcasts] = useState<Set<number>>(() => {
+    const stored = localStorage.getItem('ultron_dismissed_broadcasts');
+    return new Set<number>(stored ? JSON.parse(stored) : []);
+  });
 
   // Poll latest telemetry every 5s, KPIs are pushed via WebSocket + cached on backend
   useEffect(() => {
@@ -596,7 +599,7 @@ export const DashboardScreen = () => {
     assignedParams.forEach(p => {
       const device = devices.find(d => d.id == p.device_id);
       const station = stations.find(s => s.id == device?.station_id);
-      const key = station?.name || p.description || 'General';
+      const key = station?.name || p.description || '—';
       if (!grouped[key]) {
         grouped[key] = [];
       }
@@ -794,8 +797,8 @@ export const DashboardScreen = () => {
 
       <AlarmsInspectorModal isOpen={showAlarmsModal} onClose={() => setShowAlarmsModal(false)} />
 
-      {broadcasts && broadcasts.length > 0 && (() => {
-        const visible = broadcasts.find((b: any) => b.id !== dismissedBroadcast);
+      {broadcasts && broadcasts.length > 0 && localStorage.getItem('ultron_broadcast_enabled') !== 'false' && (() => {
+        const visible = (broadcasts as any[]).find((b: any) => !dismissedBroadcasts.has(b.id));
         if (!visible) return null;
         const sev = visible.severity || 'info';
         const colors: Record<string,any> = {
@@ -804,6 +807,12 @@ export const DashboardScreen = () => {
           info:     { bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ️',  title: '#1e40af', text: '#1e3a5f', label: 'Broadcast Message' },
         };
         const c = colors[sev] || colors.info;
+        const dismiss = () => {
+          const next = new Set(dismissedBroadcasts);
+          next.add(visible.id);
+          setDismissedBroadcasts(next);
+          localStorage.setItem('ultron_dismissed_broadcasts', JSON.stringify([...next]));
+        };
         return (
           <div style={{ position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999, maxWidth: '400px', padding: '16px 20px', background: c.bg, border: `1px solid ${c.border}`, borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
             <span style={{ fontSize: '24px', flexShrink: 0 }}>{c.icon}</span>
@@ -811,7 +820,7 @@ export const DashboardScreen = () => {
               <div style={{ fontSize: '13px', fontWeight: '700', color: c.title, marginBottom: '4px' }}>{c.label}</div>
               <div style={{ fontSize: '12px', color: c.text }}>{visible.message}</div>
             </div>
-            <button onClick={() => setDismissedBroadcast(visible.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: c.title, padding: '0 0 0 8px', lineHeight: 1 }}>×</button>
+            <button onClick={dismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: c.title, padding: '0 0 0 8px', lineHeight: 1 }}>×</button>
           </div>
         );
       })()}

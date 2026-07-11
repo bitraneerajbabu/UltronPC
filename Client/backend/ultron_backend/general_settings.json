@@ -1,0 +1,11 @@
+{
+  "retentionDays": 90,
+  "timezone": "Asia/Kolkata",
+  "pollingInterval": 60,
+  "alarmCheckInterval": 30,
+  "emailEnabled": false,
+  "smtpHost": "",
+  "smtpPort": 587,
+  "smtpUser": "",
+  "alertRecipients": ""
+}

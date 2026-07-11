@@ -1,4 +1,4 @@
-import React, { useContext, useState, useMemo } from 'react';
+import React, { useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext';
 import { T } from '../theme';
 
@@ -80,42 +80,16 @@ export const DevicesScreen = () => {
   const [activeProtoTab, setActiveProtoTab] = useState('all');
   const [modalTab, setModalTab] = useState('source');
 
-  const filteredParams = useMemo(() => {
-    if (activeProtoTab === 'all') return parameters;
-    return parameters.filter(p => {
-      const d = devices.find(dd => dd.id == p.device_id);
-      const proto = d?.protocol || '';
-      switch (activeProtoTab) {
-        case 'tcp': return proto === 'modbus_tcp' || proto === 'tcp_custom';
-        case 'rs485': return proto === 'modbus_rtu';
-        case 'udp': return proto === 'udp_custom';
-        case 'csv': return proto === 'csv';
-        default: return true;
-      }
-    });
-  }, [activeProtoTab, parameters, devices]);
+  const filteredParams = parameters;
 
   const protoTabs = [
     { key: 'all', label: 'All' },
-    { key: 'tcp', label: 'TCP' },
-    { key: 'rs485', label: 'RS485' },
-    { key: 'udp', label: 'UDP' },
-    { key: 'csv', label: 'CSV / Excel' },
   ];
 
-  const protoCounts = useMemo(() => {
-    const count = (pred) => parameters.filter(p => { const d = devices.find(dd => dd.id == p.device_id); return pred(d?.protocol || ''); }).length;
-    return {
-      all: parameters.length,
-      tcp:  count(pr => pr === 'modbus_tcp' || pr === 'tcp_custom'),
-      rs485: count(pr => pr === 'modbus_rtu'),
-      udp:  count(pr => pr === 'udp_custom'),
-      csv:  count(pr => pr === 'csv'),
-    };
-  }, [parameters, devices]);
+  const allCount = parameters.length;
 
   const protoFromTab = (tab: string) => {
-    return tab === 'all' ? 'modbus_tcp' : tab === 'tcp' ? 'modbus_tcp' : tab === 'rs485' ? 'modbus_rtu' : tab === 'udp' ? 'udp_custom' : 'csv';
+    return tab === 'udp' ? 'udp_custom' : 'modbus_tcp';
   };
 
   const openNew = () => {
@@ -146,7 +120,7 @@ export const DevicesScreen = () => {
       csv_filename_pattern: dev?.csv_filename_pattern || '{YYYYMMDD}.csv',
       csv_delimiter: dev?.csv_delimiter || ',',
       csv_timestamp_col: dev?.csv_timestamp_col ?? 0,
-      station_name: (dev?.station_id ? (stations.find(s => s.id == dev.station_id)?.name || '') : '') || p.description || '',
+      station_name: dev?.station_id ? (stations.find(s => s.id == dev.station_id)?.name || '') : '',
       serial_port: dev?.serial_port || '',
       baud_rate: dev?.baud_rate || 9600,
       data_bits: dev?.data_bits || 8,
@@ -316,7 +290,7 @@ export const DevicesScreen = () => {
               marginLeft: '6px', fontSize: '10px', fontWeight: '700',
               background: activeProtoTab === tab.key ? '#f0fdfa' : '#f1f5f9',
               color: '#64748b', padding: '1px 7px', borderRadius: '99px',
-            }}>{protoCounts[tab.key]}</span>
+            }}>{allCount}</span>
           </button>
         ))}
       </div>
@@ -374,9 +348,7 @@ export const DevicesScreen = () => {
                 })}
                 {filteredParams.length === 0 && (
                   <tr><td colSpan={10} style={{ padding: '48px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
-                    {parameters.length === 0
-                      ? 'No rules configured. Click Add Rule to get started.'
-                      : 'No ' + (activeProtoTab === 'tcp' ? 'TCP' : activeProtoTab === 'rs485' ? 'RS485' : activeProtoTab === 'udp' ? 'UDP' : 'CSV/Excel') + ' rules. Change the filter or add a new rule.'}
+                    No rules configured. Click Add Rule to get started.
                   </td></tr>
                 )}
               </tbody>

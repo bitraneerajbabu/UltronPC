@@ -55,4 +55,6 @@ client_lock.json
 # Frontend boilerplate assets
 react.svg
 vite.svg
-hero.png
+hero.png
+# Agent workspace.agents/
+

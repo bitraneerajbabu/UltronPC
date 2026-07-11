@@ -318,7 +318,7 @@ export const ReportsScreen = () => {
         <div className="section-title">Report Filters</div>
         <div className="filter-grid">
           <div className="form-group">
-            <label className="form-label">Station name (Device & Config)</label>
+            <label className="form-label">Station Name</label>
             <select className="form-select" value={stationId} onChange={e => setStationId(e.target.value)}>
               {allStations.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
             </select>

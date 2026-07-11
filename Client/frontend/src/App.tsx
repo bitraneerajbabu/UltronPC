@@ -341,10 +341,9 @@ function App() {
             onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
           />
         </div>
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)', borderTop: '1px solid #e2e8f0', padding: '6px 20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', fontSize: '11px', fontWeight: '600', color: '#64748b', flexWrap: 'wrap', zIndex: 10 }}>
-              <span>&copy; 2026 <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#14b8a6', textDecoration: 'none' }}>Neeraj</a></span>
-          <span>Support: 7659091468, 9133377852, 853</span>
-          <span>Sales: 8801231166, 9133377852</span>
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)', borderTop: '1px solid #e2e8f0', padding: '6px 20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', fontSize: '11px', fontWeight: '600', color: '#64748b', flexWrap: 'wrap', zIndex: 10 }}>
+              <span>&copy; 2026 All Rights Reserved to <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#14b8a6', textDecoration: 'none' }}>Sunshinetechnologies</a></span>
+          <span>Support: 7659091468, 9133377852, 853 &amp; Sales: 8801231166, 9133377854</span>
         </div>
         <div id="toastContainer"></div>
       </div>
@@ -502,19 +501,15 @@ function App() {
             textTransform: 'uppercase',
             lineHeight: 1.4
           }}>
-            <div>All &copy; 2026 rights reserved
-              <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#14b8a6', marginLeft: '4px', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => (e.target as HTMLElement).style.color = '#0f766e'} onMouseOut={e => (e.target as HTMLElement).style.color = '#14b8a6'}>
-                All Rights Reserved to Neeraj
-              </a>
-            </div>
-            <div style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'none', letterSpacing: '0.02em' }}>
-              Support: 7659091468, 9133377852, 853 &nbsp;|&nbsp; Sales: 8801231166, 9133377852
+            <div style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'none', letterSpacing: '0.02em', lineHeight: 1.6 }}>
+              All &copy; 2026 rights reserved | All Rights Reserved to <a href="https://www.sunshinetechno.com" target="_blank" rel="noopener noreferrer" style={{ color: '#0f766e', textDecoration: 'underline' }}>Sunshinetechnologies</a>
+              <br />Support: 7659091468, 9133377852, 853 &amp; Sales: 8801231166, 9133377854
             </div>
           </div>
           <div className="marquee-container" style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
             <div style={{ width: '100%', overflow: 'hidden' }}>
               <div className="marquee-content" style={{ animationDuration: broadcasts && broadcasts.length > 0 ? '25s' : '35s' }}>
-                {broadcasts && broadcasts.length > 0 ? (
+                {broadcasts && broadcasts.length > 0 && localStorage.getItem('ultron_broadcast_enabled') !== 'false' ? (
                   broadcasts.map((b, i) => (
                     <span key={b.id} style={{ color: b.severity === 'critical' ? '#ef4444' : b.severity === 'warn' ? '#f59e0b' : 'inherit' }}>
                       {b.message}{i < broadcasts.length - 1 ? '  ◆  ' : ''}

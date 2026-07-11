@@ -613,7 +613,8 @@ export const AppProvider = ({ children }) => {
     if (!res.ok) { showToast(await extractApiError(res, 'Failed to create device.'), 'error'); return false; }
     const newDevice = await res.json();
     setDevices(prev => [...prev, newDevice]);
-    showToast('Device added successfully.'); return newDevice;
+    showToast('Device added successfully.');
+    loadAllData(); return newDevice;
   };
 
   const editDevice = async (id, payload) => {

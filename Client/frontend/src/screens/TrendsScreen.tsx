@@ -283,7 +283,7 @@ export const TrendsScreen = () => {
         <div className="section-title">Trend Analysis</div>
         <div className="filter-grid">
           <div className="form-group">
-            <label className="form-label">Station name (Device & Config)</label>
+            <label className="form-label">Station Name</label>
             <select className="form-select" value={stationId} onChange={e => setStationId(e.target.value)}>
               {allStations.map(st => <option value={st.id} key={st.id}>{st.name}</option>)}
             </select>

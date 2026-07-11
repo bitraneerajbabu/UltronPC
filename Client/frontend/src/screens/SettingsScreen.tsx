@@ -15,6 +15,7 @@ export const SettingsScreen = () => {
   const [fwProgress, setFwProgress] = useState(null);
   const [fwChecking, setFwChecking] = useState(false);
   const [customUrl, setCustomUrl] = useState('');
+  const [broadcastEnabled, setBroadcastEnabled] = useState(() => localStorage.getItem('ultron_broadcast_enabled') !== 'false');
 
   const [formData, setFormData] = useState({
     plantName: '', plantAddress: '', plantLogo: '',
@@ -382,6 +383,21 @@ export const SettingsScreen = () => {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
 
           <div style={sectionTitleS}>Plant Identification</div>
+
+          <div style={{ gridColumn: 'span 3', display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 0' }}>
+            <div style={labelS}>Broadcast Messages</div>
+            <button onClick={() => { const v = !broadcastEnabled; setBroadcastEnabled(v); localStorage.setItem('ultron_broadcast_enabled', String(v)); }} style={{
+              width: '44px', height: '24px', borderRadius: '12px', border: 'none', cursor: 'pointer',
+              background: broadcastEnabled ? '#0f766e' : '#cbd5e1', position: 'relative', transition: 'background 0.2s',
+            }}>
+              <span style={{
+                position: 'absolute', top: '2px', left: broadcastEnabled ? '22px' : '2px',
+                width: '20px', height: '20px', borderRadius: '50%', background: '#fff',
+                transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+              }} />
+            </button>
+            <span style={{ fontSize: '12px', color: T.textMuted }}>{broadcastEnabled ? 'Enabled' : 'Disabled'}</span>
+          </div>
 
           <div style={{ gridColumn: 'span 2' }}>
             <div style={labelS}>Plant Name</div>
