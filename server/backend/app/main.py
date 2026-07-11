@@ -1,10 +1,8 @@
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-import os
 import time
 from collections import defaultdict
 from app.core.config import settings
@@ -274,29 +272,6 @@ app.include_router(quality.router, prefix=f"{settings.API_V1_STR}/quality", tags
 app.include_router(alarms.router, prefix=f"{settings.API_V1_STR}/alarms", tags=["alarms"])
 app.include_router(cpcb.router, prefix=f"{settings.API_V1_STR}/cpcb", tags=["cpcb"])
 app.include_router(ota.router, prefix=f"{settings.API_V1_STR}/ota", tags=["ota"])
-
-# Serve frontend build if it exists
-_base = os.path.dirname(__file__)
-frontend_path = os.path.abspath(os.path.join(_base, "..", "..", "frontend", "dist"))
-if not os.path.exists(frontend_path):
-    frontend_path = os.path.abspath(os.path.join(_base, "..", "frontend", "dist"))
-if os.path.exists(frontend_path):
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_path, "assets")), name="assets")
-    
-    @app.get("/")
-    async def serve_frontend_root():
-        return FileResponse(os.path.join(frontend_path, "index.html"))
-        
-    @app.get("/{full_path:path}")
-    async def serve_frontend(full_path: str):
-        # Allow API requests to pass through (this catch-all must be defined AFTER API routers)
-        if full_path.startswith("api/"):
-            return JSONResponse({"detail": "Not Found"}, status_code=404)
-            
-        file_path = os.path.join(frontend_path, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(frontend_path, "index.html"))
 
 # Background heartbeat monitor loop for server
 import asyncio

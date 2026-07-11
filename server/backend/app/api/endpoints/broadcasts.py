@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -58,7 +59,7 @@ def create_broadcast(payload: BroadcastCreate, db: Session = Depends(get_db), au
     return bcast
 
 @router.put("/{broadcast_id}", response_model=BroadcastResponse)
-def update_broadcast(broadcast_id: int, payload: BroadcastCreate, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
+def update_broadcast(broadcast_id: uuid.UUID, payload: BroadcastCreate, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
     if not auth.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     bcast = db.query(Broadcast).filter(Broadcast.id == broadcast_id).first()
@@ -78,7 +79,7 @@ def update_broadcast(broadcast_id: int, payload: BroadcastCreate, db: Session = 
     return bcast
 
 @router.delete("/{broadcast_id}")
-def delete_broadcast(broadcast_id: int, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
+def delete_broadcast(broadcast_id: uuid.UUID, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
     if not auth.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     bcast = db.query(Broadcast).filter(Broadcast.id == broadcast_id).first()
@@ -89,7 +90,7 @@ def delete_broadcast(broadcast_id: int, db: Session = Depends(get_db), auth: Aut
     return {"status": "deleted", "id": broadcast_id}
 
 @router.put("/{broadcast_id}/toggle")
-def toggle_broadcast(broadcast_id: int, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
+def toggle_broadcast(broadcast_id: uuid.UUID, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
     if not auth.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     bcast = db.query(Broadcast).filter(Broadcast.id == broadcast_id).first()

@@ -122,12 +122,6 @@ hidden = [
     # python-dotenv
     "dotenv",
     # Rate limiting (slowapi) & dependencies
-    "slowapi",
-    "slowapi.util",
-    "slowapi.errors",
-    "limits",
-    "limits.storage",
-    "limits.strategies",
     "packaging",
     "deprecated",
     # httpx (async HTTP client for license, poll, push, rajapi)

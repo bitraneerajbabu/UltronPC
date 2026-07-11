@@ -13,18 +13,6 @@ const formatCurrentTime = () => {
   return `${p(date.getDate())}-${p(date.getMonth()+1)}-${date.getFullYear()} ${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
 };
 
-const StackIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: T.primaryLight }}>
-    <path d="M2 22h20" />
-    <path d="M17 22l-2-12h-6l-2 12" />
-    <path d="M11 10h2" />
-    <path d="M10 14h4" />
-    <path d="M9 18h6" />
-    <path d="M12 7c.2-.8.8-.8 1 0s.8.8 1 0" />
-    <path d="M10 5c.2-.8.8-.8 1 0s.8.8 1 0" />
-  </svg>
-);
-
 const StationIcon = () => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
     <path d="M22 22H2" />
@@ -62,35 +50,6 @@ const NetworkIcon = () => (
     <line x1="6" y1="18" x2="6.01" y2="18" />
   </svg>
 );
-
-const getTimeAgo = (timestampStr, currentTimeStr) => {
-  if (!timestampStr || timestampStr === '—') return '—';
-  try {
-    const parts = timestampStr.split(' ');
-    const dateParts = parts[0].split('-');
-    const timeParts = parts[1].split(':');
-    const tsDate = new Date(
-      parseInt(dateParts[2]),
-      parseInt(dateParts[1]) - 1,
-      parseInt(dateParts[0]),
-      parseInt(timeParts[0]),
-      parseInt(timeParts[1]),
-      parseInt(timeParts[2])
-    );
-    const diffMs = Date.now() - tsDate.getTime();
-    if (isNaN(diffMs) || diffMs < 0) return 'Just now';
-    const diffSec = Math.floor(diffMs / 1000);
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `${diffMin} minutes ago`;
-    const diffHour = Math.floor(diffMin / 60);
-    if (diffHour < 24) return `${diffHour} hours ago`;
-    const diffDay = Math.floor(diffHour / 24);
-    return `${diffDay} days ago`;
-  } catch (e) {
-    return '—';
-  }
-};
 
 // Isolated and optimized Parameter Card component
 interface ParameterCardProps {
@@ -630,46 +589,6 @@ export const DashboardScreen = () => {
     showToast('PDF print dialog opened.');
   };
 
-  const exportCSV = () => {
-    if (!selectedParam || !dataPointsRef.current.datasets[selectedParam]) return;
-    const rows = [['Timestamp', 'Parameter', 'Value', 'Unit']];
-    const currentParamObj = parameters.find(p => p.tag_name === selectedParam) || {};
-    const unit = currentParamObj.unit || '';
-    
-    dataPointsRef.current.labels.forEach((ts, idx) => {
-      const val = dataPointsRef.current.datasets[selectedParam][idx];
-      rows.push([ts, selectedParam, val, unit]);
-    });
-
-    const csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `LiveTrend_${selectedParam}_${Date.now()}.csv`;
-    a.click();
-    showToast('Live trend telemetry exported to CSV.');
-  };
-
-  const exportExcel = () => {
-    if (!selectedParam || !dataPointsRef.current.datasets[selectedParam]) return;
-    const rows = [['Timestamp', 'Parameter', 'Value', 'Unit']];
-    const currentParamObj = parameters.find(p => p.tag_name === selectedParam) || {};
-    const unit = currentParamObj.unit || '';
-
-    dataPointsRef.current.labels.forEach((ts, idx) => {
-      const val = dataPointsRef.current.datasets[selectedParam][idx];
-      rows.push([ts, selectedParam, val !== undefined ? val : '', unit]);
-    });
-
-    const tsvContent = rows.map(r => r.join('\t')).join('\n');
-    const blob = new Blob([tsvContent], { type: 'application/vnd.ms-excel' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `LiveTrend_${selectedParam}_${Date.now()}.xls`;
-    a.click();
-    showToast('Live trend telemetry exported to Excel.');
-  };
-
   // Performance memoizations
   const groupedBySensor = useMemo(() => {
     const grouped = {};
@@ -698,149 +617,12 @@ export const DashboardScreen = () => {
       const now = new Date();
       const diffDays = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
       if (diffDays <= 0) return { msg: `AMC has expired! Please renew immediately.`, severity: 'critical' };
-      if (diffDays <= 45) return { msg: `AMC expires in ${diffDays} day${diffDays === 1 ? '' : 's'} (${amcExpiry}). Contact Sunshine Technologies for renewal.`, severity: 'warn' };
+      if (diffDays <= 45) return { msg: `AMC expires in ${diffDays} day${diffDays === 1 ? '' : 's'} (${amcExpiry}). Contact Neeraj for renewal.`, severity: 'warn' };
     } catch {}
     return null;
   })();
 
-  if (!parameters || parameters.length === 0) {
-    return (
-      <div className="screen active" id="dashboardScreen">
-        
-        {/* AMC Warning Banner */}
-        {amcWarning && (
-          <div className="card" style={{ padding: '12px 20px', marginBottom: '16px', background: amcWarning.severity === 'critical' ? '#fef2f2' : '#fffbeb', border: `1px solid ${amcWarning.severity === 'critical' ? '#fecaca' : '#fde68a'}`, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? '🚨' : '⚠️'}</span>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: amcWarning.severity === 'critical' ? '#991b1b' : '#92400e', flex: 1 }}>{amcWarning.msg}</span>
-          </div>
-        )}
-
-        {/* KPI Cards */}
-        <div className="card">
-          <div className="section-title">System Summary</div>
-          <div className="grid-5">
-            <div className="kpi-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Total Stations</span>
-                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f766e, #14b8a6)', boxShadow: '0 4px 12px rgba(15,118,110,0.25)' }}>
-                  <StationIcon />
-                </div>
-              </div>
-              <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f766e', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-                {String(kpis.totalStations).padStart(2, '0')}
-              </div>
-            </div>
-
-            <div className="kpi-card kpi-green">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Online Parameters</span>
-                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #059669, #10b981)', boxShadow: '0 4px 12px rgba(5,150,105,0.25)' }}>
-                  <OnlineIcon />
-                </div>
-              </div>
-              <div style={{ fontSize: '30px', fontWeight: '800', color: '#059669', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-                {String(kpis.onlineDevices).padStart(2, '0')}
-              </div>
-            </div>
-
-            <div className="kpi-card kpi-red">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Offline Parameters</span>
-                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #dc2626, #ef4444)', boxShadow: '0 4px 12px rgba(220,38,38,0.25)' }}>
-                  <OfflineIcon />
-                </div>
-              </div>
-              <div style={{ fontSize: '30px', fontWeight: '800', color: '#dc2626', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-                {String(kpis.offlineDevices).padStart(2, '0')}
-              </div>
-            </div>
-
-            <div className="kpi-card kpi-amber" onClick={() => setShowAlarmsModal(true)} style={{ cursor: 'pointer' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Active Alarms</span>
-                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #b45309, #f59e0b)', boxShadow: '0 4px 12px rgba(180,83,9,0.25)' }}>
-                  <AlarmIcon />
-                </div>
-              </div>
-              <div style={{ fontSize: '30px', fontWeight: '800', color: '#b45309', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {String(kpis.activeAlarms).padStart(2, '0')}
-                {kpis.activeAlarms > 0 && (
-                  <span style={{ width: '7px', height: '7px', background: '#ef4444', borderRadius: '50%', display: 'inline-block', boxShadow: '0 0 8px #ef4444' }}></span>
-                )}
-              </div>
-            </div>
-
-            <div className="kpi-card kpi-blue">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>PC Network</span>
-                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0369a1, #38bdf8)', boxShadow: '0 4px 12px rgba(3,105,161,0.25)' }}>
-                  <NetworkIcon />
-                </div>
-              </div>
-              <div style={{ fontSize: '20px', fontWeight: '700', color: '#0369a1', fontFamily: T.fontMono, lineHeight: '1.15', marginBottom: '4px' }}>
-                {networkInfo?.lan_ip || '---'}
-              </div>
-              <div style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block', backgroundColor: networkInfo?.internet_connected ? '#10b981' : '#ef4444', boxShadow: networkInfo?.internet_connected ? '0 0 6px #10b981' : '0 0 6px #ef4444' }}></span>
-                  {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
-                </span>
-                {networkInfo?.hostname && <span>{networkInfo.hostname}</span>}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* No Mapped Parameters Message */}
-
-        {/* No Mapped Parameters Message */}
-        <div className="card" style={{ padding: '40px 20px', textAlign: 'center', ...GLASS_CARD, boxShadow: T.shadowSm }}>
-          <div style={{ fontSize: '18px', fontWeight: '600', color: T.textLabel, marginBottom: '10px' }}>
-            No mapped parameters found.
-          </div>
-          <div style={{ color: T.textFaint, fontSize: '14px' }}>
-            Please configure your station, devices, and map parameters in the Parameter Mapping screen to start viewing live telemetry.
-          </div>
-        </div>
-
-        <AlarmsInspectorModal isOpen={showAlarmsModal} onClose={() => setShowAlarmsModal(false)} />
-
-        {broadcasts && broadcasts.length > 0 && (() => {
-          const visible = broadcasts.find((b: any) => b.id !== dismissedBroadcast);
-          if (!visible) return null;
-          const sev = visible.severity || 'info';
-          const colors: Record<string,any> = {
-            critical: { bg: '#fef2f2', border: '#fecaca', icon: '🚨', title: '#991b1b', text: '#7f1d1d', label: 'Critical Broadcast' },
-            warn:     { bg: '#fffbeb', border: '#fde68a', icon: '⚠️',  title: '#92400e', text: '#78350f', label: 'Warning Broadcast' },
-            info:     { bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ️',  title: '#1e40af', text: '#1e3a5f', label: 'Broadcast Message' },
-          };
-          const c = colors[sev] || colors.info;
-          return (
-            <div style={{
-              position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999,
-              maxWidth: '400px', padding: '16px 20px',
-              background: c.bg, border: `1px solid ${c.border}`,
-              borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
-              display: 'flex', alignItems: 'flex-start', gap: '12px',
-            }}>
-              <span style={{ fontSize: '24px', flexShrink: 0 }}>{c.icon}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: c.title, marginBottom: '4px' }}>{c.label}</div>
-                <div style={{ fontSize: '12px', color: c.text }}>{visible.message}</div>
-              </div>
-              <button onClick={() => setDismissedBroadcast(visible.id)} style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '18px', color: c.title, padding: '0 0 0 8px', lineHeight: 1
-              }}>×</button>
-            </div>
-          );
-        })()}
-
-
-
-      </div>
-    );
-  }
+  const isEmpty = !parameters || parameters.length === 0;
 
   return (
     <div className="screen active" id="dashboardScreen">
@@ -929,148 +711,89 @@ export const DashboardScreen = () => {
         </div>
       </div>
 
-      {/* Live Trends Modal */}
-      {isTrendsModalOpen && parameters && parameters.length > 0 && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)',
-          zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
-        }} onClick={() => setIsTrendsModalOpen(false)}>
-          <div style={{
-            backgroundColor: 'rgba(253, 250, 242, 0.95)', backdropFilter: 'blur(25px)', WebkitBackdropFilter: 'blur(25px)',
-            border: '1px solid rgba(235, 225, 205, 0.9)',
-            borderRadius: '16px', width: '100%', maxWidth: '900px',
-            padding: '24px', boxShadow: T.shadowLg, position: 'relative'
-          }} onClick={e => e.stopPropagation()}>
-            <button 
-              onClick={() => setIsTrendsModalOpen(false)}
-              title="Close modal"
-              aria-label="Close modal"
-              style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: T.textFaint }}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
+      {/* Body — conditional: empty state vs live telemetry */}
+      {isEmpty ? (
+        <div className="card" style={{ padding: '40px 20px', textAlign: 'center', ...GLASS_CARD, boxShadow: T.shadowSm }}>
+          <div style={{ fontSize: '18px', fontWeight: '600', color: T.textLabel, marginBottom: '10px' }}>
+            No mapped parameters found.
+          </div>
+          <div style={{ color: T.textFaint, fontSize: '14px' }}>
+            Please configure your station, devices, and map parameters in the Parameter Mapping screen to start viewing live telemetry.
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Live Trends Modal */}
+          {isTrendsModalOpen && (
+            <div style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(13, 79, 73, 0.6)', backdropFilter: 'blur(4px)',
+              zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+            }} onClick={() => setIsTrendsModalOpen(false)}>
+              <div style={{
+                backgroundColor: 'rgba(253, 250, 242, 0.95)', backdropFilter: 'blur(25px)', WebkitBackdropFilter: 'blur(25px)',
+                border: '1px solid rgba(235, 225, 205, 0.9)',
+                borderRadius: '16px', width: '100%', maxWidth: '900px',
+                padding: '24px', boxShadow: T.shadowLg, position: 'relative'
+              }} onClick={e => e.stopPropagation()}>
+                <button onClick={() => setIsTrendsModalOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: T.textFaint }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div className="section-title" style={{ margin: 0, fontSize: '20px' }}>Live Trends</div>
+                  <div style={{ display: 'flex', gap: '16px', alignItems: 'center', paddingRight: '32px' }}>
+                    <select value={selectedParam} onChange={handleParamChange} style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${T.borderSoft}`, fontSize: '14px', fontWeight: '700', color: T.text, backgroundColor: '#f8fafc', outline: 'none', cursor: 'pointer' }}>
+                      {parameters.map(p => <option key={p.id} value={p.tag_name}>{p.name || p.tag_name}</option>)}
+                    </select>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={downloadPNG} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PNG</button>
+                      <button onClick={downloadPDF} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PDF</button>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <div className="section-title" style={{ margin: 0, fontSize: '20px' }}>Live Trends</div>
-              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', paddingRight: '32px' }}>
-                <select 
-                  value={selectedParam} 
-                  onChange={handleParamChange}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    border: `1.5px solid ${T.borderSoft}`,
-                    fontSize: '14px',
-                    fontWeight: '700',
-                    color: T.text,
-                    backgroundColor: '#f8fafc',
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {parameters.map(p => (
-                    <option key={p.id} value={p.tag_name}>{p.name || p.tag_name}</option>
-                  ))}
-                </select>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={downloadPNG} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PNG</button>
-                  <button onClick={downloadPDF} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PDF</button>
-                  <button onClick={exportCSV} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>CSV</button>
-                  <button onClick={exportExcel} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>Excel</button>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ position: 'relative', width: '100%', minHeight: '350px' }}>
+                  <canvas ref={chartRef}></canvas>
                 </div>
               </div>
             </div>
-            
-            <div style={{ position: 'relative', width: '100%', minHeight: '350px' }}>
-              <canvas ref={chartRef}></canvas>
-            </div>
+          )}
+
+          {/* Sensor telemetry Grid */}
+          <div className="card">
+            <div className="section-title">Live Parameters</div>
+            {Object.entries(groupedBySensor).map(([sensorName, params]) => (
+              <div key={sensorName} style={{ marginBottom: '24px' }}>
+                <div style={{ fontSize: '14px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: `1px solid ${T.borderSoft}`, paddingBottom: '6px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '800', color: T.primary, background: T.primaryBg, padding: '2px 10px', borderRadius: T.rFull, letterSpacing: '0.03em' }}>
+                    {sensorName}
+                  </span>
+                </div>
+                <div className="grid-4">
+                  {(params as any[]).map(p => (
+                    <ParameterCard key={p.id} p={p} data={liveData[p.tag_name]} currentTime={currentTime} avgVal={avg15Mins[p.id]} history={dataPointsRef.current.datasets[p.tag_name] || []} deviceName="" isSelected={selectedParam === p.tag_name} onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }} />
+                  ))}
+                </div>
+              </div>
+            ))}
+            {unassignedParameters.length > 0 && (
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ fontSize: '14px', fontWeight: '700', color: T.textLabel, marginBottom: '12px', borderBottom: '1px solid rgba(100, 116, 139, 0.15)', paddingBottom: '6px' }}>
+                  Unassigned Parameters
+                </div>
+                <div className="grid-4">
+                  {unassignedParameters.map(p => (
+                    <ParameterCard key={p.id} p={p} data={liveData[p.tag_name]} currentTime={currentTime} avgVal={avg15Mins[p.id]} history={dataPointsRef.current.datasets[p.tag_name] || []} deviceName="Unassigned" isSelected={selectedParam === p.tag_name} onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        </>
       )}
-
-      {/* Sensor telemetry Grid grouped by monitored sensor name */}
-      <div className="card">
-        <div className="section-title">Live Parameters</div>
-        {Object.entries(groupedBySensor).map(([sensorName, params]) => (
-          <div key={sensorName} style={{ marginBottom: '24px' }}>
-            <div style={{
-              fontSize: '14px',
-              marginBottom: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              borderBottom: `1px solid ${T.borderSoft}`,
-              paddingBottom: '6px'
-            }}>
-              <span style={{
-                fontSize: '14px',
-                fontWeight: '800',
-                color: T.primary,
-                background: T.primaryBg,
-                padding: '2px 10px',
-                borderRadius: T.rFull,
-                letterSpacing: '0.03em'
-              }}>
-                {sensorName}
-              </span>
-            </div>
-            <div className="grid-4">
-              {(params as any[]).map(p => (
-                <ParameterCard
-                  key={p.id}
-                  p={p}
-                  data={liveData[p.tag_name]}
-                  currentTime={currentTime}
-                  avgVal={avg15Mins[p.id]}
-                  history={dataPointsRef.current.datasets[p.tag_name] || []}
-                  deviceName=""
-                  isSelected={selectedParam === p.tag_name}
-                  onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
-
-        {/* Fallback for unmapped parameters (no device at all) */}
-        {unassignedParameters.length > 0 && (
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{
-              fontSize: '14px',
-              fontWeight: '700',
-              color: T.textLabel,
-              marginBottom: '12px',
-              borderBottom: '1px solid rgba(100, 116, 139, 0.15)',
-              paddingBottom: '6px'
-            }}>
-              Unassigned Parameters
-            </div>
-            <div className="grid-4">
-              {unassignedParameters.map(p => (
-                <ParameterCard
-                  key={p.id}
-                  p={p}
-                  data={liveData[p.tag_name]}
-                  currentTime={currentTime}
-                  avgVal={avg15Mins[p.id]}
-                  history={dataPointsRef.current.datasets[p.tag_name] || []}
-                  deviceName="Unassigned"
-                  isSelected={selectedParam === p.tag_name}
-                  onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-
 
       <AlarmsInspectorModal isOpen={showAlarmsModal} onClose={() => setShowAlarmsModal(false)} />
 
-      {/* Broadcast Popup — shown as dismissible overlay */}
       {broadcasts && broadcasts.length > 0 && (() => {
         const visible = broadcasts.find((b: any) => b.id !== dismissedBroadcast);
         if (!visible) return null;
@@ -1082,22 +805,13 @@ export const DashboardScreen = () => {
         };
         const c = colors[sev] || colors.info;
         return (
-          <div style={{
-            position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999,
-            maxWidth: '400px', padding: '16px 20px',
-            background: c.bg, border: `1px solid ${c.border}`,
-            borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
-            display: 'flex', alignItems: 'flex-start', gap: '12px',
-          }}>
+          <div style={{ position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999, maxWidth: '400px', padding: '16px 20px', background: c.bg, border: `1px solid ${c.border}`, borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
             <span style={{ fontSize: '24px', flexShrink: 0 }}>{c.icon}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '13px', fontWeight: '700', color: c.title, marginBottom: '4px' }}>{c.label}</div>
               <div style={{ fontSize: '12px', color: c.text }}>{visible.message}</div>
             </div>
-            <button onClick={() => setDismissedBroadcast(visible.id)} style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: '18px', color: c.title, padding: '0 0 0 8px', lineHeight: 1
-            }}>×</button>
+            <button onClick={() => setDismissedBroadcast(visible.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: c.title, padding: '0 0 0 8px', lineHeight: 1 }}>×</button>
           </div>
         );
       })()}

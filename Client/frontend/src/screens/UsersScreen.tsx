@@ -140,11 +140,11 @@ function UserModal({ mode, user, onClose, onSave }: UserModalProps) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
-      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
+      background: 'rgba(13,79,73,0.6)', backdropFilter: 'blur(6px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div style={{
-        background: '#1e293b', border: '1px solid #334155', borderRadius: '16px',
+        background: '#0d4f49', border: '1px solid #1a7a6e', borderRadius: '16px',
         width: '460px', maxWidth: '95vw', padding: '28px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -263,11 +263,11 @@ function DeleteConfirmModal({ user, onClose, onConfirm }: DeleteConfirmModalProp
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
-      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)',
+      background: 'rgba(13,79,73,0.6)', backdropFilter: 'blur(6px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div style={{
-        background: '#1e293b', border: '1px solid #334155', borderRadius: '16px',
+        background: '#0d4f49', border: '1px solid #1a7a6e', borderRadius: '16px',
         width: '380px', padding: '28px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
       }}>
         <h3 style={{ margin: '0 0 12px', fontSize: '18px', fontWeight: '700', color: '#f1f5f9' }}>Delete User</h3>
@@ -352,7 +352,7 @@ export function UsersScreen() {
           { label: 'Disabled', value: usersList.filter(u => !u.is_active).length, color: '#64748b' },
         ].map(({ label, value, color }) => (
           <div key={label} style={{
-            flex: 1, background: '#1e293b', border: '1px solid #334155', borderRadius: '12px',
+            flex: 1, background: '#0d4f49', border: '1px solid #1a7a6e', borderRadius: '12px',
             padding: '16px 20px',
           }}>
             <div style={{ fontSize: '24px', fontWeight: '800', color, fontFamily: 'monospace' }}>{value}</div>
@@ -372,10 +372,10 @@ export function UsersScreen() {
       </div>
 
       {/* Table */}
-      <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '12px', overflow: 'hidden' }}>
+      <div style={{ background: '#0d4f49', border: '1px solid #1a7a6e', borderRadius: '12px', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ background: '#0f172a', borderBottom: '1px solid #334155' }}>
+            <tr style={{ background: '#083832', borderBottom: '1px solid #1a7a6e' }}>
               {['Username', 'Full Name', 'Role', 'Status', 'Created', 'Last Login', 'Actions'].map(h => (
                 <th key={h} style={{
                   padding: '12px 16px', textAlign: 'left', fontSize: '11px',
@@ -398,11 +398,11 @@ export function UsersScreen() {
                 <tr
                   key={u.id}
                   style={{
-                    borderBottom: '1px solid #1e293b',
+                    borderBottom: '1px solid #0d4f49',
                     background: u.username === currentUser ? 'rgba(15,118,110,0.05)' : 'transparent',
                     transition: 'background 0.15s',
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(15,118,110,0.08)'}
                   onMouseLeave={e => e.currentTarget.style.background = u.username === currentUser ? 'rgba(15,118,110,0.05)' : 'transparent'}
                 >
                   <td style={{ padding: '13px 16px' }}>

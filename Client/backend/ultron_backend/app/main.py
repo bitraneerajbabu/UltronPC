@@ -242,7 +242,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="UltrON Industrial Monitoring API",
     description="""
-## UltrON — Powered by Sunshine Technologies
+## UltrON — All Rights Reserved to Neeraj
 
 Real-time industrial telemetry platform supporting:
 - **Modbus TCP / RTU / RS485**
@@ -281,15 +281,6 @@ class CSPMiddleware(BaseHTTPMiddleware):
         return resp
 
 app.add_middleware(CSPMiddleware)
-
-# ─── Rate Limiting (slowapi) ─────────────────────────────────────────────────
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-
-_app_limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = _app_limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ─── API Routes ───────────────────────────────────────────────────────────────
 PREFIX = "/api/v1"

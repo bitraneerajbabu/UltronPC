@@ -1,18 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { ThemeProvider } from '@mui/material/styles'
+import CssBaseline from '@mui/material/CssBaseline'
 import { Chart, registerables } from 'chart.js'
 Chart.register(...registerables)
 import {
   Box, Typography, TextField, Button, Alert, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, IconButton, Tooltip, Select, MenuItem,
   FormControl, InputLabel, Chip, Grid, Card, CardContent,
+  Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material'
 import Icon from './components/Common/Icon'
+import { getTheme } from './theme'
 
 // --- State Interfaces ---
 interface Site { id: number; name: string; api_key: string; location: string; is_active: boolean; amc_expiry?: string; last_sync?: string; lock_status?: string; lock_reason?: string; lock_updated_at?: string; last_error?: string; last_error_at?: string; client_version?: string; notes?: string; }
 interface TelemetryPoint { id?: number; value: number | null; quality: string; timestamp: string; }
 interface LatestPoint { tag_name: string; name: string; unit?: string; value?: number; quality: string; timestamp: string; }
-interface BroadcastItem { id: number; message: string; message_type: string; is_active: boolean; created_at: string; expires_at?: string; target_all: boolean; target_site_id?: number | null; }
+interface BroadcastItem { id: string; message: string; message_type: string; is_active: boolean; created_at: string; expires_at?: string; target_all: boolean; target_site_id?: number | null; }
 interface LockSummary { id: number; lock_status: string; lock_reason?: string; lock_updated_at?: string; }
 
 import Layout from './components/Layout/Layout'
@@ -26,7 +30,6 @@ import CreateSiteDialog from './components/Dialogs/CreateSiteDialog'
 import EditSiteDialog from './components/Dialogs/EditSiteDialog'
 import BroadcastDialog from './components/Dialogs/BroadcastDialog'
 import LockDialog from './components/Dialogs/LockDialog'
-import FleetMonitoring from './components/FleetMonitoring'
 
 function getConnectionStatus(last_sync?: string): { label: string; color: string } {
   if (!last_sync) return { label: 'Never Connected', color: '#9CA3AF' };
@@ -67,6 +70,14 @@ function App() {
   // Broadcast Modal State
   const [showBcModal, setShowBcModal] = useState(false)
   const [editingBc, setEditingBc] = useState<BroadcastItem | null>(null)
+  const [confirmDeleteBc, setConfirmDeleteBc] = useState<BroadcastItem | null>(null)
+  const [deletingBc, setDeletingBc] = useState(false)
+
+  // Plant Action Dialog States
+  const [confirmDeleteSite, setConfirmDeleteSite] = useState<Site | null>(null)
+  const [deletingSite, setDeletingSite] = useState(false)
+  const [confirmRenewSite, setConfirmRenewSite] = useState<Site | null>(null)
+  const [renewingSite, setRenewingSite] = useState(false)
 
   // Gmail-style UI State
   const [searchQuery, setSearchQuery] = useState('')
@@ -183,29 +194,12 @@ function App() {
     } catch (err) { console.error(err); }
   };
 
-  const handleRenewAmc = async (siteId: number) => {
-    if (!window.confirm("Are you sure? This will permanently invalidate the current API key and disconnect the client until they enter the new key.")) return;
-    try {
-      const res = await adminFetch(`/api/v1/sites/${siteId}/renew`, { method: 'POST' });
-      if (res.ok) {
-        const updatedSite = await res.json();
-        setSites(sites.map(s => s.id === siteId ? updatedSite : s));
-      }
-    } catch (err) { console.error(err); }
+  const handleRenewAmc = (site: Site) => {
+    setConfirmRenewSite(site);
   };
 
-  const handleDeleteSite = async (siteId: number, siteName: string) => {
-    if (!window.confirm(`Permanently delete "${siteName}" and ALL its telemetry data? This cannot be undone.`)) return;
-    try {
-      const res = await adminFetch(`/api/v1/sites/${siteId}`, { method: 'DELETE' });
-      if (res.ok) {
-        setSites(sites.filter(s => s.id !== siteId));
-        if (activeSite?.id === siteId) { setActiveSite(null); setLiveData([]); }
-      } else {
-        const body = await res.text();
-        alert(`Delete failed: ${body}`);
-      }
-    } catch (err) { console.error(err); alert('Network error — could not delete site'); }
+  const handleDeleteSite = (site: Site) => {
+    setConfirmDeleteSite(site);
   };
 
   const handleUpdateSite = async (id: number, name: string, location: string, notes: string) => {
@@ -383,31 +377,29 @@ function App() {
   }, [activeSite]);
 
   // --- LOGIN PAGE ---
-  if (!isLoggedIn) {
-    return (
-      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: '#F5F7FA', p: 2 }}>
-        <Paper elevation={0} sx={{ p: 4, maxWidth: 420, width: '100%', borderRadius: '16px', border: '1px solid rgba(0,0,0,0.06)' }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4, textAlign: 'center' }}>
-            <img 
-              src="/assets/Ultron_logo.png" 
-              alt="UltrON" 
-              style={{ height: 96, width: 96, objectFit: 'contain', marginBottom: 20 }} 
-            />
-            <Typography variant="h4" sx={{ fontWeight: 800, fontSize: '24px', color: '#111827', mb: 0.5 }}>RajAPI</Typography>
-            <Typography variant="body2" sx={{ color: '#6B7280', fontWeight: 500 }}>Super Admin Portal</Typography>
-          </Box>
-          <Box component="form" onSubmit={handleLogin} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-            <TextField label="Username" value={username} onChange={e => setUsername(e.target.value)} required fullWidth />
-            <TextField label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} required fullWidth />
-            {loginError && <Alert severity="error">{loginError}</Alert>}
-            <Button type="submit" variant="contained" size="large" fullWidth sx={{ py: 1.5 }}>
-              Sign In
-            </Button>
-          </Box>
-        </Paper>
-      </Box>
-    )
-  }
+  const loginPage = (
+    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default', p: 2 }}>
+      <Paper elevation={0} sx={{ p: { xs: 3, sm: 4 }, maxWidth: 420, width: '100%', borderRadius: '16px' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 4, textAlign: 'center' }}>
+          <img 
+            src="/assets/Ultron_logo.png" 
+            alt="UltrON" 
+            style={{ height: 80, width: 80, objectFit: 'contain', marginBottom: 16 }} 
+          />
+          <Typography variant="h4" sx={{ fontWeight: 800, fontSize: '24px', mb: 0.5 }}>Neeraj</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 500 }}>Super Admin Portal</Typography>
+        </Box>
+        <Box component="form" onSubmit={handleLogin} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <TextField label="Username" value={username} onChange={e => setUsername(e.target.value)} required fullWidth />
+          <TextField label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} required fullWidth />
+          {loginError && <Alert severity="error">{loginError}</Alert>}
+          <Button type="submit" variant="contained" size="large" fullWidth sx={{ py: 1.5 }}>
+            Sign In
+          </Button>
+        </Box>
+      </Paper>
+    </Box>
+  );
 
   const filteredSites = sites.filter(site => {
     if (selectedCategory === 'Online' && !site.is_active) return false;
@@ -440,7 +432,7 @@ function App() {
       case 'cpcb': return renderCpcb();
       case 'quality': return renderQuality();
       case 'alarms': return renderAlarms();
-      case 'fleet': return <FleetMonitoring />;
+      case 'fleet': return renderDashboard();
       default: return renderDashboard();
     }
   };
@@ -535,9 +527,9 @@ function App() {
                             <Box sx={{ display: 'flex', gap: 0.25, justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
                               <Tooltip title="Edit AMC Expiry"><IconButton size="small" onClick={() => { setEditingExpiry(site.id); setEditExpiryVal(site.amc_expiry?.split('T')[0] || ''); }} sx={{ color: '#9CA3AF' }}><Icon name="CalendarRange" size={18} /></IconButton></Tooltip>
                               <Tooltip title={site.is_active ? 'Deactivate' : 'Activate'}><IconButton size="small" onClick={() => handleToggleStatus(site.id, site.is_active)} sx={{ color: '#9CA3AF' }}><Icon name="Power" size={18} /></IconButton></Tooltip>
-                              <Tooltip title="Renew AMC"><IconButton size="small" onClick={() => handleRenewAmc(site.id)} sx={{ color: '#9CA3AF' }}><Icon name="RotateCcw" size={18} /></IconButton></Tooltip>
+                              <Tooltip title="Renew AMC"><IconButton size="small" onClick={() => handleRenewAmc(site)} sx={{ color: '#9CA3AF' }}><Icon name="RotateCcw" size={18} /></IconButton></Tooltip>
                               <Tooltip title="Edit"><IconButton size="small" onClick={() => setEditSiteModal({ id: site.id, name: site.name, location: site.location || '', notes: site.notes || '' })} sx={{ color: '#9CA3AF' }}><Icon name="Pencil" size={18} /></IconButton></Tooltip>
-                              <Tooltip title="Delete"><IconButton size="small" onClick={() => handleDeleteSite(site.id, site.name)} sx={{ color: '#9CA3AF' }}><Icon name="Trash2" size={18} /></IconButton></Tooltip>
+                              <Tooltip title="Delete"><IconButton size="small" onClick={() => handleDeleteSite(site)} sx={{ color: '#9CA3AF' }}><Icon name="Trash2" size={18} /></IconButton></Tooltip>
                             </Box>
                           </TableCell>
                         </TableRow>
@@ -571,15 +563,15 @@ function App() {
                 </Box>
               }
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: getConnectionStatus(activeSite.last_sync).color }} />
-                <Typography variant="caption" sx={{ color: '#6B7280' }}>{getConnectionStatus(activeSite.last_sync).label}</Typography>
-                {(() => {
-                  const c = getConnectionStatus(activeSite.last_sync);
-                  return c.label === 'Live' && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#16A34A', animation: 'pulse 2s infinite', ml: 1 }} />;
-                })()}
-                <Typography variant="caption" sx={{ color: '#9CA3AF', ml: 'auto' }}>Live</Typography>
-              </Box>
+              {(() => {
+                const c = getConnectionStatus(activeSite.last_sync);
+                return <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: c.color }} />
+                  <Typography variant="caption" sx={{ color: '#6B7280' }}>{c.label}</Typography>
+                  {c.label === 'Live' && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#16A34A', animation: 'pulse 2s infinite', ml: 1 }} />}
+                  <Typography variant="caption" sx={{ color: '#9CA3AF', ml: 'auto' }}>Live</Typography>
+                </Box>;
+              })()}
 
               {/* Live data table */}
               {liveData.length === 0 && !liveDataLoading ? (
@@ -744,8 +736,8 @@ function App() {
                   <Button size="small" variant="outlined"
                     onClick={async () => {
                       await adminFetch(`/api/v1/broadcasts/${bc.id}/toggle`, { method: 'PUT' });
-                      const res = await fetch('/api/v1/broadcasts/');
-                      setBroadcasts(await res.json());
+                      const res = await adminFetch('/api/v1/broadcasts/');
+                      if (res.ok) setBroadcasts(await res.json());
                     }}
                     color={bc.is_active ? 'warning' : 'success'}
                   >{bc.is_active ? 'Deactivate' : 'Activate'}</Button>
@@ -753,11 +745,7 @@ function App() {
                     onClick={() => { setEditingBc(bc); setShowBcModal(true); }}
                   >Edit</Button>
                   <Button size="small" color="error"
-                    onClick={async () => {
-                      if (!confirm('Delete this broadcast?')) return;
-                      await adminFetch(`/api/v1/broadcasts/${bc.id}`, { method: 'DELETE' });
-                      setBroadcasts(broadcasts.filter(b => b.id !== bc.id));
-                    }}
+                    onClick={() => setConfirmDeleteBc(bc)}
                   >Delete</Button>
                 </Box>
               </Box>
@@ -765,6 +753,49 @@ function App() {
           ))}
         </Box>
       )}
+
+      {/* Broadcast Delete Confirmation Dialog */}
+      <Dialog open={!!confirmDeleteBc} onClose={() => !deletingBc && setConfirmDeleteBc(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Delete Broadcast?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ color: '#6B7280' }}>
+            Are you sure you want to delete this broadcast? This cannot be undone.
+          </Typography>
+          {confirmDeleteBc && (
+            <Typography variant="body2" sx={{ mt: 1.5, p: 1.5, bgcolor: '#F3F4F6', borderRadius: 1, fontStyle: 'italic' }}>
+              "{confirmDeleteBc.message}"
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button onClick={() => setConfirmDeleteBc(null)} disabled={deletingBc}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={deletingBc}
+            onClick={async () => {
+              if (!confirmDeleteBc) return;
+              setDeletingBc(true);
+              try {
+                const res = await adminFetch(`/api/v1/broadcasts/${confirmDeleteBc.id}`, { method: 'DELETE' });
+                if (res.ok) {
+                  setBroadcasts(prev => prev.filter(b => b.id !== confirmDeleteBc.id));
+                  setConfirmDeleteBc(null);
+                } else {
+                  const err = await res.json().catch(() => ({}));
+                  alert('Delete failed: ' + (err.detail || res.statusText));
+                }
+              } catch {
+                alert('Network error — could not delete broadcast');
+              } finally {
+                setDeletingBc(false);
+              }
+            }}
+          >
+            {deletingBc ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 
@@ -1160,7 +1191,9 @@ function App() {
     </>
   );
 
-  return (
+  const theme = getTheme(darkMode ? 'dark' : 'light');
+
+  const mainApp = (
     <>
       <Layout
         activeTab={activeTab}
@@ -1183,12 +1216,108 @@ function App() {
         const url = editingBc ? `/api/v1/broadcasts/${editingBc.id}` : '/api/v1/broadcasts/';
         const method = editingBc ? 'PUT' : 'POST';
         await adminFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        const res = await fetch('/api/v1/broadcasts/');
-        setBroadcasts(await res.json());
+        const res = await adminFetch('/api/v1/broadcasts/');
+        if (res.ok) setBroadcasts(await res.json());
       }} />
       <LockDialog open={!!lockModal} site={lockModal} onClose={() => setLockModal(null)} onSave={handleLockSave} />
+
+      {/* Delete Plant Confirmation Dialog */}
+      <Dialog open={!!confirmDeleteSite} onClose={() => !deletingSite && setConfirmDeleteSite(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Delete Plant?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ color: '#6B7280' }}>
+            Are you sure you want to permanently delete this plant and ALL of its telemetry data? This cannot be undone.
+          </Typography>
+          {confirmDeleteSite && (
+            <Typography variant="body2" sx={{ mt: 1.5, p: 1.5, bgcolor: '#F3F4F6', borderRadius: 1, fontWeight: 600 }}>
+              {confirmDeleteSite.name} ({confirmDeleteSite.location || 'No location'})
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button onClick={() => setConfirmDeleteSite(null)} disabled={deletingSite}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={deletingSite}
+            onClick={async () => {
+              if (!confirmDeleteSite) return;
+              setDeletingSite(true);
+              try {
+                const res = await adminFetch(`/api/v1/sites/${confirmDeleteSite.id}`, { method: 'DELETE' });
+                if (res.ok) {
+                  setSites(prev => prev.filter(s => s.id !== confirmDeleteSite.id));
+                  if (activeSite?.id === confirmDeleteSite.id) { setActiveSite(null); setLiveData([]); }
+                  setConfirmDeleteSite(null);
+                } else {
+                  const body = await res.text();
+                  alert(`Delete failed: ${body}`);
+                }
+              } catch {
+                alert('Network error — could not delete plant');
+              } finally {
+                setDeletingSite(false);
+              }
+            }}
+          >
+            {deletingSite ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Renew AMC Confirmation Dialog */}
+      <Dialog open={!!confirmRenewSite} onClose={() => !renewingSite && setConfirmRenewSite(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontWeight: 700 }}>Renew AMC?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ color: '#6B7280' }}>
+            Are you sure you want to renew the AMC? This will permanently invalidate the current API key and disconnect the client until they enter the new key.
+          </Typography>
+          {confirmRenewSite && (
+            <Typography variant="body2" sx={{ mt: 1.5, p: 1.5, bgcolor: '#F3F4F6', borderRadius: 1, fontWeight: 600 }}>
+              {confirmRenewSite.name}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button onClick={() => setConfirmRenewSite(null)} disabled={renewingSite}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="primary"
+            disabled={renewingSite}
+            onClick={async () => {
+              if (!confirmRenewSite) return;
+              setRenewingSite(true);
+              try {
+                const res = await adminFetch(`/api/v1/sites/${confirmRenewSite.id}/renew`, { method: 'POST' });
+                if (res.ok) {
+                  const updatedSite = await res.json();
+                  setSites(prev => prev.map(s => s.id === confirmRenewSite.id ? updatedSite : s));
+                  setConfirmRenewSite(null);
+                  alert(`AMC renewed! New API Key generated. Copy it from the plant details.`);
+                } else {
+                  const body = await res.text();
+                  alert(`Renewal failed: ${body}`);
+                }
+              } catch {
+                alert('Network error — could not renew AMC');
+              } finally {
+                setRenewingSite(false);
+              }
+            }}
+          >
+            {renewingSite ? 'Renewing…' : 'Renew'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
-  )
+  );
+
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      {isLoggedIn ? mainApp : loginPage}
+    </ThemeProvider>
+  );
 }
 
 export default App

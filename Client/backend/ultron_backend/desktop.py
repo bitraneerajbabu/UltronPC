@@ -9,6 +9,11 @@ so errors are visible even when console=False.
 
 import sys
 import io
+import os
+
+# Make sys.argv[0] absolute immediately to prevent pywebview base_uri/get_app_root chdir bugs
+if sys.argv and sys.argv[0]:
+    sys.argv[0] = os.path.abspath(sys.argv[0])
 
 # ── Robust Stream Patch ───────────────────────────────────────────────────────
 # When packaged with console=False, standard streams (stdout, stderr) are None

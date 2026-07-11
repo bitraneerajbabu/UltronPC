@@ -1,6 +1,8 @@
+import uuid
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
+
 
 class TelemetryPoint(BaseModel):
     tag_name: str
@@ -71,7 +73,7 @@ class BroadcastCreate(BaseModel):
     target_site_id: Optional[int] = None
 
 class BroadcastResponse(BaseModel):
-    id: int
+    id: uuid.UUID
     message: str
     message_type: str
     is_active: bool
@@ -87,11 +89,4 @@ class LockUpdate(BaseModel):
     lock_status: str = "unlocked"
     lock_reason: Optional[str] = None
 
-class LockSummary(BaseModel):
-    id: int
-    lock_status: str
-    lock_reason: Optional[str] = None
-    lock_updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True

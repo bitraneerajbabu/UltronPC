@@ -49,41 +49,8 @@ async def create_parameter(
         data["display_order"] = max_ord + 1
     param = Parameter(**data)
     db.add(param)
-    await db.flush()
-
-    # Sync description to all parameters in the same device if description is set
-    if param.description:
-        from sqlalchemy import update as sa_update
-        await db.execute(
-            sa_update(Parameter)
-            .where(Parameter.device_id == param.device_id)
-            .values(description=param.description)
-        )
-        await db.flush()
-
     await db.commit()
     await db.refresh(param)
-
-    # Auto-enable parameter mapping for all existing push servers
-    from app.models.server_config import ServerConfig, ServerParameterMapping
-    servers_res = await db.execute(select(ServerConfig))
-    servers = servers_res.scalars().all()
-    for srv in servers:
-        mapping = ServerParameterMapping(
-            server_id=srv.id,
-            parameter_id=param.id,
-            is_active=True,
-            api_vname=param.tag_name,
-            api_unit=param.unit or "",
-            api_id="",
-            api_name="",
-            api_password="",
-            cpcb_station_name="",
-            cpcb_parameter=param.name
-        )
-        db.add(mapping)
-    await db.flush()
-    await db.commit()
 
     background_tasks.add_task(polling_engine.reload_device, param.device_id)
     return param

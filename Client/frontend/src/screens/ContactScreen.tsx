@@ -102,11 +102,11 @@ export const ContactScreen = () => {
           </div>
           <div style={s.card}>
             <div style={s.heading}><IconWrapper><PhoneIcon /></IconWrapper> Sales Enquiries</div>
-            <div style={s.value}>8801231166, 9133377852</div>
+            <div style={s.value}>8801231166, 9133377854</div>
           </div>
           <div style={s.card}>
             <div style={s.heading}><IconWrapper><MailIcon /></IconWrapper> Email</div>
-            <div style={s.value}>tst@sunshinetechno.com</div>
+            <div style={s.value}>tst@sunshinetechno.com, support@sunshinetechno.com, service@sunshinetechno.com</div>
           </div>
           <div style={s.card}>
             <div style={s.heading}><IconWrapper><GlobeIcon /></IconWrapper> Website</div>
@@ -145,7 +145,7 @@ export const ContactScreen = () => {
             Real-time telemetry, CPCB compliance, and alarm management system.
             <br />Developed by{' '}
             <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#0f766e', fontWeight: '600', textDecoration: 'none' }}>
-              Sunshine Technologies
+              Neeraj
             </a>
             {localVersion && <> &mdash; v{localVersion}</>}
           </div>

@@ -31,6 +31,23 @@ from app.services.lock_store import is_push_allowed, get_lock_status
 log = get_logger("ultron.server_push")
 
 
+def _quality_str(avg):
+    if not avg or not avg.quality:
+        return ""
+    q = avg.quality.value if hasattr(avg.quality, "value") else avg.quality
+    return str(q)
+
+
+def _cpcb_row(station_name, param_code, local_from, value, quality):
+    local_to = local_from + timedelta(minutes=15)
+    date_from = local_from.strftime("%d-%m-%Y %H:%M")
+    date_to = local_to.strftime("%d-%m-%Y %H:%M")
+    value_str = f"{value:.2f}" if value is not None else ""
+    q = _quality_str(quality)
+    remark = q if q != "U" else ""
+    return f"{station_name},{param_code},{date_from},{date_to},{value_str},0,0,{remark},"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # TGPCB — JSON HTTP Push
 # ─────────────────────────────────────────────────────────────────────────────
@@ -367,31 +384,17 @@ async def _push_cpcb(config: ServerConfig, db):
 
         # Convert UTC database timestamp to local time for formatting
         local_from = avg.timestamp.replace(tzinfo=timezone.utc).astimezone()
-        local_to = local_from + timedelta(minutes=15)
 
         date_from_str = local_from.strftime("%d-%m-%Y %H:%M")
-        date_to_str   = local_to.strftime("%d-%m-%Y %H:%M")
 
         # Check for duplicates
-        if (station_name, param_code, date_from_str, date_to_str) in existing_records:
+        if (station_name, param_code, date_from_str, (local_from + timedelta(minutes=15)).strftime("%d-%m-%Y %H:%M")) in existing_records:
             skipped_count += 1
             continue
 
-        # Value: 2 decimal places
-        value_str = f"{avg.value:.2f}" if avg.value is not None else ""
+        val_repr = f"{avg.value:.2f}" if avg.value is not None else "NOT_POSTED (No average)"
+        row = _cpcb_row(station_name, param_code, local_from, avg.value, avg)
 
-        # Flags: 0 = normal operation
-        calib_flag = 0
-        maint_flag = 0
-
-        # Remark: blank when quality is U, otherwise quality string
-        remark = ""
-        if avg.quality and str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality) != "U":
-            remark = str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality)
-
-        val_repr = value_str if value_str != "" else "NOT_POSTED (No average)"
-        row = f"{station_name},{param_code},{date_from_str},{date_to_str},{value_str},{calib_flag},{maint_flag},{remark},"
-        
         new_rows.append(row)
         written_summary_items.append(f"{param_code}@{date_from_str}={val_repr}")
 
@@ -480,21 +483,8 @@ async def generate_historical_cpcb_file(db, config: ServerConfig, date_str: str)
 
         param_avgs = sorted(averages_by_param[m.parameter_id], key=lambda x: x.timestamp)
         for avg in param_avgs:
-            # Convert UTC database timestamp to local time for formatting
             local_from = avg.timestamp.replace(tzinfo=timezone.utc).astimezone()
-            local_to = local_from + timedelta(minutes=15)
-
-            date_from_str = local_from.strftime("%d-%m-%Y %H:%M")
-            date_to_str   = local_to.strftime("%d-%m-%Y %H:%M")
-
-            value_str = f"{avg.value:.2f}" if avg.value is not None else ""
-            calib_flag = 0
-            maint_flag = 0
-            remark = ""
-            if avg.quality and str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality) != "U":
-                remark = str(avg.quality.value if hasattr(avg.quality, "value") else avg.quality)
-
-            row = f"{station_name},{param_code},{date_from_str},{date_to_str},{value_str},{calib_flag},{maint_flag},{remark},"
+            row = _cpcb_row(station_name, param_code, local_from, avg.value, avg)
             new_rows.append(row)
 
     header1 = "1,2,3,4,5,6,7,8,"

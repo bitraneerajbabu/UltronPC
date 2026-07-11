@@ -33,10 +33,6 @@ class Device(Base):
 
     name = Column(String(120), nullable=False, index=True)
     device_type = Column(SAEnum(DeviceType), default=DeviceType.ANALYZER)
-    manufacturer = Column(String(100))
-    model_number = Column(String(100))
-    serial_number = Column(String(100))
-    firmware_version = Column(String(50))
 
     # Protocol (can override station-level)
     protocol = Column(SAEnum(DeviceProtocol), default=DeviceProtocol.modbus_tcp)

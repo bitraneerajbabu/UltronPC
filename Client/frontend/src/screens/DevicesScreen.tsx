@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect, useMemo, useRef } from 'react';
+import React, { useContext, useState, useMemo } from 'react';
 import { AppContext } from '../context/AppContext';
 import { T } from '../theme';
 
@@ -25,7 +25,7 @@ const revMap = Object.fromEntries(
 const getDataTypeLabel = (dt, bo) => revMap[dt + '|' + bo] || 'Float point';
 
 const DEFAULT_PARAM = {
-  name: '', tag_name: '', description: '', unit: 'ppm', device_id: '',
+  name: '', tag_name: '', unit: 'ppm', device_id: '',
   input_type: 'modbus_tcp', register_type: 'input_reg', register_address: 40001,
   register_count: 2, data_type: 'float32', byte_order: 'big',
   scale_factor: 1.0, offset: 0.0, min_valid: 0.0, max_valid: 1000.0,
@@ -51,6 +51,11 @@ const Bolt = () => (
 
 const genTag = (name) => !name ? '' : name.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_').replace(/_+/g, '_').substring(0, 50);
 
+const DEVICE_PROTO_LABELS = {
+  modbus_tcp: 'TCP Gateway', modbus_rtu: 'RS485 Gateway',
+  tcp_custom: 'TCP Custom', udp_custom: 'UDP Gateway', csv: 'CSV Reader'
+};
+
 const renderCsvPattern = (pattern) => {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
@@ -64,7 +69,7 @@ const renderCsvPattern = (pattern) => {
 };
 
 export const DevicesScreen = () => {
-  const { parameters, devices, stations, addParameter, editParameter, deleteParameter, addDevice, editDevice, showToast, testParameterConnection, hasLoadedOnce, API_BASE, authFetch, liveData } = useContext(AppContext);
+  const { parameters, devices, stations, addParameter, editParameter, deleteParameter, addDevice, editDevice, showToast, testParameterConnection } = useContext(AppContext);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingIdx, setEditingIdx] = useState(null);
@@ -183,10 +188,7 @@ export const DevicesScreen = () => {
       const deviceProtocol = form.input_type;
       const toNum = (v: any, fallback: any) => { const n = Number(v); return isNaN(n) ? fallback : n; };
 
-      const protoLabel = {
-        modbus_tcp: 'TCP Gateway', modbus_rtu: 'RS485 Gateway',
-        tcp_custom: 'TCP Custom', udp_custom: 'UDP Gateway', csv: 'CSV Reader'
-      }[deviceProtocol] || 'Gateway';
+      const protoLabel = DEVICE_PROTO_LABELS[deviceProtocol] || 'Gateway';
       const autoDeviceName = (form.station_name?.trim() || form.name?.trim() || 'Device') + ' ' + protoLabel;
 
       const deviceUpdate: Record<string, any> = { protocol: deviceProtocol, name: autoDeviceName };
@@ -384,7 +386,7 @@ export const DevicesScreen = () => {
       </div>
 
       {modalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(6px)' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,79,73,0.6)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(6px)' }}>
           <div style={{ width: '100%', maxWidth: '680px', background: '#fff', borderRadius: '14px', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)' }}>
 
             <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>

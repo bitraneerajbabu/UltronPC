@@ -11,8 +11,6 @@ class ServerConfigBase(BaseModel):
     is_active: bool = True
     is_cpcb_active: bool = True
 
-    # LED Board (LAN)
-    led_channel_id: Optional[int] = None          # PCB/ChannelId shown to LED card (e.g. 7003)
     led_station_name: Optional[str] = None        # Station label on the LED board
 
     @field_validator("protocol")

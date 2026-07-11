@@ -77,10 +77,6 @@ class DeviceBase(BaseModel):
     station_name: Optional[str] = None
     name: str = Field(..., max_length=120)
     device_type: DeviceType = DeviceType.ANALYZER
-    manufacturer: Optional[str] = None
-    model_number: Optional[str] = None
-    serial_number: Optional[str] = None
-    firmware_version: Optional[str] = None
     protocol: DeviceProtocol = DeviceProtocol.modbus_tcp
     host: Optional[str] = None
     port: Optional[int] = None
@@ -107,8 +103,7 @@ class DeviceBase(BaseModel):
     def clean_empty_strings(cls, data):
         if isinstance(data, dict):
             nullable_fields = [
-                "station_id", "manufacturer", "model_number", "serial_number", 
-                "firmware_version", "host", "port", "serial_port", "csv_path",
+                "station_id", "host", "port", "serial_port", "csv_path",
                 "csv_folder", "csv_filename_pattern", "csv_timestamp_col"
             ]
             for f in nullable_fields:
@@ -139,10 +134,6 @@ class DeviceUpdate(BaseModel):
     station_name: Optional[str] = None
     name: Optional[str] = None
     device_type: Optional[DeviceType] = None
-    manufacturer: Optional[str] = None
-    model_number: Optional[str] = None
-    serial_number: Optional[str] = None
-    firmware_version: Optional[str] = None
     protocol: Optional[DeviceProtocol] = None
     host: Optional[str] = None
     port: Optional[int] = None
@@ -170,8 +161,7 @@ class DeviceUpdate(BaseModel):
     def clean_empty_strings(cls, data):
         if isinstance(data, dict):
             fields = [
-                "station_id", "manufacturer", "model_number", "serial_number",
-                "firmware_version", "host", "port", "slave_id", "serial_port",
+                "station_id", "host", "port", "slave_id", "serial_port",
                 "baud_rate", "data_bits", "stop_bits", "csv_path", "csv_folder",
                 "csv_filename_pattern", "csv_delimiter", "csv_timestamp_col",
                 "poll_interval", "timeout", "retry_count", "request_hex"

@@ -5,7 +5,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from app.db.database import get_db
 from app.models.core import IndustrySite, TelemetryData, Parameter, Device
-from app.schemas.api_models import SiteCreate, SiteResponse, DeviceResponse, DeviceCreate, LatestTelemetryPoint, LockUpdate, LockSummary
+from app.schemas.api_models import SiteCreate, SiteResponse, DeviceResponse, DeviceCreate, LatestTelemetryPoint, LockUpdate
 from app.api.deps import AuthContext, get_auth_context
 
 router = APIRouter()
@@ -134,23 +134,6 @@ def renew_site_amc(site_id: int, db: Session = Depends(get_db), auth: AuthContex
     return db_site
 
 from pydantic import BaseModel
-
-class AmcExpiryUpdate(BaseModel):
-    amc_expiry: datetime
-
-@router.put("/{site_id}/amc-expiry", response_model=SiteResponse)
-def update_site_amc_expiry(site_id: int, payload: AmcExpiryUpdate, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
-    if not auth.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    db_site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
-    if not db_site:
-        raise HTTPException(status_code=404, detail="Site not found")
-    
-    db_site.amc_expiry = payload.amc_expiry
-    db.commit()
-    db.refresh(db_site)
-    return db_site
-
 
 class SiteUpdate(BaseModel):
     name: Optional[str] = None
@@ -377,19 +360,6 @@ def prune_all_telemetry(keep_days: int = 7, db: Session = Depends(get_db), auth:
     return {"status": "pruned_all", "deleted_rows": result.rowcount, "kept_days": keep_days}
 
 
-@router.get("/locks/summary", response_model=List[LockSummary])
-def get_locks_summary(db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
-    q = db.query(IndustrySite).with_entities(
-        IndustrySite.id,
-        IndustrySite.lock_status,
-        IndustrySite.lock_reason,
-        IndustrySite.lock_updated_at
-    )
-    if not auth.is_admin:
-        q = q.filter(IndustrySite.id == auth.site_id)
-    return q.all()
-
-
 @router.put("/{site_id}/lock")
 def update_lock(site_id: int, payload: LockUpdate, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
     if not auth.is_admin:
@@ -402,4 +372,21 @@ def update_lock(site_id: int, payload: LockUpdate, db: Session = Depends(get_db)
     site.lock_updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"status": "updated", "id": site_id, "lock_status": site.lock_status}
+
+
+@router.get("/locks/summary")
+def get_locks_summary(db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
+    if not auth.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    sites = db.query(IndustrySite).all()
+    return [
+        {
+            "id": site.id,
+            "lock_status": site.lock_status or "unlocked",
+            "lock_reason": site.lock_reason,
+            "lock_updated_at": site.lock_updated_at.isoformat() if site.lock_updated_at else None
+        }
+        for site in sites
+    ]
+
 

@@ -252,10 +252,26 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
                 delete(LiveData).where(LiveData.parameter_id.in_(param_ids))
             )
 
+        # ponytail: freeze timestamp to last good value for offline parameters
+        bad_quality_ids = [r["parameter_id"] for r in readings if r.get("quality") in ("E", "N")]
+        last_good_map = {}
+        if bad_quality_ids:
+            good_result = await db.execute(
+                select(HistoricalData.parameter_id, func.max(HistoricalData.timestamp).label("last_good_ts"))
+                .where(
+                    HistoricalData.parameter_id.in_(bad_quality_ids),
+                    HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range, DataQuality.uncertain))
+                )
+                .group_by(HistoricalData.parameter_id)
+            )
+            for row in good_result.all():
+                last_good_map[row.parameter_id] = row.last_good_ts
+
         for r in readings:
             q_str = r.get("quality", "U")
             quality_enum = DataQuality(q_str) if q_str in _VALID_QUALITIES else DataQuality.good
             ts = r.get("timestamp") if r.get("timestamp") is not None else now
+            live_ts = last_good_map.get(r["parameter_id"], ts)  # frozen timestamp for offline
 
             hist_rows.append(HistoricalData(
                 parameter_id=r["parameter_id"],
@@ -268,7 +284,7 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
 
             live_rows.append(LiveData(
                 parameter_id=r["parameter_id"],
-                timestamp=ts,
+                timestamp=live_ts,
                 value=r["value"],
                 raw_value=r.get("raw_value"),
                 quality=quality_enum,
@@ -286,7 +302,7 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
                     "value":        r["value"],
                     "unit":         param.unit or "",
                     "quality":      r.get("quality", "U"),
-                    "timestamp":    ts.isoformat(),
+                    "timestamp":    live_ts.isoformat(),
                 })
 
         # Bulk insert historical and live data

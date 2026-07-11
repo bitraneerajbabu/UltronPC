@@ -226,7 +226,7 @@ def register_add_remove_programs(target_exe: str, version: str):
         key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, uninstall_key)
         winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "UltrON")
         winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, version.lstrip("v"))
-        winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Sunshine Technologies")
+        winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Neeraj")
         winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, target_exe)
         winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, install_dir)
         winreg.SetValueEx(key, "InstallDate", 0, winreg.REG_SZ, today)

@@ -199,12 +199,14 @@ export const AppProvider = ({ children }) => {
           telemetryData.forEach(p => {
             const param = activeParams.find(paramObj => paramObj.id == p.parameter_id);
             if (param) {
+              const prevPt = prev[param.tag_name];
+              const isOnline = p.quality === 'good' || p.quality === 'out_of_range' || p.quality === 'uncertain' || p.quality === 'U' || p.quality === 'O' || p.quality === 'N';
               newLiveData[param.tag_name] = {
                 value: p.value,
                 raw_value: p.raw_value,
                 unit: param.unit || '',
-                status: (p.quality === 'good' || p.quality === 'out_of_range' || p.quality === 'uncertain' || p.quality === 'U' || p.quality === 'O' || p.quality === 'N') ? 'online' : 'offline',
-                timestamp: formatTimestamp(parseUtcDate(p.timestamp))
+                status: isOnline ? 'online' : 'offline',
+                timestamp: !isOnline && prevPt?.timestamp ? prevPt.timestamp : formatTimestamp(parseUtcDate(p.timestamp))
               };
             }
           });

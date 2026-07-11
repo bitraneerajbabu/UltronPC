@@ -16,8 +16,6 @@ class ServerConfig(Base):
     is_active = Column(Boolean, default=True)
     is_cpcb_active = Column(Boolean, default=True)
 
-    # ─── LED Board (LAN) ──────────────────────────────────────────────────────
-    led_channel_id = Column(Integer, nullable=True)      # PCB/ChannelId integer (e.g. 7003)
     led_station_name = Column(String(100), nullable=True) # Station label on LED board
 
     mappings = relationship("ServerParameterMapping", back_populates="server", cascade="all, delete-orphan")

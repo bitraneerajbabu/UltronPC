@@ -3,7 +3,7 @@ cd /d "%~dp0"
 
 echo ============================================================
 echo   UltrON - Standalone Executable Build Script
-echo   Powered by Sunshine Technologies
+echo   All Rights Reserved to Neeraj
 echo ============================================================
 echo.
 

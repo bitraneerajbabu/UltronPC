@@ -1,6 +1,21 @@
-import React, { useContext, useState, useEffect, useMemo } from 'react';
+import React, { useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { T, GLASS_CARD, BTN, INP, SEL } from '../theme';
+
+interface ReportSectionProps {
+  title: string;
+  intervalOptions: { label: string; value: string | number }[];
+  fromDate: string; setFromDate: (v: string) => void;
+  fromTime: string; setFromTime: (v: string) => void;
+  toDate: string; setToDate: (v: string) => void;
+  toTime: string; setToTime: (v: string) => void;
+  interval: string; setInterval: (v: string) => void;
+  onExportPDF: () => void;
+  onExportCSV: () => void;
+  previewHeaders: string[];
+  previewRows: Record<string, any>[];
+  loading: boolean;
+}
 
 const NORMAL_INTERVALS = [
   { label: '1 min', value: 1 },
@@ -23,70 +38,96 @@ const AVG_INTERVALS = [
   { label: '24 hr avg', value: 'avg_24hr' },
 ];
 
+const saveAs = async (blob: Blob, name: string, mime: string) => {
+  try {
+    if ('showSaveFilePicker' in window) {
+      const handle = await (window as any).showSaveFilePicker({
+        suggestedName: name,
+        types: [{ description: 'Document', accept: { [mime]: ['.' + name.split('.').pop()] } }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return true;
+    }
+  } catch (e: any) {
+    if (e.name === 'AbortError') return false;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return true;
+};
+
 const dlDate = (daysOffset = 0) => {
   const d = new Date(Date.now() + daysOffset * 86400000);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-const fmtTs = (date) => {
-  const p = (n) => String(n).padStart(2, '0');
+const fmtTs = (date: Date) => {
+  const p = (n: number) => String(n).padStart(2, '0');
   return `${date.getFullYear()}/${p(date.getMonth() + 1)}/${p(date.getDate())} ${p(date.getHours())}:${p(date.getMinutes())}`;
 };
 
-const secStyle = { ...GLASS_CARD, padding: '22px', marginTop: '18px' };
-const titleStyle = { fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '16px' };
-const gridStyle = { display: 'flex', flexWrap: 'wrap' as const, gap: '12px' };
-const labelStyle = { fontSize: '11px', fontWeight: '600', color: T.textLabel, marginBottom: '4px' };
-const btnRowStyle = { display: 'flex', gap: '10px', marginTop: '16px' };
-
-const ReportSection = ({ title, intervalOptions, fromDate, setFromDate, fromTime, setFromTime, toDate, setToDate, toTime, setToTime, interval, setInterval, onExportPDF, onExportCSV, previewHeaders, previewRows }: any) => (
-  <div style={secStyle}>
-    <div style={titleStyle}>{title}</div>
-    <div style={gridStyle}>
-      <div>
-        <div style={labelStyle}>Interval</div>
-        <select style={SEL} value={interval} onChange={e => setInterval(e.target.value)}>
+const ReportSection = ({
+  title, intervalOptions,
+  fromDate, setFromDate, fromTime, setFromTime,
+  toDate, setToDate, toTime, setToTime,
+  interval, setInterval,
+  onExportPDF, onExportCSV,
+  previewHeaders, previewRows, loading,
+}: ReportSectionProps) => (
+  <div className="card" style={{ marginTop: '18px' }}>
+    <div className="section-title">{title}</div>
+    {loading && <div className="spinner" style={{ margin: '12px 0' }}>Loading...</div>}
+    <div className="filter-grid">
+      <div className="form-group">
+        <label className="form-label">Interval</label>
+        <select className="form-select" value={interval} onChange={e => setInterval(e.target.value)}>
           {intervalOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
-      <div>
-        <div style={labelStyle}>From Date</div>
-        <input type="date" style={INP} value={fromDate} onChange={e => setFromDate(e.target.value)} />
+      <div className="form-group">
+        <label className="form-label">From Date</label>
+        <input type="date" className="form-input" value={fromDate} onChange={e => setFromDate(e.target.value)} />
       </div>
-      <div>
-        <div style={labelStyle}>From Time</div>
-        <input type="time" style={INP} value={fromTime} onChange={e => setFromTime(e.target.value)} />
+      <div className="form-group">
+        <label className="form-label">From Time</label>
+        <input type="time" className="form-input" value={fromTime} onChange={e => setFromTime(e.target.value)} />
       </div>
-      <div>
-        <div style={labelStyle}>To Date</div>
-        <input type="date" style={INP} value={toDate} onChange={e => setToDate(e.target.value)} />
+      <div className="form-group">
+        <label className="form-label">To Date</label>
+        <input type="date" className="form-input" value={toDate} onChange={e => setToDate(e.target.value)} />
       </div>
-      <div>
-        <div style={labelStyle}>To Time</div>
-        <input type="time" style={INP} value={toTime} onChange={e => setToTime(e.target.value)} />
+      <div className="form-group">
+        <label className="form-label">To Time</label>
+        <input type="time" className="form-input" value={toTime} onChange={e => setToTime(e.target.value)} />
       </div>
     </div>
-    <div style={btnRowStyle}>
-      <button style={BTN.primary} onClick={onExportPDF}>Export PDF</button>
-      <button style={BTN.ghost} onClick={onExportCSV}>Export CSV</button>
+    <div className="toolbar" style={{ marginTop: '16px' }}>
+      <button className="btn btn-primary" onClick={onExportPDF} disabled={loading}>Export PDF</button>
+      <button className="btn" onClick={onExportCSV} disabled={loading}>Export CSV</button>
     </div>
     {(previewHeaders.length > 0 && previewRows.length > 0) && (
-      <div style={{ marginTop: '16px', maxHeight: '300px', overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+      <div className="table-wrapper" style={{ marginTop: '16px' }}>
+        <table className="table">
           <thead>
             <tr>
-              {previewHeaders.map(h => (
-                <th key={h} style={{ textAlign: 'left', padding: '6px 8px', borderBottom: `1.5px solid ${T.primaryBorder}`, color: T.textLabel, fontWeight: '600', position: 'sticky', top: 0, background: T.glass }}>{h}</th>
-              ))}
+              {previewHeaders.map(h => <th key={h}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
             {previewRows.slice(0, 50).map((row, idx) => (
               <tr key={idx}>
-                <td style={{ padding: '5px 8px', borderBottom: `1px solid ${T.borderSoft}` }}>{row['Date & Time']}</td>
+                <td>{row['Date & Time']}</td>
                 {previewHeaders.slice(1).map(h => {
                   const val = row[h];
-                  return <td key={h} style={{ padding: '5px 8px', borderBottom: `1px solid ${T.borderSoft}`, fontWeight: val !== 'NA' ? '600' : '400' }}>{val}</td>;
+                  return <td key={h} style={{ fontWeight: val !== 'NA' ? '600' : '400' }}>{val}</td>;
                 })}
               </tr>
             ))}
@@ -106,8 +147,9 @@ export const ReportsScreen = () => {
   const [normalFromTime, setNormalFromTime] = useState('00:00');
   const [normalToDate, setNormalToDate] = useState(dlDate(0));
   const [normalToTime, setNormalToTime] = useState('23:59');
-  const [normalHeaders, setNormalHeaders] = useState([]);
-  const [normalRows, setNormalRows] = useState([]);
+  const [normalHeaders, setNormalHeaders] = useState<string[]>([]);
+  const [normalRows, setNormalRows] = useState<Record<string, any>[]>([]);
+  const [normalLoading, setNormalLoading] = useState(false);
 
   const [selectedParamIds, setSelectedParamIds] = useState<string[]>([]);
 
@@ -116,22 +158,15 @@ export const ReportsScreen = () => {
   const [avgFromTime, setAvgFromTime] = useState('00:00');
   const [avgToDate, setAvgToDate] = useState(dlDate(0));
   const [avgToTime, setAvgToTime] = useState('23:59');
-  const [avgHeaders, setAvgHeaders] = useState([]);
-  const [avgRows, setAvgRows] = useState([]);
+  const [avgHeaders, setAvgHeaders] = useState<string[]>([]);
+  const [avgRows, setAvgRows] = useState<Record<string, any>[]>([]);
+  const [avgLoading, setAvgLoading] = useState(false);
 
-  // Merge actual stations with unique parameter descriptions to support custom virtual stations
-  const allStations = useMemo(() => {
-    const list = stations.map(s => ({ id: String(s.id), name: s.name }));
-    parameters.forEach(p => {
-      if (p.description && p.description.trim()) {
-        const desc = p.description.trim();
-        if (!list.some(s => s.name === desc)) {
-          list.push({ id: desc, name: desc });
-        }
-      }
-    });
-    return list;
-  }, [stations, parameters]);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const allStations = useMemo(() =>
+    stations.map(s => ({ id: String(s.id), name: s.name })),
+  [stations]);
 
   useEffect(() => {
     if (allStations.length && !stationId) setStationId(allStations[0].id);
@@ -140,15 +175,11 @@ export const ReportsScreen = () => {
   const filteredParams = useMemo(() => {
     return parameters.filter(p => {
       if (!stationId) return true;
-      if (p.description === stationId) return true;
       const dev = devices.find(d => String(d.id) === String(p.device_id));
       if (!dev) return false;
-      const st = stations.find(s => String(s.id) === String(dev.station_id));
-      if (st && st.name === stationId) return true;
-      if (String(dev.station_id) === stationId) return true;
-      return false;
+      return String(dev.station_id) === stationId;
     });
-  }, [parameters, stationId, stations, devices]);
+  }, [parameters, stationId, devices]);
 
   useEffect(() => {
     setSelectedParamIds(filteredParams.map(p => String(p.id)));
@@ -160,6 +191,10 @@ export const ReportsScreen = () => {
 
   const fetchData = async (isNormal: boolean) => {
     if (!selectedParamIds.length) { showToast('No parameters selected.', 'warn'); return null; }
+    if (abortRef.current) abortRef.current.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
     const paramIds = selectedParamIds.join(',');
     const fromD = isNormal ? normalFromDate : avgFromDate;
     const fromT = isNormal ? normalFromTime : avgFromTime;
@@ -171,8 +206,8 @@ export const ReportsScreen = () => {
     const avgType = isNormal ? 'raw' : avgInterval;
 
     try {
-      const url = `${API_BASE}/trends/chart-data?parameter_ids=${paramIds}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${avgType}`;
-      const res = await authFetch(url);
+      const url = `${API_BASE}/trends/chart-data?parameter_ids=${paramIds}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${avgType}&limit=100000`;
+      const res = await authFetch(url, { signal: ac.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const resData: any = await res.json();
       const seriesList: any[] = resData.series || [];
@@ -186,7 +221,7 @@ export const ReportsScreen = () => {
       const dataByTs: Record<string, Record<string, any>> = {};
       timestamps.forEach(ts => { dataByTs[ts] = {}; });
       seriesList.forEach(s => {
-        s.labels.forEach((lbl, idx) => { if (dataByTs[lbl]) dataByTs[lbl][s.name] = s.values[idx]; });
+        s.labels.forEach((lbl: string, idx: number) => { if (dataByTs[lbl]) dataByTs[lbl][s.name] = s.values[idx]; });
       });
 
       let filteredTimestamps = timestamps;
@@ -210,25 +245,28 @@ export const ReportsScreen = () => {
         const row: Record<string, any> = { 'Date & Time': fmtTs(parseUtcDate(ts)) };
         seriesList.forEach((s, idx) => {
           const val = dataByTs[ts][s.name];
-          row[headers[idx + 1]] = val !== null && val !== undefined ? val.toFixed(2) : 'NA';
+          row[headers[idx + 1]] = val !== null && val !== undefined ? Number(val).toFixed(2) : 'NA';
         });
         return row;
       });
 
       return { headers, rows };
-    } catch (e) {
+    } catch (e: any) {
+      if (e.name === 'AbortError') return null;
       showToast('Could not fetch data.', 'error');
       return null;
     }
   };
 
   const handlePreview = async (isNormal: boolean) => {
+    if (isNormal) setNormalLoading(true); else setAvgLoading(true);
     const result = await fetchData(isNormal);
     if (result) {
       if (isNormal) { setNormalHeaders(result.headers); setNormalRows(result.rows); }
       else { setAvgHeaders(result.headers); setAvgRows(result.rows); }
       showToast(`${result.rows.length} rows loaded.`);
     }
+    if (isNormal) setNormalLoading(false); else setAvgLoading(false);
   };
 
   const handleExport = async (isNormal: boolean, format: 'pdf' | 'csv') => {
@@ -243,73 +281,51 @@ export const ReportsScreen = () => {
     const resolvedSt = stations.find(s => String(s.id) === stationId || s.name === stationId);
     const stName = resolvedSt?.name || stationId || 'UltrON Station';
     const stepMin = isNormal ? Number(normalInterval) : 0;
+    const avgType = isNormal ? 'raw' : avgInterval;
 
-    // Estimate rows and warn if > 15 days or > 21600 rows
     const numMinutes = (new Date(`${toD}T${toT}`).getTime() - new Date(`${fromD}T${fromT}`).getTime()) / 60000;
     const numDays = numMinutes / 1440;
     const estRows = isNormal
       ? Math.ceil(numMinutes / Math.max(stepMin, 1))
-      : Math.ceil(numMinutes / ({ avg_15min: 15, avg_30min: 30, avg_1hr: 60, avg_3hr: 180, avg_6hr: 360, avg_12hr: 720, avg_24hr: 1440 }[avgInterval] || 60));
+      : Math.ceil(numMinutes / ({ avg_15min: 15, avg_30min: 30, avg_1hr: 60, avg_3hr: 180, avg_6hr: 360, avg_12hr: 720, avg_24hr: 1440 } as Record<string, number>)[avgInterval] || 60);
     if (numDays > 15 || estRows > 21600) {
-      const proceed = window.confirm(
-        `This export covers ${numDays.toFixed(1)} days (~${estRows.toLocaleString()} rows per parameter). ` +
-        `Proceeding may take time or memory. PDF is capped at 15 days (21600 rows). Continue?`
-      );
-      if (!proceed) return;
+      if (!window.confirm(`This export covers ${numDays.toFixed(1)} days (~${estRows.toLocaleString()} rows). Continue?`)) return;
     }
 
-    if (format === 'csv') {
-      const result = await fetchData(isNormal);
-      if (!result || !result.rows.length) return showToast('No data for CSV export.', 'warn');
-      const csvContent = [
-        result.headers,
-        ...result.rows.map(r => result.headers.map(h => {
-          const val = r[h] ?? '';
-          return `"${String(val).replace(/"/g, '""')}"`;
-        }))
-      ].map(row => row.join(',')).join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${isNormal ? 'Normal' : 'Average'}_Report_${fromD}_to_${toD}.csv`;
-      a.click();
-      showToast('CSV exported.');
-      return;
-    }
+    if (isNormal) setNormalLoading(true); else setAvgLoading(true);
 
     try {
-      const avgType = isNormal ? 'raw' : avgInterval;
-      const url = `${API_BASE}/reports/pdf?parameter_ids=${paramIds}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${avgType}&step_minutes=${stepMin}&station_name=${encodeURIComponent(stName)}`;
+      const endpoint = format === 'csv' ? '/reports/export-csv' : '/reports/pdf';
+      const url = `${API_BASE}${endpoint}?parameter_ids=${paramIds}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${avgType}&step_minutes=${stepMin}&station_name=${encodeURIComponent(stName)}`;
       const res = await authFetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
-      const objUrl = URL.createObjectURL(blob);
-      const iframe = document.createElement('iframe');
-      iframe.style.display = 'none';
-      iframe.src = objUrl;
-      document.body.appendChild(iframe);
-      setTimeout(() => { document.body.removeChild(iframe); URL.revokeObjectURL(objUrl); }, 5000);
-      showToast('PDF opened.');
-    } catch (e) {
-      showToast(`PDF export failed: ${e.message}`, 'error');
+      const ext = format === 'csv' ? 'csv' : 'pdf';
+      const name = `UltrON_Report_${fromD}_to_${toD}.${ext}`;
+      const mime = format === 'csv' ? 'text/csv' : 'application/pdf';
+      await saveAs(blob, name, mime);
+      showToast(`${format.toUpperCase()} saved — also available in the Reports folder next to the app.`);
+    } catch (e: any) {
+      showToast(`${format.toUpperCase()} export failed.`, 'error');
+    } finally {
+      if (isNormal) setNormalLoading(false); else setAvgLoading(false);
     }
   };
 
   return (
     <div className="screen active" id="reportsScreen">
-      <div style={{ ...GLASS_CARD, padding: '20px', marginBottom: '2px' }}>
-        <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>Report Filters</div>
-        <div style={gridStyle}>
-          <div>
-            <div style={labelStyle}>Station name (Device & Config)</div>
-            <select style={SEL} value={stationId} onChange={e => setStationId(e.target.value)}>
+      <div className="card" style={{ marginBottom: '2px' }}>
+        <div className="section-title">Report Filters</div>
+        <div className="filter-grid">
+          <div className="form-group">
+            <label className="form-label">Station name (Device & Config)</label>
+            <select className="form-select" value={stationId} onChange={e => setStationId(e.target.value)}>
               {allStations.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
             </select>
           </div>
-
-          <div>
-            <div style={labelStyle}>Parameter</div>
-            <div style={{ ...INP, height: 'auto', minHeight: '38px', maxHeight: '180px', overflowY: 'auto', padding: '4px 8px', width: '220px' }}>
+          <div className="form-group">
+            <label className="form-label">Parameter</label>
+            <div className="form-input" style={{ height: 'auto', minHeight: '38px', maxHeight: '180px', overflowY: 'auto', padding: '4px 8px', width: '220px' }}>
               {filteredParams.length === 0 ? (
                 <div style={{ color: T.textFaint, fontSize: '12px', padding: '4px 0' }}>No parameters</div>
               ) : (
@@ -329,7 +345,7 @@ export const ReportsScreen = () => {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button style={{ ...BTN.ghost, padding: '7px 18px' }} onClick={() => handlePreview(true)}>Refresh Preview</button>
+            <button className="btn" style={{ padding: '7px 18px' }} onClick={() => handlePreview(true)} disabled={normalLoading}>Refresh Preview</button>
           </div>
         </div>
       </div>
@@ -346,6 +362,7 @@ export const ReportsScreen = () => {
         onExportCSV={() => handleExport(true, 'csv')}
         previewHeaders={normalHeaders}
         previewRows={normalRows}
+        loading={normalLoading}
       />
 
       <ReportSection
@@ -360,6 +377,7 @@ export const ReportsScreen = () => {
         onExportCSV={() => handleExport(false, 'csv')}
         previewHeaders={avgHeaders}
         previewRows={avgRows}
+        loading={avgLoading}
       />
     </div>
   );

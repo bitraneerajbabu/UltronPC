@@ -13,31 +13,32 @@ interface HeaderProps {
   onLogout: () => void;
   collapsed: boolean;
   onToggleSidebar: () => void;
+  onOpenMobile?: () => void;
+  isMobile?: boolean;
 }
 
 export default function Header({
   activeTab, searchQuery, onSearchChange,
   darkMode, onToggleDark,
   notifPermission, onRequestNotif, onLogout,
+  onOpenMobile, isMobile,
 }: HeaderProps) {
   const getBreadcrumbs = () => {
     switch (activeTab) {
       case 'dashboard':
-        return ['RajAPI', 'Dashboard'];
+        return ['Neeraj', 'Dashboard'];
       case 'alarms':
-        return ['RajAPI', 'Monitoring', 'Notifications'];
+        return ['Neeraj', 'Monitoring', 'Notifications'];
       case 'commands':
-        return ['RajAPI', 'Management', 'Configuration'];
+        return ['Neeraj', 'Management', 'Configuration'];
       case 'broadcasts':
-        return ['RajAPI', 'Management', 'Broadcast Center'];
+        return ['Neeraj', 'Management', 'Broadcast Center'];
       case 'locks':
-        return ['RajAPI', 'Management', 'AMC Management'];
+        return ['Neeraj', 'Management', 'AMC Management'];
       case 'quality':
-        return ['RajAPI', 'Reports', 'Audit Logs'];
-      case 'settings_tab':
-        return ['RajAPI', 'Reports', 'Settings'];
+        return ['Neeraj', 'Reports', 'Audit Logs'];
       default:
-        return ['RajAPI', 'Dashboard'];
+        return ['Neeraj', 'Dashboard'];
     }
   };
 
@@ -45,43 +46,56 @@ export default function Header({
     <Box
       sx={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        height: 70, px: 3,
-        borderBottom: '1px solid rgba(0,0,0,0.06)',
-        backgroundColor: '#FFFFFF',
-        gap: 2,
+        height: { xs: 60, md: 70 }, px: { xs: 1.5, md: 3 },
+        borderBottom: 1, borderColor: 'divider',
+        bgcolor: 'background.paper',
+        gap: 1,
       }}
     >
-      {/* Left: Breadcrumbs */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 240 }}>
-        {getBreadcrumbs().map((b, index, arr) => (
-          <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography
-              variant="body2"
-              sx={{
-                fontWeight: index === arr.length - 1 ? 600 : 400,
-                color: index === arr.length - 1 ? '#111827' : '#6B7280',
-                fontSize: '14px',
-              }}
-            >
-              {b}
-            </Typography>
-            {index < arr.length - 1 && (
-              <Typography variant="caption" sx={{ color: '#9CA3AF', fontSize: '12px' }}>
-                /
+      {/* Left: Hamburger (mobile) or Breadcrumbs (desktop) */}
+      {isMobile ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <IconButton onClick={onOpenMobile} size="small" sx={{ color: '#6B7280' }}>
+            <Icon name="Menu" size={22} />
+          </IconButton>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', fontSize: '14px' }}>
+            {getBreadcrumbs().slice(-1)[0]}
+          </Typography>
+        </Box>
+      ) : (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 240 }}>
+          {getBreadcrumbs().map((b, index, arr) => (
+            <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: index === arr.length - 1 ? 600 : 400,
+                  color: index === arr.length - 1 ? '#111827' : '#6B7280',
+                  fontSize: '14px',
+                }}
+              >
+                {b}
               </Typography>
-            )}
-          </Box>
-        ))}
-      </Box>
+              {index < arr.length - 1 && (
+                <Typography variant="caption" sx={{ color: '#9CA3AF', fontSize: '12px' }}>
+                  /
+                </Typography>
+              )}
+            </Box>
+          ))}
+        </Box>
+      )}
 
-      {/* Center: Search */}
-      <Box sx={{ flex: 2, display: 'flex', justifyContent: 'center' }}>
-        <SearchBar
-          value={searchQuery}
-          onChange={onSearchChange}
-          placeholder="Search Plants, Gateways, Customers..."
-        />
-      </Box>
+      {/* Center: Search (hidden on mobile) */}
+      {!isMobile && (
+        <Box sx={{ flex: 2, display: 'flex', justifyContent: 'center' }}>
+          <SearchBar
+            value={searchQuery}
+            onChange={onSearchChange}
+            placeholder="Search Plants, Gateways, Customers..."
+          />
+        </Box>
+      )}
 
       {/* Right: Actions */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, justifyContent: 'flex-end' }}>

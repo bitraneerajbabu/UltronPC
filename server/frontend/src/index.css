@@ -4,62 +4,21 @@
 @import '@fontsource/inter/600.css';
 @import '@fontsource/inter/700.css';
 
-:root {
-  /* Color Palette */
-  --primary: #2563EB;
-  --primary-hover: #1D4ED8;
-  --primary-light: #EFF6FF;
-  
-  --success: #16A34A;
-  --success-hover: #15803D;
-  --success-light: #F0FDF4;
-
-  --warning: #D97706;
-  --warning-hover: #B45309;
-  --warning-light: #FFFBEB;
-
-  --error: #DC2626;
-  --error-hover: #B91C1C;
-  --error-light: #FEF2F2;
-
-  --info: #0284C7;
-  --info-hover: #0369A1;
-  --info-light: #F0F9FF;
-
-  /* Neutral grays */
-  --bg-main: #F9FAFB;
-  --bg-surface: #FFFFFF;
-  --border: #E5E7EB;
-  --border-focus: #3B82F6;
-  
-  --text-primary: #111827;
-  --text-secondary: #4B5563;
-  --text-muted: #9CA3AF;
-
-  /* Spacing and Radius */
-  --radius-card: 12px;
-  --radius-button: 8px;
-  --radius-input: 8px;
-
-  /* Shadows (Flat Material design shadow tokens) */
-  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03);
-  --shadow-card-hover: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  --shadow-popover: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
-  --shadow-focus: 0 0 0 3px rgba(59, 130, 246, 0.15);
-}
-
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html {
+  transition: background-color 0.3s ease;
+}
+
 body {
   font-family: 'Inter', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--bg-main);
-  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 @keyframes pulse {
@@ -83,4 +42,13 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #9CA3AF;
+}
+
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar-thumb {
+    background: #334155;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+  }
 }

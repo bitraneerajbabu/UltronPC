@@ -1,9 +1,9 @@
 import os
+import ssl
 import json
 import urllib.request
 from fastapi import APIRouter
 from fastapi.responses import FileResponse, RedirectResponse
-from app.core.ssl_utils import get_verified_ssl_context
 
 router = APIRouter()
 
@@ -13,7 +13,7 @@ FALLBACK_VERSION = "v1.0.10"
 
 def _get_latest_version() -> str:
     """Query GitHub releases API for the latest tag. Fall back to FALLBACK_VERSION on error."""
-    ctx = get_verified_ssl_context()
+    ctx = ssl.create_default_context()
     url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
     req = urllib.request.Request(
         url,

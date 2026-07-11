@@ -1,8 +1,11 @@
-"""UltrON — Reports API (Excel + PDF generation)"""
+"""UltrON — Reports API (Excel + PDF + CSV generation)"""
 
+import csv
 import io
 import math
+import os
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
 
@@ -21,9 +24,16 @@ from app.models.device import Device
 from app.models.station import Station
 from app.core.security import require_admin
 from app.core.logger import get_logger
+from app.config import settings
 
 log = get_logger("ultron.reports")
 router = APIRouter(prefix="/reports", tags=["Reports"])
+
+
+def _reports_dir() -> Path:
+    d = Path(settings.REPORTS_DIR).resolve()
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 async def _fetch_report_data(
@@ -102,9 +112,6 @@ async def generate_excel(
     ids = [int(x) for x in parameter_ids.split(",") if x.strip().isdigit()]
     params, readings = await _fetch_report_data(db, ids, start, end, avg_type, step_minutes)
     param_map = {p.id: p for p in params}
-
-    # TEMP DEBUG: tzinfo check
-    print(f"[DEBUG generate_excel] start.tzinfo={start.tzinfo}, end.tzinfo={end.tzinfo}, readings[0].timestamp.tzinfo={readings[0].timestamp.tzinfo if readings else 'no readings'}", flush=True)
 
     wb = openpyxl.Workbook()
     # Remove default sheet — we'll add per-day sheets
@@ -206,9 +213,6 @@ async def generate_pdf(
     params, readings = await _fetch_report_data(db, ids, start, end, avg_type, step_minutes)
     param_map = {p.id: p for p in params}
 
-    # TEMP DEBUG: tzinfo check
-    print(f"[DEBUG generate_pdf] start.tzinfo={start.tzinfo}, end.tzinfo={end.tzinfo}, readings[0].timestamp.tzinfo={readings[0].timestamp.tzinfo if readings else 'no readings'}", flush=True)
-
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 16)
@@ -259,9 +263,79 @@ async def generate_pdf(
 
     buf = io.BytesIO(pdf.output())
     fname = f"UltrON_Report_{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}.pdf"
+    # Save to Reports dir
+    try:
+        report_path = _reports_dir() / fname
+        with open(report_path, "wb") as f:
+            f.write(buf.getvalue())
+        log.info(f"PDF saved to {report_path}")
+    except Exception as e:
+        log.warning(f"Could not save PDF to Reports dir: {e}")
     return StreamingResponse(
         buf,
         media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@router.get("/export-csv")
+async def export_csv(
+    parameter_ids: str = Query(..., description="Comma-separated parameter IDs"),
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    avg_type: AverageType = AverageType.avg_1hr,
+    step_minutes: int = Query(0, description="Step interval in minutes for normal (raw) reports"),
+    station_name: str = Query("UltrON Station"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate a CSV report saved to the Reports directory."""
+    if not end:
+        end = datetime.utcnow()
+    if not start:
+        start = end - timedelta(hours=24)
+
+    ids = [int(x) for x in parameter_ids.split(",") if x.strip().isdigit()]
+    params, readings = await _fetch_report_data(db, ids, start, end, avg_type, step_minutes)
+    param_map = {p.id: p for p in params}
+
+    if step_minutes > 0 and avg_type == AverageType.raw:
+        rtype = f"Normal (Step: {step_minutes}min)"
+    else:
+        rtype = f"Average ({str(avg_type)})"
+
+    timestamps = sorted(set(r.timestamp for r in readings))
+    data_by_ts: dict = {ts: {} for ts in timestamps}
+    for r in readings:
+        data_by_ts[r.timestamp][r.parameter_id] = r.value
+
+    headers = ["Date & Time"] + [param_map[pid].tag_name for pid in ids if pid in param_map]
+
+    rows = []
+    for ts in timestamps:
+        row = [ts.strftime("%Y/%m/%d %H:%M")]
+        for pid in ids:
+            if pid in param_map:
+                val = data_by_ts[ts].get(pid)
+                row.append(f"{val:.3f}" if val is not None else "NA")
+        rows.append(row)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(headers)
+    writer.writerows(rows)
+    csv_content = buf.getvalue()
+
+    fname = f"UltrON_Report_{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}.csv"
+    try:
+        report_path = _reports_dir() / fname
+        report_path.write_text(csv_content, encoding="utf-8")
+        log.info(f"CSV saved to {report_path}")
+    except Exception as e:
+        log.warning(f"Could not save CSV to Reports dir: {e}")
+
+    return StreamingResponse(
+        io.BytesIO(csv_content.encode("utf-8")),
+        media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
 
