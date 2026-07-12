@@ -271,6 +271,11 @@ class Settings(BaseSettings):
     # ─── WebSocket ────────────────────────────────────────────
     WS_LIVE_PUSH_INTERVAL: int = 5
 
+    # ─── RajAPI URLs (movable to .env; defaults for backward compatibility) ────
+    RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/heartbeat"
+    RAJAPI_COMMANDS_URL: str = "https://rajapi.com/api/v1/commands/pending"
+    CENTRAL_API_URL: str = "https://rajapi.com/api/v1/sync/"
+
     # ─── RajAPI Central Sync (background, invisible to user) ────
     RAJAPI_API_KEY: str = ""                  # Legacy API key — kept for backward compatibility
     RAJAPI_SYNC_ENABLED: bool = True
@@ -304,6 +309,18 @@ class Settings(BaseSettings):
     UPLOADS_DIR: str = "./uploads"
 
     # ─── Security ────────────────────────────────────────────────────
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    MAX_FAILED_LOGIN_ATTEMPTS: int = 5
+    ACCOUNT_LOCKOUT_MINUTES: int = 15
+    PASSWORD_MIN_LENGTH: int = 8
+    PASSWORD_REQUIRE_UPPERCASE: bool = True
+    PASSWORD_REQUIRE_LOWERCASE: bool = True
+    PASSWORD_REQUIRE_DIGIT: bool = True
+    PASSWORD_REQUIRE_SPECIAL: bool = True
+    PASSWORD_HISTORY_COUNT: int = 5
+    SESSION_TIMEOUT_MINUTES: int = 0
+    JWT_BLACKLIST_ENABLED: bool = True
+
     EMAIL_ENABLED: bool = False
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
@@ -353,9 +370,4 @@ class Settings(BaseSettings):
 # Singleton instance — import this everywhere
 settings = Settings()
 
-# ─── Immutable RajAPI Server URL ──────────────────────────────
-# Hardcoded — cannot be overridden by .env. All UltrON clients
-# past, present, and future connect here.
-RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/heartbeat"
-RAJAPI_COMMANDS_URL: str = "https://rajapi.com/api/v1/commands/pending"
-CENTRAL_API_URL: str = "https://rajapi.com/api/v1/sync/"
+

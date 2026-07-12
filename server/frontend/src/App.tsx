@@ -222,8 +222,8 @@ function App() {
     if (!editExpiryVal) return;
     setSavingExpiry(true);
     try {
-      const res = await adminFetch(`/api/v1/sites/${siteId}/amc-expiry`, {
-        method: 'PUT',
+      const res = await adminFetch(`/api/v1/sites/${siteId}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amc_expiry: new Date(editExpiryVal).toISOString() })
       });

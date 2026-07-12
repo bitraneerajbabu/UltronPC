@@ -58,3 +58,8 @@ vite.svg
 hero.png
 # Agent workspace.agents/
 
+# Binary bloat — never commit EXEs
+*.exe
+server/backend/downloads/
+
+

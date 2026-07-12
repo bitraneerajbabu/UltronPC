@@ -31,14 +31,14 @@ from app.services.lock_store import is_push_allowed, get_lock_status
 log = get_logger("ultron.server_push")
 
 
-def _quality_str(avg):
-    if not avg or not avg.quality:
+def _quality_str(avg: object) -> str:
+    if not avg or not hasattr(avg, 'quality'):
         return ""
     q = avg.quality.value if hasattr(avg.quality, "value") else avg.quality
     return str(q)
 
 
-def _cpcb_row(station_name, param_code, local_from, value, quality):
+def _cpcb_row(station_name: str, param_code: str, local_from: datetime, value: float | None, quality: object) -> str:
     local_to = local_from + timedelta(minutes=15)
     date_from = local_from.strftime("%d-%m-%Y %H:%M")
     date_to = local_to.strftime("%d-%m-%Y %H:%M")
@@ -601,13 +601,13 @@ async def _poll_remote_commands():
     Replaces the old MQTT-based remote_control.py.
     Called every 1 minute from run_server_push("live").
     """
-    from app.config import settings, RAJAPI_COMMANDS_URL
+    from app.config import settings
     station_id = settings.RAJAPI_STATION_ID
     api_key = settings.RAJAPI_API_KEY
     if not station_id or not api_key:
         return
 
-    url = RAJAPI_COMMANDS_URL
+    url = settings.RAJAPI_COMMANDS_URL
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
@@ -641,7 +641,7 @@ async def _poll_remote_commands():
                     log.error(f"[CMD] factory_reset failed: {e}")
 
             # Acknowledge command as executed
-            ack_url = f"https://rajapi.com/api/v1/commands/{cmd_id}/ack"
+            ack_url = f"{settings.RAJAPI_COMMANDS_URL.replace('/pending', '')}/{cmd_id}/ack"
             async with httpx.AsyncClient(timeout=5.0) as client:
                 await client.post(
                     ack_url,

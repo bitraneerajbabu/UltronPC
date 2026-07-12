@@ -19,7 +19,7 @@ This means the client sets their RajAPI api_key as the 'Site Name' (api_name) fi
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
-from typing import List, Optional, Any
+from typing import Optional, Any
 from pydantic import BaseModel
 from app.db.database import get_db
 from app.models.core import IndustrySite, TelemetryData, Parameter, Device, Broadcast

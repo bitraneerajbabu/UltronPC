@@ -35,7 +35,7 @@ def _update_env_enc(updates: dict) -> None:
     write_env_enc_from_dict(existing, enc_file)
 
 
-from app.config import CENTRAL_API_URL, RAJAPI_SYNC_URL
+from app.config import settings
 
 class LicenseVerifyRequest(BaseModel):
     api_key: str
@@ -44,7 +44,7 @@ class LicenseVerifyRequest(BaseModel):
 @router.get("/status")
 async def get_license_status():
     """License check removed — always returns True for direct Master login."""
-    return {"licensed": True, "server_url": CENTRAL_API_URL}
+    return {"licensed": True, "server_url": settings.CENTRAL_API_URL}
 
 @router.post("/verify")
 async def verify_and_save_license(req: LicenseVerifyRequest):
@@ -55,7 +55,7 @@ async def verify_and_save_license(req: LicenseVerifyRequest):
         raise HTTPException(status_code=400, detail="API Key is required.")
     
     # Always use the hardcoded RajAPI server URL — clients cannot change this
-    url = CENTRAL_API_URL
+    url = settings.CENTRAL_API_URL
     payload = {"client_id": "setup_test", "points": []}
     
     try:

@@ -270,7 +270,7 @@ class UDPCustomReader:
                 if p.get("parse_config"):
                     conf = json.loads(p["parse_config"])
                     req_hex = conf.get("request_hex")
-            except:
+            except Exception:
                 pass
                 
             key = (thost, tport, req_hex)

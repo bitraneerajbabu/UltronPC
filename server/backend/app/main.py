@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -60,7 +60,7 @@ def _run_auto_migrations():
                 logger.warning(f"Index '{idx_name}' skipped: {e}")
 
         # Add lock fields & error tracking & version/notes to industry_sites if missing
-        existing_cols = {c["name"] for c in inspector.get_columns("industry_sites")}
+        # (existing_cols already fetched above — indexes don't change columns)
         for col_name, col_def in [
             ("lock_status", "VARCHAR(50) DEFAULT 'unlocked'"),
             ("lock_reason", "TEXT"),
@@ -108,25 +108,6 @@ def _run_auto_migrations():
                 logger.info("Auto-migration: added 'target_site_id' to broadcasts")
         except Exception as e:
             logger.warning(f"Auto-migration for broadcast columns skipped: {e}")
-
-        # Remove accidental demo broadcast so clients only see manually-created messages.
-        try:
-            result = conn.execute(
-                text(
-                    "DELETE FROM broadcasts "
-                    "WHERE lower(trim(message)) = :message "
-                    "AND CAST(expires_at AS TEXT) LIKE :expires_at"
-                ),
-                {
-                    "message": "scheduled maintenance tonight at 2 am",
-                    "expires_at": "2026-07-05%",
-                },
-            )
-            conn.commit()
-            if result.rowcount and result.rowcount > 0:
-                logger.info(f"Removed {result.rowcount} accidental placeholder broadcast(s)")
-        except Exception as e:
-            logger.warning(f"Broadcast placeholder cleanup skipped: {e}")
 
         # Add api_key column to devices table if missing
         try:

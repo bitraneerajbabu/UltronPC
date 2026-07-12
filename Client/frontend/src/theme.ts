@@ -83,14 +83,6 @@ export const PROTO = {
   csv:        { label: 'CSV Watch',  color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  glow: 'rgba(251,191,36,0.25)',  icon: '' },
 };
 
-export const INPUT_TYPES = {
-  modbus_tcp:     { label: 'Modbus TCP',  color: '#38bdf8', icon: '' },
-  modbus_rtu:     { label: 'Modbus RTU',  color: '#a78bfa', icon: '' },
-  csv:            { label: 'CSV File',    color: '#fbbf24', icon: '' },
-  cumulative:     { label: 'Cumulative',  color: '#34d399', icon: ''  },
-  day_cumulative: { label: 'Day Cumul.', color: '#f472b6', icon: '' },
-};
-
 // ─── Sensor card state ────────────────────────────────────────────────────────
 export const PARAM_STATE = {
   offline:  { cls: 'sensor-card-offline',  badge: 'OFFLINE',  text: 'OFFLINE',  dot: T.danger   },

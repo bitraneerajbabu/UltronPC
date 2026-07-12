@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
-import { T, GLASS_CARD, BTN, INP, SEL } from '../theme';
+import { T, GLASS_CARD } from '../theme';
 
 interface ReportSectionProps {
   title: string;

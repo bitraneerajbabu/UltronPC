@@ -16,9 +16,8 @@ from app.models.parameter import Parameter, RegisterType, DataType, ByteOrder, A
 from app.models.telemetry import LiveData, HistoricalData, Averages, Alarm, SystemLog, PendingUpload
 from app.config import APP_DIR, settings
 from app.core.logger import get_logger, get_audit_logger
+import httpx
 import socket
-import asyncio
-
 log = get_logger("ultron.settings")
 audit = get_audit_logger()
 router = APIRouter(
@@ -66,14 +65,9 @@ async def _get_lan_ip() -> str:
 
 async def _check_internet() -> bool:
     try:
-        import urllib.request
-        from app.core.ssl_utils import urlopen_with_ssl_fallback
-        req = urllib.request.Request(
-            "https://clients3.google.com/generate_204",
-            method="GET",
-        )
-        with urlopen_with_ssl_fallback(req, timeout=5) as resp:
-            return resp.status == 204
+        async with httpx.AsyncClient(verify=True, timeout=5) as client:
+            resp = await client.get("https://clients3.google.com/generate_204")
+            return resp.status_code == 204
     except Exception:
         return False
 
@@ -378,24 +372,16 @@ async def check_firmware():
     Query the GitHub Releases API to find the latest UltrON release.
     Returns version, release notes, download URL, and whether an update is available.
     """
-    import urllib.request
-    import json as _json
-    import ssl
-
     current_version = settings.APP_VERSION
 
     try:
-        from app.core.ssl_utils import urlopen_with_ssl_fallback
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": "UltrON-FirmwareChecker/1.0",
-                "Accept": "application/vnd.github.v3+json",
-            }
-        )
-        with urlopen_with_ssl_fallback(req, timeout=10) as resp:
-            data = _json.loads(resp.read().decode("utf-8"))
+        async with httpx.AsyncClient(verify=True, timeout=10) as client:
+            resp = await client.get(
+                f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
+                headers={"User-Agent": "UltrON-FirmwareChecker/1.0", "Accept": "application/vnd.github.v3+json"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
         latest_tag = data.get("tag_name", "").lstrip("v")
         release_name = data.get("name", latest_tag)
@@ -477,7 +463,7 @@ _fw_download_state: dict = {
 }
 
 
-def _do_firmware_download(custom_url=None):
+def _do_firmware_download(custom_url: str | None = None) -> None:
     """Run in a background thread: download UltrON.exe from GitHub or a custom URL."""
     global _fw_download_state
     import urllib.request

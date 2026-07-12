@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 
 const s: Record<string, React.CSSProperties> = {
@@ -85,7 +85,9 @@ const MapPinIcon = () => (
 );
 
 export const ContactScreen = () => {
-  const { currentUser, localVersion } = useContext(AppContext);
+  const { currentUser } = useContext(AppContext);
+  const [localVersion, setLocalVersion] = useState('');
+  useEffect(() => { fetch('/version').then(r => r.ok ? r.text() : '').then(setLocalVersion).catch(() => {}); }, []);
 
   return (
     <div className="screen active" id="contactScreen">

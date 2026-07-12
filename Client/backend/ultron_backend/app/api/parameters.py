@@ -1,12 +1,16 @@
 """UltrON — Parameters API"""
 
 import asyncio
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete, func
 from typing import List
 from app.database import get_db
 from app.models.parameter import Parameter
+from app.models.device import Device
+from app.models.station import Station, StationStatus
+from app.models.telemetry import LiveData, HistoricalData, DataQuality
 from app.schemas.parameter import ParameterCreate, ParameterUpdate, ParameterOut
 from app.services import polling_engine
 from app.core.security import get_current_user, require_admin
@@ -318,6 +322,14 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
             value = round(value, 2)
             
         if quality in ("U", "O"):
+            now = datetime.now(timezone.utc)
+            await db.execute(delete(LiveData).where(LiveData.parameter_id == param.id))
+            db.add(LiveData(parameter_id=param.id, timestamp=now, value=value, raw_value=raw_value, quality=quality, source="test"))
+            db.add(HistoricalData(parameter_id=param.id, timestamp=now, value=value, raw_value=raw_value, quality=quality, source="test"))
+            await db.execute(Device.__table__.update().where(Device.id == device.id).values(status="online", last_poll=now))
+            if device.station_id:
+                await db.execute(Station.__table__.update().where(Station.id == device.station_id).values(status=StationStatus.online, last_seen=now))
+            await db.commit()
             return {
                 "success": True,
                 "value": value,

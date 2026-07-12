@@ -21,6 +21,7 @@ const DT_MAP = {
 const revMap = Object.fromEntries(
   Object.entries(DT_MAP).map(([label, v]) => [v.data_type + '|' + v.byte_order, label])
 );
+const CUSTOM_PROTOCOLS = ['tcp_custom', 'udp_custom'];
 
 const getDataTypeLabel = (dt, bo) => revMap[dt + '|' + bo] || 'Float point';
 
@@ -138,13 +139,22 @@ export const DevicesScreen = () => {
     setForm(DEFAULT_PARAM);
   };
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    if (type === 'number' && value === '') {
-      const defaults = { scale_factor: 1.0, offset: 0.0, register_count: 2 };
-      setForm(p => ({ ...p, [name]: name in defaults ? defaults[name] : '' }));
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const t = e.target as HTMLInputElement | HTMLSelectElement;
+    const { name, type } = t;
+    if (type === 'checkbox') {
+      setForm(p => ({ ...p, [name]: (t as HTMLInputElement).checked }));
+    } else if (type === 'number') {
+      const raw = t.value;
+      const defaults: Record<string, number> = { scale_factor: 1.0, offset: 0.0, register_count: 2 };
+      if (raw === '' || raw === '-' || raw === '.' || raw === '-.') {
+        setForm(p => ({ ...p, [name]: name in defaults ? defaults[name] : (p as any)[name] }));
+      } else {
+        const n = Number(raw);
+        setForm(p => ({ ...p, [name]: isNaN(n) ? (p as any)[name] : n }));
+      }
     } else {
-      setForm(p => ({ ...p, [name]: type === 'checkbox' ? checked : value }));
+      setForm(p => ({ ...p, [name]: t.value }));
     }
   };
 
@@ -160,7 +170,7 @@ export const DevicesScreen = () => {
     setSaving(true);
     try {
       const deviceProtocol = form.input_type;
-      const toNum = (v: any, fallback: any) => { const n = Number(v); return isNaN(n) ? fallback : n; };
+      const toNum = (v: unknown, fallback: number): number => { const n = Number(v); return isNaN(n) ? fallback : n; };
 
       const protoLabel = DEVICE_PROTO_LABELS[deviceProtocol] || 'Gateway';
       const autoDeviceName = (form.station_name?.trim() || form.name?.trim() || 'Device') + ' ' + protoLabel;
@@ -232,7 +242,7 @@ export const DevicesScreen = () => {
           if (!isNaN(n)) payload[f] = n;
         }
       });
-      const success = editingIdx !== null ? await editParameter((form as any).id, payload) : await addParameter(payload);
+      const success = editingIdx !== null ? await editParameter((form as Record<string, unknown>).id as number, payload) : await addParameter(payload);
       if (success) closeModal();
     } catch (err) {
       console.error('Failed to save parameter config:', err);
@@ -327,9 +337,9 @@ export const DevicesScreen = () => {
                         <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>{protoLabel}</span>
                       </td>
                       <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{proto !== 'csv' ? addr + ':' + port : addr}</td>
-                      <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{['tcp_custom', 'udp_custom'].includes(proto) ? '-' : (p.slave_id || dev?.slave_id || '')}</td>
+                      <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{CUSTOM_PROTOCOLS.includes(proto) ? '-' : (p.slave_id || dev?.slave_id || '')}</td>
                       <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#64748b' }}>{p.register_address}</td>
-                      <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>{['tcp_custom', 'udp_custom'].includes(proto) ? '-' : getDataTypeLabel(p.data_type, p.byte_order)}</td>
+                      <td style={{ padding: '12px 14px', fontSize: '12px', color: '#475569' }}>{CUSTOM_PROTOCOLS.includes(proto) ? '-' : getDataTypeLabel(p.data_type, p.byte_order)}</td>
                       <td style={{ padding: '12px 14px' }}>
                         <span style={{
                           fontSize: '10px', fontWeight: '700', padding: '3px 10px', borderRadius: '99px',
@@ -524,7 +534,7 @@ export const DevicesScreen = () => {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: ['tcp_custom', 'udp_custom'].includes(form.input_type) ? '1fr 1fr' : '1fr 1fr 1fr', gap: '12px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: CUSTOM_PROTOCOLS.includes(form.input_type) ? '1fr 1fr' : '1fr 1fr 1fr', gap: '12px' }}>
                           <div>
                             <label style={s()}>IP Address</label>
                             <input type="text" name="host" value={form.host} onChange={handleChange} style={ipt} placeholder="192.168.1.101" />
@@ -533,7 +543,7 @@ export const DevicesScreen = () => {
                             <label style={s()}>Port</label>
                             <input type="text" name="port" value={form.port} onChange={handleChange} style={ipt} placeholder="502" />
                           </div>
-                          {!['tcp_custom', 'udp_custom'].includes(form.input_type) && (
+                          {!CUSTOM_PROTOCOLS.includes(form.input_type) && (
                             <div>
                               <label style={s()}>Slave ID</label>
                               <input type="number" name="slave_id" value={form.slave_id} onChange={handleChange} style={ipt} />
@@ -563,7 +573,7 @@ export const DevicesScreen = () => {
 
                     {form.input_type !== 'csv' && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        {!['tcp_custom', 'udp_custom'].includes(form.input_type) && (
+                        {!CUSTOM_PROTOCOLS.includes(form.input_type) && (
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                             <div>
                               <label style={s()}>Function Code</label>
@@ -585,15 +595,15 @@ export const DevicesScreen = () => {
                             </div>
                           </div>
                         )}
-                        <div style={{ display: 'grid', gridTemplateColumns: ['tcp_custom', 'udp_custom'].includes(form.input_type) ? '1fr 1fr' : '1fr 1fr', gap: '12px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: CUSTOM_PROTOCOLS.includes(form.input_type) ? '1fr 1fr' : '1fr 1fr', gap: '12px' }}>
                           <div>
-                            <label style={s()}>{['tcp_custom', 'udp_custom'].includes(form.input_type) ? 'Field Index' : 'Start Address'}</label>
+                            <label style={s()}>{CUSTOM_PROTOCOLS.includes(form.input_type) ? 'Field Index' : 'Start Address'}</label>
                             <input type="number" name="register_address" value={form.register_address} onChange={handleChange} style={ipt} />
-                            {['tcp_custom', 'udp_custom'].includes(form.input_type) && (
+                            {CUSTOM_PROTOCOLS.includes(form.input_type) && (
                               <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>ASCII field index (0-based space-delimited position)</div>
                             )}
                           </div>
-                          {!['tcp_custom', 'udp_custom'].includes(form.input_type) ? (
+                          {!CUSTOM_PROTOCOLS.includes(form.input_type) ? (
                             <div>
                               <label style={s()}>Register Count</label>
                               <input type="number" name="register_count" value={form.register_count} onChange={handleChange} style={ipt} />

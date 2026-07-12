@@ -24,7 +24,7 @@ from app.services.modbus_tcp import ModbusTCPReader
 from app.services.modbus_rtu import ModbusRTUReader
 from app.services.tcp_custom import TCPCustomReader
 from app.services.udp_custom import UDPCustomReader
-from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher, SmartWatcher, DailySmartWatcher
+from app.services.csv_watcher import CSVWatcher, SmartWatcher, DailySmartWatcher
 from app.services.data_quality import dq_engine
 from app.services.alarm_engine import alarm_engine
 from app.websocket_manager import ws_manager
@@ -118,7 +118,7 @@ def _get_csv_watcher(device: Device) -> Optional[CSVWatcher]:
     return _csv_watchers[device.id]
 
 
-def _cleanup_reader(device_id: int, protocol: str, device: Device = None):
+def _cleanup_reader(device_id: int, device: Device = None):
     """Remove stale reader instances from pool so fresh connections are made."""
     _tcp_readers.pop(device_id, None)
     _tcp_custom.pop(device_id, None)
@@ -209,7 +209,7 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
     except Exception as e:
         log.error(f"Poll error device={device.id} ({device.name}): {e}")
         # Force reconnect next cycle by clearing the reader from pool
-        _cleanup_reader(device.id, protocol, device)
+        _cleanup_reader(device.id, device)
         readings = [
             {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "E"}
             for p in param_dicts
@@ -415,66 +415,6 @@ async def _device_poll_loop(device_id: int, interval: int):
         await asyncio.sleep(interval + jitter)
 
 
-async def _central_sync_worker():
-    """Background task to push telemetry data to RajAPI.com"""
-    log.info("Central Sync Worker started")
-    
-    from app.config import CENTRAL_API_URL
-    import os
-    central_url = CENTRAL_API_URL
-
-    while _running:
-        api_key = os.environ.get("CENTRAL_API_KEY", "")
-        if not api_key:
-            # If AMC is expired or setup is pending, we don't sync, but we wait in the loop
-            log.debug("No CENTRAL_API_KEY configured or AMC pending. Central sync paused.")
-            await asyncio.sleep(60)
-            continue
-
-        try:
-            async with AsyncSessionLocal() as db:
-                result = await db.execute(select(LiveData).join(Parameter).options(selectinload(LiveData.parameter)))
-                live_data = result.scalars().all()
-                
-                if live_data:
-                    payload = {
-                        "client_id": "ultron_client_01",
-                        "points": [
-                            {
-                                "tag_name": ld.parameter.tag_name,
-                                "value": ld.value,
-                                "quality": ld.quality.value if hasattr(ld.quality, "value") else str(ld.quality),
-                                "timestamp": ld.timestamp.isoformat()
-                            } for ld in live_data
-                        ]
-                    }
-                    
-                    async with httpx.AsyncClient() as client:
-                        response = await client.post(
-                            central_url, 
-                            json=payload,
-                            headers={"X-API-Key": api_key},
-                            timeout=10.0
-                        )
-                        if response.status_code != 200:
-                            log.warning(f"Central sync failed: {response.status_code} {response.text}")
-                            # Important: the API key might have been deleted on the server (AMC expired)
-                            if response.status_code == 401:
-                                log.error("AMC Token expired or invalid! Locking out client.")
-                                if "CENTRAL_API_KEY" in os.environ:
-                                    del os.environ["CENTRAL_API_KEY"]
-                                
-                                from app.config import APP_DIR
-                                from app.core.config_crypt import write_env_enc_from_dict
-                                enc_file = str(APP_DIR / ".env.enc")
-                                write_env_enc_from_dict({"CENTRAL_API_KEY": ""}, enc_file)
-                        else:
-                            log.debug("Successfully synced telemetry to RajAPI")
-                            
-        except Exception as e:
-            log.error(f"Central sync error: {e}")
-            
-        await asyncio.sleep(60) # Sync every 60 seconds
 
 
 

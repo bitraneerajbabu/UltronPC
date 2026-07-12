@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from app.database import AsyncSessionLocal
 from app.models.telemetry import Broadcast
-from app.config import settings, RAJAPI_SYNC_URL
+from app.config import settings
 from app.core.logger import get_logger
 from app.services.lock_store import update_from_sync_response
 
@@ -148,7 +148,7 @@ async def send_heartbeat():
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(RAJAPI_SYNC_URL, json=payload)
+            resp = await client.post(settings.RAJAPI_SYNC_URL, json=payload)
 
             if resp.status_code < 300:
                 data = resp.json()

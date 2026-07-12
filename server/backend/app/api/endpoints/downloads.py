@@ -2,8 +2,9 @@ import os
 import ssl
 import json
 import urllib.request
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import FileResponse, RedirectResponse
+from app.api.deps import get_auth_context, AuthContext
 
 router = APIRouter()
 
@@ -28,7 +29,7 @@ def _get_latest_version() -> str:
 
 
 @router.get("/installer")
-async def download_installer():
+async def download_installer(auth: AuthContext = Depends(get_auth_context)):
     """
     Serve the UltrON_Installer.exe directly from the server.
     URL: https://rajapi.com/api/v1/downloads/installer
@@ -43,7 +44,7 @@ async def download_installer():
 
 
 @router.get("/latest-client")
-async def download_latest_client():
+async def download_latest_client(auth: AuthContext = Depends(get_auth_context)):
     """
     Redirect to the latest UltrON.exe on GitHub Releases.
     """
@@ -53,7 +54,7 @@ async def download_latest_client():
 
 
 @router.get("/version")
-async def get_latest_version():
+async def get_latest_version(auth: AuthContext = Depends(get_auth_context)):
     """Return the current latest version info for auto-update checks."""
     version = _get_latest_version()
     return {

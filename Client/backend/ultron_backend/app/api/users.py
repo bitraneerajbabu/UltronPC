@@ -3,7 +3,6 @@ UltrON — Users Management API (Admin only)
 Admin can create, list, update, and delete client/admin user accounts.
 """
 
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select

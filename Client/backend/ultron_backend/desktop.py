@@ -227,32 +227,41 @@ def _check_and_download_update():
 
         downloaded_hash = sha256.hexdigest()
 
-        # Verify checksum if checksums.json exists in the release
+        # Verify checksum — fail CLOSED (reject update if checksums.json missing or mismatch)
         checksums_url = None
         for asset in assets:
             if asset.get("name", "").lower() == "checksums.json":
                 checksums_url = asset.get("browser_download_url")
                 break
 
-        if checksums_url:
-            try:
-                ck_req = urllib.request.Request(
-                    checksums_url,
-                    headers={"User-Agent": "UltrON-Updater/1.0"},
+        if not checksums_url:
+            _log_update.error("No checksums.json in release — rejecting update for safety.")
+            os.remove(partial_exe)
+            return
+
+        try:
+            ck_req = urllib.request.Request(
+                checksums_url,
+                headers={"User-Agent": "UltrON-Updater/1.0"},
+            )
+            with _urlopen_verified(ck_req, timeout=15) as ck_resp:
+                checksums = _json.loads(ck_resp.read().decode("utf-8"))
+            expected_hash = checksums.get("UltrON.exe", "")
+            if expected_hash and downloaded_hash != expected_hash:
+                _log_update.error(
+                    "Checksum mismatch! Expected %s, got %s — rejecting update.",
+                    expected_hash, downloaded_hash,
                 )
-                with _urlopen_verified(ck_req, timeout=15) as ck_resp:
-                    checksums = _json.loads(ck_resp.read().decode("utf-8"))
-                expected_hash = checksums.get("UltrON.exe", "")
-                if expected_hash and downloaded_hash != expected_hash:
-                    _log_update.error(
-                        "Checksum mismatch! Expected %s, got %s — rejecting update.",
-                        expected_hash, downloaded_hash,
-                    )
-                    os.remove(partial_exe)
-                    return
-                _log_update.info("Checksum verified [OK]")
-            except Exception as ck_err:
-                _log_update.warning("Checksum verification skipped (%s)", ck_err)
+                os.remove(partial_exe)
+                return
+            _log_update.info("Checksum verified [OK]")
+        except Exception as ck_err:
+            _log_update.error(
+                "Checksum fetch/parse failed (%s) — rejecting update for safety.",
+                ck_err,
+            )
+            os.remove(partial_exe)
+            return
 
         # Move .part → final
         if os.path.exists(new_exe):

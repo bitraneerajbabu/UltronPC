@@ -48,9 +48,6 @@ class ServerMappingBase(BaseModel):
     led_channel_name: Optional[str] = None  # Label on LED display (e.g. "NOX", "PM10")
     led_unit: Optional[str] = None          # Unit override for LED display
 
-class ServerMappingUpdate(ServerMappingBase):
-    pass
-
 class ServerMappingResponse(ServerMappingBase):
     id: int
     parameter_id: int

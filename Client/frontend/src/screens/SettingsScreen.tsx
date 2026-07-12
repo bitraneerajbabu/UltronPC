@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
-import { T, GLASS_CARD, BTN, INP, SEL } from '../theme';
+import { T, GLASS_CARD, BTN, INP } from '../theme';
 
 export const SettingsScreen = () => {
   const { API_BASE, showToast, loadAllData, authFetch } = useContext(AppContext);

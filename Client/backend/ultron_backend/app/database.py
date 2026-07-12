@@ -70,7 +70,7 @@ async def init_db():
     Create all tables, and ensure schema migrations are applied.
     """
     # Import all models so SQLAlchemy sees them
-    from app.models import station, device, parameter, telemetry, user, server_config, cpcb, calibration, plant_settings  # noqa: F401
+    from app.models import station, device, parameter, telemetry, user, server_config, cpcb, calibration, plant_settings, security  # noqa: F401
     from sqlalchemy import text
 
     log.info("Initialising database tables …")
@@ -153,6 +153,10 @@ async def init_db():
                 "users": [
                     ("created_by", "VARCHAR(80)"),
                     ("last_login", "DATETIME"),
+                    ("failed_login_attempts", "INTEGER DEFAULT 0"),
+                    ("locked_until", "DATETIME"),
+                    ("password_changed_at", "DATETIME"),
+                    ("require_password_change", "BOOLEAN DEFAULT FALSE"),
                 ],
                 "cpcb_station_config": [
                     ("calibration_mode", "BOOLEAN DEFAULT FALSE"),
@@ -175,6 +179,28 @@ async def init_db():
                     log.warning(f"{table} migration skipped: {e}")
         else:
             log.info("Column migrations already applied, skipping.")
+
+        # 2.1 Always-checked migrations (security columns — not gated by sentinel)
+        def _ensure_security_columns(sync_conn):
+            from sqlalchemy import inspect
+            inspector = inspect(sync_conn)
+            try:
+                cols = {col["name"] for col in inspector.get_columns("users")}
+            except Exception:
+                return
+            sec_cols = {"failed_login_attempts", "locked_until", "password_changed_at", "require_password_change"}
+            missing = sec_cols - cols
+            for col_name in missing:
+                col_type = {
+                    "failed_login_attempts": "INTEGER DEFAULT 0",
+                    "locked_until": "DATETIME",
+                    "password_changed_at": "DATETIME",
+                    "require_password_change": "BOOLEAN DEFAULT FALSE",
+                }[col_name]
+                sync_conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
+                log.info(f"Security migration: added '{col_name}' to users")
+
+        await conn.run_sync(_ensure_security_columns)
 
         # 2.11 Data migrations are no-ops for current deployments.
 

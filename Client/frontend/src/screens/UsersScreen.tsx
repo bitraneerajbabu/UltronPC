@@ -1,6 +1,9 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 
+interface UserData { id?: number; username: string; full_name?: string; role: string; is_active: boolean; created_at?: string; created_by?: string; last_login?: string; }
+interface UserPayload { username?: string; password?: string; full_name?: string | null; role?: string; is_active?: boolean; }
+
 // ─── Icons ────────────────────────────────────────────────────────────────────
 const PlusIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -48,7 +51,7 @@ const XIcon = () => (
 );
 
 // ─── Role Badge ───────────────────────────────────────────────────────────────
-function RoleBadge({ role }) {
+function RoleBadge({ role }: { role: string }) {
   const isAdmin = role === 'admin';
   return (
     <span style={{
@@ -66,7 +69,7 @@ function RoleBadge({ role }) {
 }
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
-function StatusBadge({ isActive }) {
+function StatusBadge({ isActive }: { isActive: boolean }) {
   return (
     <span style={{
       display: 'inline-block', padding: '2px 10px', borderRadius: '999px',
@@ -83,9 +86,9 @@ function StatusBadge({ isActive }) {
 // ─── Modal ────────────────────────────────────────────────────────────────────
 interface UserModalProps {
   mode: 'add' | 'edit';
-  user?: any;
+  user?: UserData;
   onClose: () => void;
-  onSave: (payload: any) => void;
+  onSave: (payload: UserPayload) => void;
 }
 
 function UserModal({ mode, user, onClose, onSave }: UserModalProps) {
@@ -100,7 +103,7 @@ function UserModal({ mode, user, onClose, onSave }: UserModalProps) {
   const [showPwd, setShowPwd] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const set = (k: string, v: string | boolean) => setForm(prev => ({ ...prev, [k]: v }));
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -118,10 +121,10 @@ function UserModal({ mode, user, onClose, onSave }: UserModalProps) {
     return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    const payload: any = {};
+    const payload: UserPayload = {};
     if (mode === 'add') {
       payload.username = form.username.trim();
       payload.password = form.password;
@@ -254,7 +257,7 @@ function UserModal({ mode, user, onClose, onSave }: UserModalProps) {
 
 // ─── Delete Confirm Modal ─────────────────────────────────────────────────────
 interface DeleteConfirmModalProps {
-  user: any;
+  user: UserData;
   onClose: () => void;
   onConfirm: () => void;
 }
@@ -288,8 +291,8 @@ function DeleteConfirmModal({ user, onClose, onConfirm }: DeleteConfirmModalProp
 export function UsersScreen() {
   const { usersList, loadUsers, addUser, editUser, deleteUser, currentUser, parseUtcDate } = useContext(AppContext);
 
-  const [modal, setModal] = useState(null);   // null | { mode: 'add'|'edit', user? }
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [modal, setModal] = useState<{ mode: 'add' | 'edit'; user?: UserData } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserData | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -301,7 +304,7 @@ export function UsersScreen() {
     (u.full_name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleSave = async (payload) => {
+  const handleSave = async (payload: UserPayload) => {
     let ok;
     if (modal.mode === 'add') {
       ok = await addUser(payload);
@@ -316,7 +319,7 @@ export function UsersScreen() {
     if (ok) setDeleteTarget(null);
   };
 
-  const formatDate = (dateStr) => {
+  const formatDate = (dateStr: string) => {
     if (!dateStr) return '—';
     return parseUtcDate(dateStr).toLocaleDateString('en-IN', {
       day: '2-digit', month: 'short', year: 'numeric',

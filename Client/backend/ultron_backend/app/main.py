@@ -32,6 +32,10 @@ from app.api import led as led_api
 from app.api import broadcasts as broadcasts_api
 from app.api import cpcb as cpcb_api
 from app.api import calibration as calibration_api
+from app.core.security_middleware import SecurityHeadersMiddleware, RequestSizeLimitMiddleware
+from app.core.rate_limiter import RateLimitMiddleware
+from app.core.error_handler import RequestIDMiddleware, GlobalExceptionMiddleware, AccessLogMiddleware
+from app.core.secrets_vault import validate_secrets_on_startup, vault
 
 log = get_logger("ultron.main")
 
@@ -140,6 +144,12 @@ async def lifespan(app: FastAPI):
                 log.info(f"Copied pre-seeded database from bundle to {app_db}")
     except Exception as e:
         log.warning(f"Could not copy bundled database: {e}")
+
+    # 1.75 Validate secrets
+    missing = vault.validate()
+    if missing:
+        for m in missing:
+            log.warning(f"Missing secret: {m}")
 
     # 2. Init DB tables
     await init_db()
@@ -282,6 +292,24 @@ class CSPMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(CSPMiddleware)
 
+# ─── Security Headers (HSTS, X-Content-Type-Options, etc.) ────────────────────
+app.add_middleware(SecurityHeadersMiddleware)
+
+# ─── Request Size Limit (10 MB) ───────────────────────────────────────────────
+app.add_middleware(RequestSizeLimitMiddleware, max_size=10 * 1024 * 1024)
+
+# ─── Request ID / Correlation ID ──────────────────────────────────────────────
+app.add_middleware(RequestIDMiddleware)
+
+# ─── Global Exception Handler ─────────────────────────────────────────────────
+app.add_middleware(GlobalExceptionMiddleware)
+
+# ─── Access Logging ───────────────────────────────────────────────────────────
+app.add_middleware(AccessLogMiddleware)
+
+# ─── Rate Limiting ────────────────────────────────────────────────────────────
+app.add_middleware(RateLimitMiddleware)
+
 # ─── API Routes ───────────────────────────────────────────────────────────────
 PREFIX = "/api/v1"
 app.include_router(stations.router,     prefix=PREFIX)
@@ -330,16 +358,24 @@ async def websocket_live(
     try:
         from app.core.security import decode_token
         payload = decode_token(token)
-        if not payload.get("sub"):
+        username = payload.get("sub")
+        if not username:
             await websocket.close(code=4001, reason="Invalid token")
             return
+        # Blacklist check on WS connect
+        if settings.JWT_BLACKLIST_ENABLED:
+            from app.core.security import is_token_blacklisted
+            async with AsyncSessionLocal() as ws_db:
+                if await is_token_blacklisted(token, ws_db):
+                    await websocket.close(code=4001, reason="Token revoked")
+                    return
     except Exception:
         await websocket.close(code=4001, reason="Invalid token")
         return
 
     sids = [int(x) for x in station_ids.split(",") if x.strip().isdigit()] if station_ids else []
     await ws_manager.connect(websocket, sids)
-    log.info(f"WS client connected (user={payload.get('sub')}). Subscribed stations: {sids or 'all'}")
+    log.info(f"WS client connected (user={username}). Subscribed stations: {sids or 'all'}")
 
     try:
         # Send welcome message

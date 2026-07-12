@@ -8,9 +8,6 @@ class SoftwareVersionBase(BaseModel):
     file_path: Optional[str] = Field(None, description="Local file path or URL to the firmware binary")
     checksum: Optional[str] = Field(None, description="SHA256 checksum of the firmware file")
 
-class SoftwareVersionCreate(SoftwareVersionBase):
-    pass
-
 class SoftwareVersionResponse(SoftwareVersionBase):
     id: int
     created_at: datetime
@@ -21,9 +18,6 @@ class SoftwareVersionResponse(SoftwareVersionBase):
 class OTADeploymentBase(BaseModel):
     site_id: int = Field(..., description="Target site/gateway ID")
     version_id: int = Field(..., description="Software version ID to deploy")
-
-class OTADeploymentCreate(OTADeploymentBase):
-    pass
 
 class OTADeploymentUpdate(BaseModel):
     status: Optional[str] = Field(None, description="Deployment status (pending, in_progress, success, failed)")
