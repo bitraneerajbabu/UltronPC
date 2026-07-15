@@ -47,14 +47,11 @@ async def get_chart_data(
     if not start:
         start = end - timedelta(hours=24)
 
-    model = HistoricalData if avg_type == AverageType.raw else Averages
-    # Get parameter metadata for labels
     param_result = await db.execute(
         select(Parameter).where(Parameter.id.in_(ids))
     )
     params = {p.id: p for p in param_result.scalars().all()}
 
-    # Build per-parameter series
     series: dict = {}
     for pid in ids:
         p = params.get(pid)
@@ -68,22 +65,48 @@ async def get_chart_data(
             "qualities": [],
         }
 
-        conditions = [
-            model.parameter_id == pid,
-            model.timestamp >= start,
-            model.timestamp <= end,
-        ]
-        if avg_type != AverageType.raw:
-            conditions.append(model.avg_type == avg_type)
-
-        result = await db.execute(
-            select(model)
-            .where(and_(*conditions))
-            .order_by(model.timestamp.desc())
-            .limit(limit)
-        )
-        rows = result.scalars().all()
-        rows = list(reversed(rows))
+        if avg_type == AverageType.raw:
+            rows = (await db.execute(
+                select(HistoricalData)
+                .where(and_(HistoricalData.parameter_id == pid, HistoricalData.timestamp >= start, HistoricalData.timestamp <= end))
+                .order_by(HistoricalData.timestamp).limit(limit)
+            )).scalars().all()
+        else:
+            rows = (await db.execute(
+                select(Averages)
+                .where(and_(Averages.parameter_id == pid, Averages.avg_type == avg_type, Averages.timestamp >= start, Averages.timestamp <= end))
+                .order_by(Averages.timestamp).limit(limit)
+            )).scalars().all()
+            if not rows:
+                # Fallback: on-the-fly average from raw data grouped by window
+                delta = {"avg_5min": 5, "avg_15min": 15, "avg_30min": 30, "avg_1hr": 60, "avg_3hr": 180, "avg_6hr": 360, "avg_12hr": 720, "avg_24hr": 1440, "avg_8hr": 480, "avg_daily": 1440}.get(avg_type.value, 15)
+                raw = (await db.execute(
+                    select(HistoricalData.timestamp, HistoricalData.value)
+                    .where(and_(HistoricalData.parameter_id == pid, HistoricalData.timestamp >= start, HistoricalData.timestamp <= end))
+                    .order_by(HistoricalData.timestamp)
+                )).all()
+                if delta >= 1440:
+                    bucket_t = start.replace(hour=0, minute=0, second=0, microsecond=0)
+                    while bucket_t <= end:
+                        bucket_end = bucket_t + timedelta(days=1)
+                        vals = [r.value for r in raw if bucket_t <= r.timestamp < bucket_end and r.value is not None]
+                        if vals:
+                            series[pid]["labels"].append(bucket_t.isoformat())
+                            series[pid]["values"].append(round(sum(vals)/len(vals), 2))
+                            series[pid]["qualities"].append("U")
+                        bucket_t = bucket_end
+                else:
+                    mins = delta
+                    bucket_t = start.replace(minute=(start.minute // mins) * mins, second=0, microsecond=0)
+                    while bucket_t <= end:
+                        bucket_end = bucket_t + timedelta(minutes=mins)
+                        vals = [r.value for r in raw if bucket_t <= r.timestamp < bucket_end and r.value is not None]
+                        if vals:
+                            series[pid]["labels"].append(bucket_t.isoformat())
+                            series[pid]["values"].append(round(sum(vals)/len(vals), 2))
+                            series[pid]["qualities"].append("U")
+                        bucket_t = bucket_end
+                continue
 
         for row in rows:
             series[pid]["labels"].append(row.timestamp.isoformat())

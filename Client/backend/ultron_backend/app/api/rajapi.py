@@ -80,7 +80,7 @@ async def update_rajapi_config(config_in: RajAPIConfigUpdate, db: AsyncSession =
         select(RajAPIConfig).options(selectinload(RajAPIConfig.stations)).where(RajAPIConfig.id == config.id)
     )
     config = result.scalars().first()
-    return _config_to_schema(config, db)
+    return await _config_to_schema(config, db)
 
 
 @router.put("/stations", dependencies=[Depends(require_admin)])
@@ -128,9 +128,9 @@ async def test_rajapi_connection(db: AsyncSession = Depends(get_db)):
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
+            resp = await client.post(
                 settings.RAJAPI_SYNC_URL,
-                headers={"Authorization": f"Bearer {config.auth_token}"},
+                json={"gateway_id": "test", "device_secret": config.auth_token},
             )
             if resp.status_code < 300:
                 return RajAPITestResult(success=True, status_code=resp.status_code, message="Connection OK")

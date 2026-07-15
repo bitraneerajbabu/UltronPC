@@ -298,7 +298,11 @@ export const TrendsScreen = () => {
           <div className="form-group">
             <label className="form-label">Parameter</label>
             <select className="form-select" value={paramId} onChange={e => setParamId(e.target.value)}>
-              {filteredParams.map(p => <option value={p.id} key={p.id}>{p.name} ({p.tag_name})</option>)}
+              {filteredParams.map(p => {
+                const dev = devices.find(d => String(d.id) === String(p.device_id));
+                const st = stations.find(s => String(s.id) === String(dev?.station_id));
+                return <option value={p.id} key={p.id}>{p.name} ({p.tag_name}) — {st?.name || 'Unknown'}</option>;
+              })}
             </select>
           </div>
           <div className="form-group">
