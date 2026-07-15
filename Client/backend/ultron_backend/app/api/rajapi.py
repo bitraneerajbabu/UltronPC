@@ -127,11 +127,25 @@ async def test_rajapi_connection(db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="No auth token configured")
 
     try:
+        from datetime import datetime, timezone
+        import platform
+        payload = {
+            "gateway_id": "test",
+            "device_secret": config.auth_token,
+            "version": settings.APP_VERSION,
+            "heartbeat_ts": datetime.now(timezone.utc).isoformat(),
+            "status": "online",
+            "cpu_usage": 0.0,
+            "ram_usage": 0.0,
+            "disk_usage": 0.0,
+            "internet": True,
+            "vpn": False,
+            "polling_active": False,
+            "service_status": {},
+            "hostname": platform.node(),
+        }
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                settings.RAJAPI_SYNC_URL,
-                json={"gateway_id": "test", "device_secret": config.auth_token},
-            )
+            resp = await client.post(settings.RAJAPI_SYNC_URL, json=payload)
             if resp.status_code < 300:
                 return RajAPITestResult(success=True, status_code=resp.status_code, message="Connection OK")
             else:
