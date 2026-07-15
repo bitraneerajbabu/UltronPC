@@ -129,8 +129,9 @@ async def test_rajapi_connection(db: AsyncSession = Depends(get_db)):
     try:
         from datetime import datetime, timezone
         import platform
+        gateway_id = settings.RAJAPI_STATION_ID or "default"
         payload = {
-            "gateway_id": "test",
+            "gateway_id": gateway_id,
             "device_secret": config.auth_token,
             "version": settings.APP_VERSION,
             "heartbeat_ts": datetime.now(timezone.utc).isoformat(),
