@@ -31,7 +31,8 @@ def get_active_broadcasts(
             (Broadcast.target_all.is_(True)) | (Broadcast.target_site_id == site_id)
         )
     elif api_key is not None:
-        site = db.query(IndustrySite).filter(IndustrySite.api_key == api_key).first()
+        from app.api.deps import find_site_by_key
+        site = find_site_by_key(db, api_key)
         if site:
             q = q.filter(
                 (Broadcast.target_all.is_(True)) | (Broadcast.target_site_id == site.id)

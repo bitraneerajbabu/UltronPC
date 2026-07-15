@@ -52,6 +52,7 @@ class IndustrySite(Base):
 
     devices = relationship("Device", back_populates="site", cascade="all, delete-orphan")
     telemetry = relationship("TelemetryData", back_populates="site", cascade="all, delete-orphan")
+    stations = relationship("Station", back_populates="site", cascade="all, delete-orphan")
 
 class Device(Base):
     __tablename__ = "devices"
@@ -129,4 +130,18 @@ class OTADeployment(Base):
 
     site = relationship("IndustrySite")
     version = relationship("SoftwareVersion", back_populates="deployments")
+
+class Station(Base):
+    __tablename__ = "stations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    site_id = Column(Integer, ForeignKey("industry_sites.id"), nullable=False)
+    station_id = Column(String(100), nullable=False)
+    username = Column(String(200), nullable=False)
+    category = Column(String(50), nullable=False)
+    station_name = Column(String(200), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    site = relationship("IndustrySite", back_populates="stations")
 

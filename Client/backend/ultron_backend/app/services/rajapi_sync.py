@@ -116,9 +116,26 @@ async def _execute_command(cmd: dict):
         log.error(f"Failed to execute command {cmd_type}: {e}")
 
 
+async def _load_rajapi_config(db) -> tuple[str | None, str | None]:
+    """Load auth token and station ID from DB config (fallback to env)."""
+    from app.models.rajapi import RajAPIConfig
+    result = await db.execute(select(RajAPIConfig).where(RajAPIConfig.is_enabled == True))
+    config = result.scalars().first()
+    if config and config.auth_token:
+        return config.auth_token, settings.RAJAPI_STATION_ID or "default"
+    # Fallback to env-based auth
+    if settings.GATEWAY_ID and settings.DEVICE_SECRET:
+        return None, settings.GATEWAY_ID
+    if settings.RAJAPI_API_KEY:
+        return settings.RAJAPI_API_KEY, settings.RAJAPI_STATION_ID
+    return None, None
+
+
 async def send_heartbeat():
     """Send lightweight heartbeat to RajAPI and process response."""
-    if not settings.GATEWAY_ID and not settings.RAJAPI_API_KEY:
+    async with AsyncSessionLocal() as db:
+        token, station_id = await _load_rajapi_config(db)
+    if not token and not (settings.GATEWAY_ID and settings.DEVICE_SECRET):
         return
 
     stats = await _get_system_stats()
@@ -128,8 +145,8 @@ async def send_heartbeat():
     polling_active = is_polling_active()
 
     payload = {
-        "gateway_id": settings.GATEWAY_ID or settings.RAJAPI_STATION_ID,
-        "device_secret": settings.DEVICE_SECRET or settings.RAJAPI_API_KEY,
+        "gateway_id": station_id or settings.RAJAPI_STATION_ID,
+        "device_secret": token or settings.DEVICE_SECRET or settings.RAJAPI_API_KEY,
         "version": settings.APP_VERSION,
         "heartbeat_ts": datetime.now(timezone.utc).isoformat(),
         "status": "online" if internet else "offline",
@@ -148,7 +165,8 @@ async def send_heartbeat():
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(settings.RAJAPI_SYNC_URL, json=payload)
+            headers = {"Authorization": f"Bearer {token}"} if token and not settings.GATEWAY_ID else {}
+            resp = await client.post(settings.RAJAPI_SYNC_URL, json=payload, headers=headers)
 
             if resp.status_code < 300:
                 data = resp.json()

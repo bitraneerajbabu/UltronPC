@@ -38,7 +38,7 @@ const STAT_COLORS: Record<string, string> = {
 };
 
 export const CalibrationScreen = () => {
-  const { stations, parameters, API_BASE, showToast, authFetch, currentUser } = useContext(AppContext);
+  const { stations, devices, parameters, API_BASE, showToast, authFetch, currentUser } = useContext(AppContext);
 
   const [activeTab, setActiveTab] = useState('jobs');
   const [jobs, setJobs] = useState<any[]>([]);
@@ -73,19 +73,26 @@ export const CalibrationScreen = () => {
     };
   }, []);
 
+  const allStations = useMemo(() => {
+    return stations.filter(st => {
+      return parameters.some(p => {
+        const dev = devices.find(d => String(d.id) === String(p.device_id));
+        return dev && String(dev.station_id) === String(st.id);
+      });
+    });
+  }, [stations, parameters, devices]);
+
   useEffect(() => {
-    if (stations.length && !startStationId) setStartStationId(stations[0].id);
-  }, [stations, startStationId]);
+    if (allStations.length && !startStationId) setStartStationId(String(allStations[0].id));
+  }, [allStations, startStationId]);
 
   const filteredParams = useMemo(() => {
     if (!startStationId) return [];
-    const station = stations.find(s => s.id === Number(startStationId));
-    if (!station) return [];
     return parameters.filter(p => {
-      const stationDeviceIds = stations.filter(s => s.id === Number(startStationId)).map(s => s.id);
-      return stationDeviceIds.includes(p.device_id);
+      const dev = devices.find(d => String(d.id) === String(p.device_id));
+      return dev && String(dev.station_id) === startStationId;
     });
-  }, [parameters, stations, startStationId]);
+  }, [parameters, devices, startStationId]);
 
   const fetchJobs = async () => {
     setJobsLoading(true);
@@ -382,7 +389,7 @@ export const CalibrationScreen = () => {
             <div className="form-group">
               <label className="form-label">Station Name</label>
               <select className="form-select" value={startStationId} onChange={e => setStartStationId(e.target.value)}>
-                {stations.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+                {allStations.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
               </select>
             </div>
             <div className="form-group">

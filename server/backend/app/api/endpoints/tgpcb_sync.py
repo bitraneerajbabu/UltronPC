@@ -19,7 +19,7 @@ This means the client sets their RajAPI api_key as the 'Site Name' (api_name) fi
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
-from typing import Optional, Any
+from typing import Optional, Any, List
 from pydantic import BaseModel
 from app.db.database import get_db
 from app.models.core import IndustrySite, TelemetryData, Parameter, Device, Broadcast
@@ -86,10 +86,12 @@ def tgpcb_sync(payload: TgpcbPayload, db: Session = Depends(get_db)):
     if not api_key:
         raise HTTPException(status_code=403, detail="Missing API key: set 'api_name' to your RajAPI site key")
 
+    from app.api.deps import find_site_by_key, find_device_by_key
+
     # Try site-level key first, then device-level key
-    site = db.query(IndustrySite).filter(IndustrySite.api_key == api_key).first()
+    site = find_site_by_key(db, api_key)
     if not site:
-        device = db.query(Device).filter(Device.api_key == api_key).first()
+        device = find_device_by_key(db, api_key)
         if device and device.site:
             site = device.site
     if not site:

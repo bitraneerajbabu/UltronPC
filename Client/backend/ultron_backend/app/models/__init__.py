@@ -9,6 +9,7 @@ from app.models.cpcb import CPCBStationConfig, CPCBParameterMapping, CPCBExportR
 from app.models.calibration import CalibrationJob, CalibrationResult, CalibrationApproval
 from app.models.plant_settings import PlantSettings
 from app.models.security import RefreshToken, RevokedToken, PasswordHistory, LoginAttempt, SecurityEvent
+from app.models.rajapi import RajAPIConfig, RajAPIStationConfig
 
 __all__ = [
     "Station", "StationStatus", "StationType",
@@ -21,4 +22,5 @@ __all__ = [
     "CalibrationJob", "CalibrationResult", "CalibrationApproval",
     "PlantSettings",
     "RefreshToken", "RevokedToken", "PasswordHistory", "LoginAttempt", "SecurityEvent",
+    "RajAPIConfig", "RajAPIStationConfig",
 ]

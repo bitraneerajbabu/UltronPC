@@ -16,12 +16,21 @@ def get_sites(db: Session = Depends(get_db), auth: AuthContext = Depends(get_aut
         return db.query(IndustrySite).all()
     return db.query(IndustrySite).filter(IndustrySite.id == auth.site_id).all()
 
+def generate_token(industry_name: str) -> str:
+    yymmdd = datetime.now(timezone.utc).strftime("%y%m%d")
+    clean_name = (industry_name or "unknown").strip()[:30]
+    hex_name = clean_name.encode('utf-8').hex()
+    neeraj_hex = "neeraj_work".encode('utf-8').hex()
+    random_part = secrets.token_hex(16)
+    return f"IN_UltronSST_{yymmdd}_{hex_name}_{neeraj_hex}_{random_part}"
+
+
 @router.post("/", response_model=SiteResponse)
 def create_site(site: SiteCreate, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
     if not auth.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     # Generate a secure API key for this site
-    api_key = f"uk_{secrets.token_urlsafe(32)}"
+    api_key = generate_token(site.name)
     
     expiry_date = site.amc_expiry if site.amc_expiry else (datetime.now(timezone.utc) + timedelta(days=365))
     
@@ -61,7 +70,7 @@ def create_device(site_id: int, payload: DeviceCreate, db: Session = Depends(get
     db_site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
     if not db_site:
         raise HTTPException(status_code=404, detail="Site not found")
-    device = Device(site_id=site_id, name=payload.name, status=payload.status, api_key=f"uk_{secrets.token_urlsafe(32)}")
+    device = Device(site_id=site_id, name=payload.name, status=payload.status, api_key=generate_token(db_site.name))
     db.add(device)
     db.commit()
     db.refresh(device)
@@ -87,7 +96,7 @@ def renew_device_key(site_id: int, device_id: int, db: Session = Depends(get_db)
     device = db.query(Device).filter(Device.id == device_id, Device.site_id == site_id).first()
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
-    device.api_key = f"uk_{secrets.token_urlsafe(32)}"
+    device.api_key = generate_token(device.site.name)
     db.commit()
     db.refresh(device)
     return device
@@ -124,8 +133,7 @@ def renew_site_amc(site_id: int, db: Session = Depends(get_db), auth: AuthContex
     if not db_site:
         raise HTTPException(status_code=404, detail="Site not found")
     
-    # Generate a completely new API key, revoking the old one
-    db_site.api_key = f"uk_{secrets.token_urlsafe(32)}"
+    # Extend the AMC expiration date while keeping the same API key
     db_site.is_active = True  # Automatically reactivate on renewal
     db_site.amc_expiry = datetime.now(timezone.utc) + timedelta(days=365)
     

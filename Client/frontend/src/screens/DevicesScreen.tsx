@@ -1,6 +1,7 @@
 import React, { useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext';
 import { T } from '../theme';
+import { PendingBadge } from '../components/PendingBadge';
 
 const DATA_TYPES = [
   'Integer', 'Signed Integer', 'Long Integer', 'Swaped Long',
@@ -75,7 +76,6 @@ export const DevicesScreen = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingIdx, setEditingIdx] = useState(null);
   const [form, setForm] = useState(DEFAULT_PARAM);
-  const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState(null);
 
   const [activeProtoTab, setActiveProtoTab] = useState('all');
@@ -167,7 +167,6 @@ export const DevicesScreen = () => {
       return showToast('Folder path is required for daily rotating CSV/Excel mode.', 'error');
     }
 
-    setSaving(true);
     try {
       const deviceProtocol = form.input_type;
       const toNum = (v: unknown, fallback: number): number => { const n = Number(v); return isNaN(n) ? fallback : n; };
@@ -247,8 +246,6 @@ export const DevicesScreen = () => {
     } catch (err) {
       console.error('Failed to save parameter config:', err);
       showToast('Communication error: Failed to save configuration.', 'error');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -702,12 +699,12 @@ export const DevicesScreen = () => {
               <button onClick={closeModal} style={{ background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 20px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
                 Cancel
               </button>
-              <button onClick={handleSave} disabled={saving} style={{
+              <button onClick={handleSave} style={{
                 background: 'linear-gradient(135deg, #0f766e, #14b8a6)', color: '#fff', border: 'none',
                 borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '800', cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(15,118,110,0.3)', opacity: saving ? 0.7 : 1,
+                boxShadow: '0 4px 12px rgba(15,118,110,0.3)',
               }}>
-                {saving ? 'Saving...' : 'Save Rule'}
+                Save Rule
               </button>
             </div>
           </div>

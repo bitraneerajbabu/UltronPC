@@ -593,6 +593,22 @@ async def retry_pending_uploads(db):
 # Remote Command Polling (replaces MQTT)
 # ─────────────────────────────────────────────────────────────────────────────
 
+async def _load_rajapi_auth() -> tuple[str | None, str | None]:
+    """Load RajAPI auth from DB config (fallback to env settings)."""
+    from app.database import AsyncSessionLocal
+    from app.models.rajapi import RajAPIConfig
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(RajAPIConfig).where(RajAPIConfig.is_enabled == True))
+            config = result.scalars().first()
+            if config and config.auth_token:
+                return config.auth_token, None  # token-based auth, station from settings
+    except Exception:
+        pass
+    from app.config import settings
+    return settings.RAJAPI_API_KEY or None, settings.RAJAPI_STATION_ID or None
+
+
 async def _poll_remote_commands():
     """
     Poll rajapi.com for pending commands for this station.
@@ -602,9 +618,10 @@ async def _poll_remote_commands():
     Called every 1 minute from run_server_push("live").
     """
     from app.config import settings
-    station_id = settings.RAJAPI_STATION_ID
-    api_key = settings.RAJAPI_API_KEY
-    if not station_id or not api_key:
+    api_key, station_id = await _load_rajapi_auth()
+    if not station_id:
+        station_id = settings.RAJAPI_STATION_ID
+    if not api_key or not station_id:
         return
 
     url = settings.RAJAPI_COMMANDS_URL

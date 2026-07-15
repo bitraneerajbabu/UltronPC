@@ -55,7 +55,7 @@ export default function Header({
       {/* Left: Hamburger (mobile) or Breadcrumbs (desktop) */}
       {isMobile ? (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <IconButton onClick={onOpenMobile} size="small" sx={{ color: '#6B7280' }}>
+          <IconButton onClick={onOpenMobile} size="small" sx={{ color: 'text.secondary' }}>
             <Icon name="Menu" size={22} />
           </IconButton>
           <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', fontSize: '14px' }}>
@@ -70,14 +70,14 @@ export default function Header({
                 variant="body2"
                 sx={{
                   fontWeight: index === arr.length - 1 ? 600 : 400,
-                  color: index === arr.length - 1 ? '#111827' : '#6B7280',
+                  color: index === arr.length - 1 ? 'text.primary' : 'text.secondary',
                   fontSize: '14px',
                 }}
               >
                 {b}
               </Typography>
               {index < arr.length - 1 && (
-                <Typography variant="caption" sx={{ color: '#9CA3AF', fontSize: '12px' }}>
+                <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '12px' }}>
                   /
                 </Typography>
               )}
@@ -100,7 +100,7 @@ export default function Header({
       {/* Right: Actions */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, justifyContent: 'flex-end' }}>
         <Tooltip title={darkMode ? 'Light Mode' : 'Dark Mode'}>
-          <IconButton onClick={onToggleDark} size="small" sx={{ color: '#6B7280' }}>
+          <IconButton onClick={onToggleDark} size="small" sx={{ color: 'text.secondary' }}>
             {darkMode ? <Icon name="Sun" size={20} /> : <Icon name="Moon" size={20} />}
           </IconButton>
         </Tooltip>
@@ -122,15 +122,15 @@ export default function Header({
           </IconButton>
         </Tooltip>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 1, pl: 2, borderLeft: '1px solid rgba(0,0,0,0.06)' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 1, pl: 2, borderLeft: 1, borderColor: 'divider' }}>
           <Avatar sx={{ width: 36, height: 36, bgcolor: '#2563EB', fontSize: '14px', fontWeight: 700 }}>
             <Icon name="User" size={18} />
           </Avatar>
           <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
             <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>Admin</Typography>
-            <Typography variant="caption" sx={{ color: '#9CA3AF' }}>Super Admin</Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>Super Admin</Typography>
           </Box>
-          <IconButton onClick={onLogout} size="small" sx={{ color: '#9CA3AF', ml: 0.5 }}>
+          <IconButton onClick={onLogout} size="small" sx={{ color: 'text.secondary', ml: 0.5 }}>
             <Icon name="LogOut" size={18} />
           </IconButton>
         </Box>

@@ -49,6 +49,9 @@ export const AppProvider = ({ children }) => {
     parametersRef.current = parameters;
   }, [parameters]);
 
+  const pendingRequestsRef = useRef<Record<string, AbortController>>({});
+  const [pendingStatus, setPendingStatus] = useState<Record<string, string>>({});
+
   // ─── Startup token validation ───────────────────────────────────────────────
   // On first load, if we have a stored token, verify it is still valid against
   // the server. If the server returns 401 (e.g. server was restarted with a
@@ -155,6 +158,104 @@ export const AppProvider = ({ children }) => {
       showToast('Local settings saved, but backend server is unreachable.', 'warn');
     }
   }, [showToast, authFetch, API_BASE]);
+
+  const optimisticEdit = useCallback(async <T,>(
+    resourceKey: string,
+    setter: React.Dispatch<React.SetStateAction<T[]>>,
+    items: T[],
+    itemId: number | string,
+    idField: string,
+    newItem: Partial<T>,
+    apiCall: (signal: AbortSignal) => Promise<Response>,
+    onSuccess: (res: Response) => Promise<void>,
+  ) => {
+    if (pendingRequestsRef.current[resourceKey]) {
+      pendingRequestsRef.current[resourceKey].abort();
+    }
+    const controller = new AbortController();
+    pendingRequestsRef.current[resourceKey] = controller;
+    setPendingStatus(prev => ({ ...prev, [resourceKey]: 'pending' }));
+    const snapshot = items;
+    setter(prev => prev.map(item => (item as any)[idField] === itemId ? { ...item, ...newItem } : item));
+    try {
+      const res = await apiCall(controller.signal);
+      if (controller.signal.aborted) return false;
+      if (res.ok) {
+        await onSuccess(res);
+        setPendingStatus(prev => ({ ...prev, [resourceKey]: '' }));
+        return true;
+      }
+      setter(snapshot);
+      setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
+      return false;
+    } catch {
+      if (controller.signal.aborted) return false;
+      setter(snapshot);
+      setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
+      return false;
+    } finally {
+      if (pendingRequestsRef.current[resourceKey] === controller) {
+        delete pendingRequestsRef.current[resourceKey];
+      }
+    }
+  }, []);
+
+  const optimisticAdd = useCallback(async <T,>(
+    resourceKey: string,
+    setter: React.Dispatch<React.SetStateAction<T[]>>,
+    newItem: T,
+    apiCall: (signal: AbortSignal) => Promise<Response>,
+    onSuccess: (res: Response) => Promise<T>,
+  ) => {
+    setPendingStatus(prev => ({ ...prev, [resourceKey]: 'pending' }));
+    setter(prev => [...prev, newItem]);
+    try {
+      const res = await apiCall(new AbortController().signal);
+      if (res.ok) {
+        const serverItem = await onSuccess(res);
+        setter(prev => prev.map(item => item === newItem ? serverItem : item));
+        setPendingStatus(prev => ({ ...prev, [resourceKey]: '' }));
+        return serverItem;
+      }
+      setter(prev => prev.filter(item => item !== newItem));
+      setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
+      return false;
+    } catch {
+      setter(prev => prev.filter(item => item !== newItem));
+      setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
+      return false;
+    }
+  }, []);
+
+  const optimisticRemove = useCallback(async <T,>(
+    resourceKey: string,
+    setter: React.Dispatch<React.SetStateAction<T[]>>,
+    items: T[],
+    itemId: number | string,
+    idField: string,
+    apiCall: (signal: AbortSignal) => Promise<Response>,
+    onSuccess: () => void,
+  ) => {
+    setPendingStatus(prev => ({ ...prev, [resourceKey]: 'pending' }));
+    const snapshot = items;
+    const removedItem = items.find(item => (item as any)[idField] === itemId);
+    setter(prev => prev.filter(item => (item as any)[idField] !== itemId));
+    try {
+      const res = await apiCall(new AbortController().signal);
+      if (res.ok) {
+        onSuccess();
+        setPendingStatus(prev => ({ ...prev, [resourceKey]: '' }));
+        return true;
+      }
+      if (removedItem) setter(prev => [...prev, removedItem]);
+      setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
+      return false;
+    } catch {
+      if (removedItem) setter(prev => [...prev, removedItem]);
+      setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
+      return false;
+    }
+  }, []);
 
   // Helper mappings
   const parseUtcDate = (dateStr) => {
@@ -581,81 +682,87 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // ─── Station REST methods ──────────────────────────────────────────────────
+  // ─── Station REST methods (optimistic) ─────────────────────────────────────
   const addStation = async (payload) => {
-    const res = await authFetch(`${API_BASE}/stations/`, { method: 'POST', body: JSON.stringify(payload) });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to create station.'), 'error'); return false; }
-    const newStation = await res.json();
-    setStations(prev => [...prev, newStation]);
-    showToast('Station added successfully.');
-    loadAllData(); return true;
+    const tempId = Date.now();
+    const optimistic = { id: tempId, ...payload };
+    return optimisticAdd(
+      `station:new`, setStations, optimistic,
+      (signal) => authFetch(`${API_BASE}/stations/`, { method: 'POST', body: JSON.stringify(payload), signal }),
+      async (res) => { const s = await res.json(); showToast('Station added successfully.'); return s; },
+    );
   };
 
   const editStation = async (id, payload) => {
-    const res = await authFetch(`${API_BASE}/stations/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to update station.'), 'error'); return false; }
-    const updated = await res.json();
-    setStations(prev => prev.map(s => s.id === id ? updated : s));
-    showToast('Station updated successfully.');
-    loadAllData(); return true;
+    return optimisticEdit(
+      `station:${id}`, setStations, stations, id, 'id', payload,
+      (signal) => authFetch(`${API_BASE}/stations/${id}`, { method: 'PATCH', body: JSON.stringify(payload), signal }),
+      async (res) => { const updated = await res.json(); setStations(prev => prev.map(s => s.id === id ? updated : s)); showToast('Station updated successfully.'); },
+    );
   };
 
   const deleteStation = async (id) => {
-    const res = await authFetch(`${API_BASE}/stations/${id}`, { method: 'DELETE' });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to delete station.'), 'error'); return false; }
-    setStations(prev => prev.filter(s => s.id !== id));
-    showToast('Station deleted.'); loadAllData(); return true;
+    return optimisticRemove(
+      `station:${id}`, setStations, stations, id, 'id',
+      (signal) => authFetch(`${API_BASE}/stations/${id}`, { method: 'DELETE', signal }),
+      () => showToast('Station deleted.'),
+    );
   };
 
-  // ─── Device REST methods ───────────────────────────────────────────────────
+  // ─── Device REST methods (optimistic) ──────────────────────────────────────
   const addDevice = async (payload) => {
-    const res = await authFetch(`${API_BASE}/devices/`, { method: 'POST', body: JSON.stringify(payload) });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to create device.'), 'error'); return false; }
-    const newDevice = await res.json();
-    setDevices(prev => [...prev, newDevice]);
-    showToast('Device added successfully.');
-    loadAllData(); return newDevice;
+    const tempId = Date.now();
+    const optimistic = { id: tempId, ...payload };
+    const result = await optimisticAdd(
+      `device:new`, setDevices, optimistic,
+      (signal) => authFetch(`${API_BASE}/devices/`, { method: 'POST', body: JSON.stringify(payload), signal }),
+      async (res) => { const d = await res.json(); showToast('Device added successfully.'); return d; },
+    );
+    return result;
   };
 
   const editDevice = async (id, payload) => {
-    const res = await authFetch(`${API_BASE}/devices/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to update device.'), 'error'); return false; }
-    const updated = await res.json();
-    setDevices(prev => prev.map(d => d.id == id ? updated : d));
-    showToast('Device updated successfully.');
-    loadAllData(); return true;
+    return optimisticEdit(
+      `device:${id}`, setDevices, devices, id, 'id', payload,
+      (signal) => authFetch(`${API_BASE}/devices/${id}`, { method: 'PATCH', body: JSON.stringify(payload), signal }),
+      async (res) => { const updated = await res.json(); setDevices(prev => prev.map(d => d.id == id ? updated : d)); showToast('Device updated successfully.'); },
+    );
   };
 
   const deleteDevice = async (id) => {
-    const res = await authFetch(`${API_BASE}/devices/${id}`, { method: 'DELETE' });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to delete device.'), 'error'); return false; }
-    setDevices(prev => prev.filter(d => d.id != id));
-    showToast('Device deleted.'); loadAllData(); return true;
+    return optimisticRemove(
+      `device:${id}`, setDevices, devices, id, 'id',
+      (signal) => authFetch(`${API_BASE}/devices/${id}`, { method: 'DELETE', signal }),
+      () => showToast('Device deleted.'),
+    );
   };
 
-  // ─── Parameter REST methods ────────────────────────────────────────────────
+  // ─── Parameter REST methods (optimistic) ────────────────────────────────────
   const addParameter = async (payload) => {
-    const res = await authFetch(`${API_BASE}/parameters/`, { method: 'POST', body: JSON.stringify(payload) });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to map parameter.'), 'error'); return false; }
-    const newParam = await res.json();
-    setParameters(prev => [...prev, newParam]);
-    showToast('Parameter mapped successfully.');
-    loadAllData(); return true;
+    const tempId = Date.now();
+    const optimistic = { id: tempId, ...payload };
+    const result = await optimisticAdd(
+      `param:new`, setParameters, optimistic,
+      (signal) => authFetch(`${API_BASE}/parameters/`, { method: 'POST', body: JSON.stringify(payload), signal }),
+      async (res) => { const p = await res.json(); showToast('Parameter mapped successfully.'); return p; },
+    );
+    return result;
   };
 
   const editParameter = async (id, payload) => {
-    const res = await authFetch(`${API_BASE}/parameters/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to update parameter.'), 'error'); return false; }
-    const updated = await res.json();
-      setParameters(prev => prev.map(p => p.id == id ? updated : p));
-    showToast('Parameter updated.'); loadAllData(); return true;
+    return optimisticEdit(
+      `param:${id}`, setParameters, parameters, id, 'id', payload,
+      (signal) => authFetch(`${API_BASE}/parameters/${id}`, { method: 'PATCH', body: JSON.stringify(payload), signal }),
+      async (res) => { const updated = await res.json(); setParameters(prev => prev.map(p => p.id == id ? updated : p)); showToast('Parameter updated.'); },
+    );
   };
 
   const deleteParameter = async (id) => {
-    const res = await authFetch(`${API_BASE}/parameters/${id}`, { method: 'DELETE' });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to delete parameter.'), 'error'); return false; }
-      setParameters(prev => prev.filter(p => p.id != id));
-    showToast('Parameter mapping deleted.'); loadAllData(); return true;
+    return optimisticRemove(
+      `param:${id}`, setParameters, parameters, id, 'id',
+      (signal) => authFetch(`${API_BASE}/parameters/${id}`, { method: 'DELETE', signal }),
+      () => showToast('Parameter mapping deleted.'),
+    );
   };
 
   const testDeviceConnection = async (id) => {
@@ -708,7 +815,7 @@ export const AppProvider = ({ children }) => {
       addParameter, editParameter, deleteParameter,
       testDeviceConnection, testParameterConnection,
       loadAllData, fetchLatestTelemetryAndKpis, showToast, API_BASE, WS_BASE, authFetch,
-      plantName, plantAddress, plantLogo, saveLocalSettings,
+      plantName, plantAddress, plantLogo, saveLocalSettings, pendingStatus,
       loading, parseUtcDate, hasLoadedOnce,
       broadcasts, amcExpiry
     }}>

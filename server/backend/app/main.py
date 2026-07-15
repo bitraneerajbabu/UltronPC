@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import models so they are registered with Base.metadata before create_all
-from app.models.core import IndustrySite, Device, Parameter, TelemetryData, Broadcast, PendingCommand, Alarm, SoftwareVersion, OTADeployment
+from app.models.core import IndustrySite, Device, Parameter, TelemetryData, Broadcast, PendingCommand, Alarm, SoftwareVersion, OTADeployment, Station
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -175,6 +175,25 @@ def _run_auto_migrations():
         except Exception as e:
             logger.warning(f"Auto-migration for alarms table skipped: {e}")
 
+        # Create stations table if not exists
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS stations (
+                    id SERIAL PRIMARY KEY,
+                    site_id INTEGER NOT NULL REFERENCES industry_sites(id) ON DELETE CASCADE,
+                    station_id VARCHAR(100) NOT NULL,
+                    username VARCHAR(200) NOT NULL,
+                    category VARCHAR(50) NOT NULL,
+                    station_name VARCHAR(200) NOT NULL,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            conn.commit()
+            logger.info("Auto-migration: ensured 'stations' table")
+        except Exception as e:
+            logger.warning(f"Auto-migration for stations table skipped: {e}")
+
 _run_auto_migrations()
 
 # ─── Simple In-Memory Rate Limiter ─────────────────────────────────────────────
@@ -225,15 +244,17 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
     if key == settings.ADMIN_KEY:
         return {"success": True}
 
+    from app.api.deps import find_site_by_key, find_device_by_key
+
     # Check site-level key
-    site = db.query(IndustrySite).filter(IndustrySite.api_key == key).first()
+    site = find_site_by_key(db, key)
     if site:
         if not site.is_active:
             return JSONResponse({"success": False, "detail": "Site is inactive"}, status_code=403)
         return {"success": True}
 
     # Check device-level key
-    device = db.query(Device).filter(Device.api_key == key).first()
+    device = find_device_by_key(db, key)
     if device:
         return {"success": True}
 
@@ -241,7 +262,7 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
     return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
 
 
-from app.api.endpoints import sync, sites, downloads, tgpcb_sync, broadcasts, commands, quality, alarms, cpcb, ota
+from app.api.endpoints import sync, sites, downloads, tgpcb_sync, broadcasts, commands, quality, alarms, cpcb, ota, stations
 
 app.include_router(sync.router, prefix=f"{settings.API_V1_STR}/sync", tags=["sync"])
 app.include_router(tgpcb_sync.router, prefix=f"{settings.API_V1_STR}/tgpcb", tags=["tgpcb-sync"])
@@ -253,6 +274,7 @@ app.include_router(quality.router, prefix=f"{settings.API_V1_STR}/quality", tags
 app.include_router(alarms.router, prefix=f"{settings.API_V1_STR}/alarms", tags=["alarms"])
 app.include_router(cpcb.router, prefix=f"{settings.API_V1_STR}/cpcb", tags=["cpcb"])
 app.include_router(ota.router, prefix=f"{settings.API_V1_STR}/ota", tags=["ota"])
+app.include_router(stations.router, prefix=f"{settings.API_V1_STR}/stations", tags=["stations"])
 
 # Background heartbeat monitor loop for server
 import asyncio

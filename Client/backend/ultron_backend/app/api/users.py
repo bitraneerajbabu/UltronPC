@@ -103,6 +103,13 @@ async def update_user(
                 detail="Cannot demote the last active admin account",
             )
 
+    # Guard: Master password is locked — only manual DB edit can change it
+    if payload.password is not None and user.username == "Master":
+        raise HTTPException(
+            status_code=403,
+            detail="Master password is locked. Change it directly in the database.",
+        )
+
     if payload.password is not None:
         user.hashed_password = hash_password(payload.password)
     if payload.full_name is not None:

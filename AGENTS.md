@@ -50,3 +50,6 @@
 - **Device update numeric fields (`DevicesScreen.tsx:157-175`):** Added `toNum()` helper for device-level fields (`slave_id`, `baud_rate`, etc.) to handle string → number conversion with fallback.
 - Fixed `===` → `==` in AppContext (`:607,614`) for `editParameter`/`deleteParameter`
 - Removed hardcoded `host: '192.168.1.101'`/`port: '502'`/`slave_id: '1'` from DEFAULT_PARAM (`:33`)
+
+## Guardrails
+- **Master password (Master/Ultronpoiu) is LOCKED.** Never change it via API or direct DB edit unless Dev explicitly says "change the Master password". The PATCH `/users/{id}` endpoint rejects password changes for user Master. Intentional — manual DB update only.

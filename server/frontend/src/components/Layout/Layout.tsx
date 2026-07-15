@@ -80,7 +80,7 @@ export default function Layout({
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <img src="/assets/Ultron_logo.png" alt="" style={{ height: 16, width: 16 }} />
-            <Typography variant="caption" sx={{ color: '#9CA3AF' }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
               Neeraj v2.0 — All Rights Reserved to Neeraj
             </Typography>
           </Box>

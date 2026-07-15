@@ -32,6 +32,7 @@ from app.api import led as led_api
 from app.api import broadcasts as broadcasts_api
 from app.api import cpcb as cpcb_api
 from app.api import calibration as calibration_api
+from app.api import rajapi as rajapi_api
 from app.core.security_middleware import SecurityHeadersMiddleware, RequestSizeLimitMiddleware
 from app.core.rate_limiter import RateLimitMiddleware
 from app.core.error_handler import RequestIDMiddleware, GlobalExceptionMiddleware, AccessLogMiddleware
@@ -329,6 +330,7 @@ app.include_router(led_api.router,      prefix=PREFIX)  # LED Board LAN endpoint
 app.include_router(broadcasts_api.router, prefix=PREFIX)
 app.include_router(cpcb_api.router, prefix=PREFIX)
 app.include_router(calibration_api.router, prefix=PREFIX)
+app.include_router(rajapi_api.router, prefix=PREFIX)
 
 # ─── Public Version Endpoint ──────────────────────────────────────────────────
 @app.get("/api/v1/version")

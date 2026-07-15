@@ -30,17 +30,15 @@ import CreateSiteDialog from './components/Dialogs/CreateSiteDialog'
 import EditSiteDialog from './components/Dialogs/EditSiteDialog'
 import BroadcastDialog from './components/Dialogs/BroadcastDialog'
 import LockDialog from './components/Dialogs/LockDialog'
+import Telemetry3DVisualizer from './components/Common/Telemetry3DVisualizer'
 
-function getConnectionStatus(last_sync?: string): { label: string; color: string } {
-  if (!last_sync) return { label: 'Never Connected', color: '#9CA3AF' };
+function getConnectionStatus(last_sync?: string): { label: string; color: string; statusKey: string } {
+  if (!last_sync) return { label: 'NC', color: '#9CA3AF', statusKey: 'nc' };
   const utcStr = last_sync.endsWith('Z') ? last_sync : last_sync + 'Z';
   const diffMs = Date.now() - new Date(utcStr).getTime();
   const diffMins = diffMs / 60000;
-  if (diffMins < 5) return { label: 'Live', color: '#16A34A' };
-  if (diffMins < 60) return { label: `${Math.floor(diffMins)}m ago`, color: '#F59E0B' };
-  const diffHrs = diffMins / 60;
-  if (diffHrs < 24) return { label: `${Math.floor(diffHrs)}h ago`, color: '#F97316' };
-  return { label: `${Math.floor(diffHrs / 24)}d ago`, color: '#DC2626' };
+  if (diffMins < 5) return { label: 'online', color: '#16A34A', statusKey: 'online' };
+  return { label: 'offline', color: '#DC2626', statusKey: 'offline' };
 }
 
 function App() {
@@ -96,11 +94,11 @@ function App() {
   const [savingExpiry, setSavingExpiry] = useState(false)
 
   // Devices state
-  const [siteDevices, setSiteDevices] = useState<{ id: number; site_id: number; name: string; status: string; api_key?: string }[]>([])
-  const [loadingDevices, setLoadingDevices] = useState(false)
-  const [newDeviceName, setNewDeviceName] = useState('')
-  const [editingDeviceId, setEditingDeviceId] = useState<number | null>(null)
-  const [editingDeviceName, setEditingDeviceName] = useState('')
+  const [siteStations, setSiteStations] = useState<{ id: number; site_id: number; station_id: string; username: string; category: string; station_name: string; is_active: boolean; created_at: string }[]>([])
+  const [showAddStation, setShowAddStation] = useState(false)
+  const [newStation, setNewStation] = useState({ station_id: '', username: '', category: 'emission', station_name: '' })
+  const [editingStationId, setEditingStationId] = useState<number | null>(null)
+  const [editStationForm, setEditStationForm] = useState({ station_id: '', username: '', category: '', station_name: '' })
 
   // CPCB Dashboard State
   const [cpcbStatus, setCpcbStatus] = useState<any[]>([])
@@ -120,7 +118,14 @@ function App() {
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | 'unsupported'>(
     'Notification' in window ? Notification.permission : 'unsupported'
   )
-  const [darkMode, setDarkMode] = useState(false)
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('rajapi_dark');
+    if (saved !== null) {
+      return saved === 'true';
+    }
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
 
   const requestNotificationPermission = async () => {
     if (!('Notification' in window)) return
@@ -325,28 +330,32 @@ function App() {
     const values = pts.map(p => p.value);
     const ctx = historyChartRef.current.getContext('2d');
     if (!ctx) return;
+    const lineColor = darkMode ? '#60A5FA' : '#2563eb';
+    const fillColor = darkMode ? 'rgba(96,165,250,0.1)' : 'rgba(37,99,235,0.1)';
+    const gridColor = darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+    const tickColor = darkMode ? '#94A3B8' : '#64748B';
     historyChartInstance.current = new Chart(ctx, {
       type: 'line',
       data: {
         labels,
         datasets: [{
           label: 'Value', data: values,
-          borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,0.1)',
+          borderColor: lineColor, backgroundColor: fillColor,
           fill: true, tension: 0.1, spanGaps: false, pointRadius: 2,
-          pointBackgroundColor: values.map(v => v == null ? 'transparent' : '#2563eb'),
+          pointBackgroundColor: values.map(v => v == null ? 'transparent' : lineColor),
         }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          x: { ticks: { maxTicksLimit: 10, font: { size: 10 } } },
-          y: { beginAtZero: false }
+          x: { ticks: { maxTicksLimit: 10, font: { size: 10 }, color: tickColor }, grid: { color: gridColor } },
+          y: { beginAtZero: false, ticks: { color: tickColor }, grid: { color: gridColor } }
         }
       }
     });
     return () => { if (historyChartInstance.current) { historyChartInstance.current.destroy(); historyChartInstance.current = null; } };
-  }, [historyData])
+  }, [historyData, darkMode])
 
   const fetchLiveData = useCallback(async (siteId: number) => {
     setLiveDataLoading(true);
@@ -368,12 +377,10 @@ function App() {
   }, [activeSite, fetchLiveData]);
 
   useEffect(() => {
-    if (!activeSite) { setSiteDevices([]); return; }
-    setLoadingDevices(true);
-    adminFetch(`/api/v1/sites/${activeSite.id}/devices`)
+    if (!activeSite) { setSiteStations([]); return; }
+    adminFetch(`/api/v1/stations/?site_id=${activeSite.id}`)
       .then(r => r.ok ? r.json() : [])
-      .then(d => { if (Array.isArray(d)) setSiteDevices(d); setLoadingDevices(false); })
-      .catch(() => setLoadingDevices(false));
+      .then(d => { if (Array.isArray(d)) setSiteStations(d); });
   }, [activeSite]);
 
   // --- LOGIN PAGE ---
@@ -414,7 +421,7 @@ function App() {
 
   const kpiData = [
     { id: 'total', icon: <Icon name="Factory" size={26} />, label: 'Total Plants', value: sites.length, color: '#2563EB', trend: { value: `${sites.length} registered`, positive: true } },
-    { id: 'online', icon: <Icon name="Wifi" size={26} />, label: 'Online', value: sites.filter(s => s.is_active && getConnectionStatus(s.last_sync).label === 'Live').length, color: '#16A34A', trend: { value: `${Math.round(sites.filter(s => s.is_active).length / Math.max(sites.length, 1) * 100)}% uptime`, positive: true } },
+    { id: 'online', icon: <Icon name="Wifi" size={26} />, label: 'Online', value: sites.filter(s => s.is_active && getConnectionStatus(s.last_sync).statusKey === 'online').length, color: '#16A34A', trend: { value: `${Math.round(sites.filter(s => s.is_active).length / Math.max(sites.length, 1) * 100)}% uptime`, positive: true } },
     { id: 'offline', icon: <Icon name="WifiOff" size={26} />, label: 'Offline', value: sites.filter(s => !s.is_active).length, color: '#DC2626', trend: { value: `${sites.filter(s => !s.is_active && s.last_error).length} with errors`, positive: false } },
     { id: 'alarms', icon: <Icon name="AlertTriangle" size={26} />, label: 'Critical Alerts', value: alarmStats?.total_active || 0, color: '#F59E0B', subtitle: `${alarmStats?.total_today || 0} triggered today` },
     { id: 'notif', icon: <Icon name="BellRing" size={26} />, label: 'Notifications', value: alarms.filter((a: any) => a.status === 'active').length, color: '#8B5CF6' },
@@ -450,7 +457,7 @@ function App() {
       </Grid>
 
       <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, lg: 8 }}>
+        <Grid size={{ xs: 12, lg: 7 }}>
           <SectionCard title="Registered Plants" subtitle={`${filteredSites.length} plants match your criteria`}
             action={
               <Box sx={{ display: 'flex', gap: 1 }}>
@@ -489,24 +496,20 @@ function App() {
                       return (
                         <TableRow key={site.id} hover
                           onClick={() => setActiveSite(site)}
-                          sx={{ cursor: 'pointer', '&:last-child td': { borderBottom: 'none' }, bgcolor: activeSite?.id === site.id ? '#EFF6FF' : 'inherit' }}
+                          sx={{ cursor: 'pointer', '&:last-child td': { borderBottom: 'none' }, bgcolor: activeSite?.id === site.id ? 'primary.light' : 'inherit' }}
                         >
                           <TableCell>
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>{site.name}</Typography>
-                            {site.client_version && <Typography variant="caption" sx={{ color: '#9CA3AF' }}>v{site.client_version}</Typography>}
+                            {site.client_version && <Typography variant="caption" sx={{ color: 'text.secondary' }}>v{site.client_version}</Typography>}
                           </TableCell>
                           <TableCell>
-                            <Typography variant="body2" sx={{ color: '#6B7280' }}>{site.location || 'Unknown'}</Typography>
+                            <Typography variant="body2" sx={{ color: 'text.secondary' }}>{site.location || 'Unknown'}</Typography>
                           </TableCell>
                           <TableCell>
-                            <StatusBadge status={site.is_active ? 'online' : 'offline'} />
+                            <StatusBadge status={conn.statusKey} />
                           </TableCell>
                           <TableCell>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: conn.color, flexShrink: 0 }} />
-                              <Typography variant="caption" sx={{ color: '#6B7280' }}>{conn.label}</Typography>
-                              {site.last_error && <Tooltip title={site.last_error}><Icon name="AlertTriangle" size={18} color="#DC2626" /></Tooltip>}
-                            </Box>
+                            {site.last_error && <Tooltip title={site.last_error}><Icon name="AlertTriangle" size={18} color="#DC2626" /></Tooltip>}
                           </TableCell>
                           <TableCell>
                             {editingExpiry === site.id ? (
@@ -514,22 +517,22 @@ function App() {
                                 <input type="date" value={editExpiryVal} onChange={e => setEditExpiryVal(e.target.value)}
                                   style={{ width: 100, padding: '2px 4px', border: '1px solid #E5E7EB', borderRadius: 4, fontSize: 12 }}
                                 />
-                                <IconButton size="small" onClick={() => handleSaveExpiry(site.id)} disabled={savingExpiry} sx={{ color: '#2563EB' }}><Icon name="RefreshCw" size={18} /></IconButton>
-                                <IconButton size="small" onClick={() => setEditingExpiry(null)} sx={{ color: '#9CA3AF' }}><Icon name="X" size={18} /></IconButton>
+                                <IconButton size="small" onClick={() => handleSaveExpiry(site.id)} disabled={savingExpiry} sx={{ color: 'primary.main' }}><Icon name="RefreshCw" size={18} /></IconButton>
+                                <IconButton size="small" onClick={() => setEditingExpiry(null)} sx={{ color: 'text.secondary' }}><Icon name="X" size={18} /></IconButton>
                               </Box>
                             ) : (
-                              <Typography variant="caption" sx={{ color: '#6B7280' }}>
+                              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                 {site.amc_expiry ? new Date(site.amc_expiry).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
                               </Typography>
                             )}
                           </TableCell>
                           <TableCell align="right">
                             <Box sx={{ display: 'flex', gap: 0.25, justifyContent: 'flex-end' }} onClick={e => e.stopPropagation()}>
-                              <Tooltip title="Edit AMC Expiry"><IconButton size="small" onClick={() => { setEditingExpiry(site.id); setEditExpiryVal(site.amc_expiry?.split('T')[0] || ''); }} sx={{ color: '#9CA3AF' }}><Icon name="CalendarRange" size={18} /></IconButton></Tooltip>
-                              <Tooltip title={site.is_active ? 'Deactivate' : 'Activate'}><IconButton size="small" onClick={() => handleToggleStatus(site.id, site.is_active)} sx={{ color: '#9CA3AF' }}><Icon name="Power" size={18} /></IconButton></Tooltip>
-                              <Tooltip title="Renew AMC"><IconButton size="small" onClick={() => handleRenewAmc(site)} sx={{ color: '#9CA3AF' }}><Icon name="RotateCcw" size={18} /></IconButton></Tooltip>
-                              <Tooltip title="Edit"><IconButton size="small" onClick={() => setEditSiteModal({ id: site.id, name: site.name, location: site.location || '', notes: site.notes || '' })} sx={{ color: '#9CA3AF' }}><Icon name="Pencil" size={18} /></IconButton></Tooltip>
-                              <Tooltip title="Delete"><IconButton size="small" onClick={() => handleDeleteSite(site)} sx={{ color: '#9CA3AF' }}><Icon name="Trash2" size={18} /></IconButton></Tooltip>
+                              <Tooltip title="Edit AMC Expiry"><IconButton size="small" onClick={() => { setEditingExpiry(site.id); setEditExpiryVal(site.amc_expiry?.split('T')[0] || ''); }} sx={{ color: 'text.secondary' }}><Icon name="CalendarRange" size={18} /></IconButton></Tooltip>
+                              <Tooltip title={site.is_active ? 'Deactivate' : 'Activate'}><IconButton size="small" onClick={() => handleToggleStatus(site.id, site.is_active)} sx={{ color: 'text.secondary' }}><Icon name="Power" size={18} /></IconButton></Tooltip>
+                              <Tooltip title="Renew AMC"><IconButton size="small" onClick={() => handleRenewAmc(site)} sx={{ color: 'text.secondary' }}><Icon name="RotateCcw" size={18} /></IconButton></Tooltip>
+                              <Tooltip title="Edit"><IconButton size="small" onClick={() => setEditSiteModal({ id: site.id, name: site.name, location: site.location || '', notes: site.notes || '' })} sx={{ color: 'text.secondary' }}><Icon name="Pencil" size={18} /></IconButton></Tooltip>
+                              <Tooltip title="Delete"><IconButton size="small" onClick={() => handleDeleteSite(site)} sx={{ color: 'text.secondary' }}><Icon name="Trash2" size={18} /></IconButton></Tooltip>
                             </Box>
                           </TableCell>
                         </TableRow>
@@ -542,8 +545,15 @@ function App() {
           </SectionCard>
         </Grid>
 
-        {/* Right Panel: Live Data */}
-        <Grid size={{ xs: 12, lg: 4 }}>
+        {/* Right Panel: Live Data & Fleet Telemetry Globe */}
+        <Grid size={{ xs: 12, lg: 5 }} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <SectionCard 
+            title="Fleet Telemetry Globe" 
+            subtitle="Drag to rotate globe. Hover nodes to view status. Click node to select."
+          >
+            <Telemetry3DVisualizer sites={sites} activeSite={activeSite} onSelectSite={setActiveSite} />
+          </SectionCard>
+
           {activeSite ? (
             <SectionCard
               title={activeSite.name}
@@ -551,15 +561,15 @@ function App() {
               action={
                 <Box sx={{ display: 'flex', gap: 0.5 }}>
                   <Tooltip title="Restart Polling"><span><IconButton size="small"
-                    disabled={getConnectionStatus(activeSite.last_sync).label !== 'Live'}
+                    disabled={getConnectionStatus(activeSite.last_sync).statusKey !== 'online'}
                     onClick={async () => {
                       if (!confirm(`Send "Restart Polling" to ${activeSite.name}?`)) return;
                       const res = await adminFetch(`/api/v1/commands/sites/${activeSite.id}/command`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restart_polling' }) });
                       const d = await res.json();
                       alert(res.ok ? `✅ Restart Polling sent` : `❌ ${d.detail || 'Failed'}`);
                     }}
-                    sx={{ color: '#9CA3AF' }}><Icon name="RefreshCw" size={18} /></IconButton></span></Tooltip>
-                  <Tooltip title="Close"><IconButton size="small" onClick={() => { setActiveSite(null); setLiveData([]); }} sx={{ color: '#9CA3AF' }}><Icon name="X" size={18} /></IconButton></Tooltip>
+                    sx={{ color: 'text.secondary' }}><Icon name="RefreshCw" size={18} /></IconButton></span></Tooltip>
+                  <Tooltip title="Close"><IconButton size="small" onClick={() => { setActiveSite(null); setLiveData([]); }} sx={{ color: 'text.secondary' }}><Icon name="X" size={18} /></IconButton></Tooltip>
                 </Box>
               }
             >
@@ -567,11 +577,23 @@ function App() {
                 const c = getConnectionStatus(activeSite.last_sync);
                 return <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: c.color }} />
-                  <Typography variant="caption" sx={{ color: '#6B7280' }}>{c.label}</Typography>
-                  {c.label === 'Live' && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#16A34A', animation: 'pulse 2s infinite', ml: 1 }} />}
-                  <Typography variant="caption" sx={{ color: '#9CA3AF', ml: 'auto' }}>Live</Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>{c.label}</Typography>
+                  {c.statusKey === 'online' && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#16A34A', animation: 'pulse 2s infinite', ml: 1 }} />}
+                  {activeSite.last_sync && <Typography variant="caption" sx={{ color: 'text.disabled', ml: 1 }}>Last sync: {new Date(activeSite.last_sync).toLocaleString()}</Typography>}
                 </Box>;
               })()}
+
+              {activeSite.api_key && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, bgcolor: 'action.hover', px: 1.5, py: 0.75, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: 10 }}>Site Key:</Typography>
+                  <Typography variant="caption" sx={{ fontFamily: 'mono', color: 'text.primary', fontSize: 10 }}>
+                    {activeSite.api_key.length > 25 ? `${activeSite.api_key.substring(0, 15)}...${activeSite.api_key.substring(activeSite.api_key.length - 10)}` : activeSite.api_key}
+                  </Typography>
+                  <IconButton size="small" onClick={() => { navigator.clipboard.writeText(activeSite.api_key); }} sx={{ color: 'text.secondary', ml: 'auto', p: 0.25 }}>
+                    <Icon name="Copy" size={16} />
+                  </IconButton>
+                </Box>
+              )}
 
               {/* Live data table */}
               {liveData.length === 0 && !liveDataLoading ? (
@@ -601,14 +623,14 @@ function App() {
                           <TableRow key={pt.tag_name} hover>
                             <TableCell>
                               <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: 'mono' }}>{pt.tag_name}</Typography>
-                              {pt.name !== pt.tag_name && <Typography variant="caption" sx={{ color: '#9CA3AF', display: 'block' }}>{pt.name}</Typography>}
+                              {pt.name !== pt.tag_name && <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{pt.name}</Typography>}
                             </TableCell>
                             <TableCell align="right">
                               <Typography variant="body2" sx={{ fontWeight: 700 }}>{pt.value != null ? Number(pt.value).toFixed(2) : '—'}</Typography>
-                              {pt.unit && <Typography variant="caption" sx={{ color: '#9CA3AF' }}>{pt.unit}</Typography>}
+                              {pt.unit && <Typography variant="caption" sx={{ color: 'text.secondary' }}>{pt.unit}</Typography>}
                             </TableCell>
                             <TableCell align="center"><StatusBadge status={isGood ? 'healthy' : 'error'} size="small" /></TableCell>
-                            <TableCell align="right"><Typography variant="caption" sx={{ color: '#9CA3AF' }}>{ago}</Typography></TableCell>
+                            <TableCell align="right"><Typography variant="caption" sx={{ color: 'text.secondary' }}>{ago}</Typography></TableCell>
                           </TableRow>
                         );
                       })}
@@ -617,75 +639,77 @@ function App() {
                 </TableContainer>
               )}
 
-              {/* Devices Section */}
-              <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+
+              <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-                  <Typography variant="overline" sx={{ color: '#6B7280' }}>Devices</Typography>
-                  {loadingDevices && <Typography variant="caption" sx={{ color: '#9CA3AF' }}>Loading...</Typography>}
+                  <Typography variant="overline" sx={{ color: 'text.secondary' }}>Stations</Typography>
+                  <Button size="small" variant="outlined" startIcon={<Icon name="Plus" size={14} />}
+                    onClick={() => setShowAddStation(!showAddStation)}>Add</Button>
                 </Box>
-                {siteDevices.length === 0 && !loadingDevices ? (
-                  <Typography variant="caption" sx={{ color: '#9CA3AF' }}>No devices yet. They appear when the client syncs.</Typography>
-                ) : siteDevices.map(d => (
-                  <Box key={d.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: '#F9FAFB', borderRadius: 1, px: 1.5, py: 1, mb: 0.5 }}>
-                    <Box>
-                      {editingDeviceId === d.id ? (
-                        <TextField size="small" value={editingDeviceName} onChange={e => setEditingDeviceName(e.target.value)}
-                          autoFocus sx={{ '& .MuiInputBase-root': { fontSize: 13, py: 0 } }}
-                          onKeyDown={async e => {
-                            if (e.key === 'Escape') setEditingDeviceId(null);
-                            if (e.key === 'Enter' && editingDeviceName.trim()) {
-                              await adminFetch(`/api/v1/sites/${activeSite!.id}/devices/${d.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: editingDeviceName.trim(), status: d.status }) });
-                              setSiteDevices(siteDevices.map(x => x.id === d.id ? { ...x, name: editingDeviceName.trim() } : x));
-                              setEditingDeviceId(null);
-                            }
-                          }}
-                        />
-                      ) : (
-                        <>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>{d.name}</Typography>
-                          {d.api_key && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              <Typography variant="caption" sx={{ fontFamily: 'mono', color: '#9CA3AF', fontSize: 10 }}>{d.api_key.substring(0, 16)}...</Typography>
-                              <IconButton size="small" onClick={() => { navigator.clipboard.writeText(d.api_key!); }} sx={{ color: '#9CA3AF', p: 0.25 }}><Icon name="Copy" size={18} /></IconButton>
-                            </Box>
-                          )}
-                        </>
-                      )}
+                {showAddStation && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 1.5, p: 1.5, bgcolor: 'action.focus', borderRadius: 1 }}>
+                    <TextField size="small" label="Station ID" value={newStation.station_id} onChange={e => setNewStation({ ...newStation, station_id: e.target.value })} />
+                    <TextField size="small" label="Username" value={newStation.username} onChange={e => setNewStation({ ...newStation, username: e.target.value })} />
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      {['emission', 'effluent', 'ambient'].map(c => (
+                        <Button key={c} size="small" variant={newStation.category === c ? 'contained' : 'outlined'}
+                          onClick={() => setNewStation({ ...newStation, category: c })} sx={{ textTransform: 'capitalize' }}>{c}</Button>
+                      ))}
                     </Box>
-                    <Box sx={{ display: 'flex', gap: 0.25 }}>
-                      <StatusBadge status={d.status || 'unknown'} size="small" />
-                      <Tooltip title="Regenerate Key"><IconButton size="small" onClick={async () => {
-                        if (!confirm(`Regenerate API key for "${d.name}"?`)) return;
-                        const res = await adminFetch(`/api/v1/sites/${activeSite!.id}/devices/${d.id}/renew-key`, { method: 'POST' });
-                        if (res.ok) { const u = await res.json(); setSiteDevices(siteDevices.map(x => x.id === d.id ? u : x)); }
-                      }} sx={{ color: '#9CA3AF' }}><Icon name="RefreshCw" size={18} /></IconButton></Tooltip>
-                      <Tooltip title="Rename"><IconButton size="small" onClick={() => { setEditingDeviceId(d.id); setEditingDeviceName(d.name); }} sx={{ color: '#9CA3AF' }}><Icon name="Pencil" size={18} /></IconButton></Tooltip>
-                      <Tooltip title="Delete"><IconButton size="small" onClick={async () => {
-                        if (!confirm(`Delete device "${d.name}"?`)) return;
-                        const res = await adminFetch(`/api/v1/sites/${activeSite!.id}/devices/${d.id}`, { method: 'DELETE' });
-                        if (res.ok) setSiteDevices(siteDevices.filter(x => x.id !== d.id));
-                      }} sx={{ color: '#9CA3AF' }}><Icon name="Trash2" size={18} /></IconButton></Tooltip>
+                    <TextField size="small" label="Station Name" value={newStation.station_name} onChange={e => setNewStation({ ...newStation, station_name: e.target.value })} />
+                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                      <Button size="small" onClick={() => { setShowAddStation(false); setNewStation({ station_id: '', username: '', category: 'emission', station_name: '' }); }}>Cancel</Button>
+                      <Button size="small" variant="contained" onClick={async () => {
+                        if (!newStation.station_id || !newStation.username || !newStation.station_name) return;
+                        const res = await adminFetch(`/api/v1/stations/?site_id=${activeSite!.id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newStation) });
+                        if (res.ok) { const c = await res.json(); setSiteStations([...siteStations, c]); setShowAddStation(false); setNewStation({ station_id: '', username: '', category: 'emission', station_name: '' }); }
+                      }}>Create</Button>
                     </Box>
                   </Box>
+                )}
+                {siteStations.length === 0 ? (
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>No stations configured.</Typography>
+                ) : siteStations.map(s => (
+                  <Box key={s.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: 'action.hover', borderRadius: 1, px: 1.5, py: 1, mb: 0.5 }}>
+                    {editingStationId === s.id ? (
+                      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        <TextField size="small" label="Station ID" value={editStationForm.station_id} onChange={e => setEditStationForm({ ...editStationForm, station_id: e.target.value })} />
+                        <TextField size="small" label="Username" value={editStationForm.username} onChange={e => setEditStationForm({ ...editStationForm, username: e.target.value })} />
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          {['emission', 'effluent', 'ambient'].map(c => (
+                            <Button key={c} size="small" variant={editStationForm.category === c ? 'contained' : 'outlined'}
+                              onClick={() => setEditStationForm({ ...editStationForm, category: c })} sx={{ textTransform: 'capitalize' }}>{c}</Button>
+                          ))}
+                        </Box>
+                        <TextField size="small" label="Station Name" value={editStationForm.station_name} onChange={e => setEditStationForm({ ...editStationForm, station_name: e.target.value })} />
+                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                          <Button size="small" onClick={() => { setEditingStationId(null); }}>Cancel</Button>
+                          <Button size="small" variant="contained" onClick={async () => {
+                            const res = await adminFetch(`/api/v1/stations/${s.id}?site_id=${activeSite!.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editStationForm) });
+                            if (res.ok) { const u = await res.json(); setSiteStations(siteStations.map(x => x.id === s.id ? u : x)); setEditingStationId(null); }
+                          }}>Save</Button>
+                        </Box>
+                      </Box>
+                    ) : (
+                      <>
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>{s.station_name}</Typography>
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            {s.station_id} · {s.username} · <Box component="span" sx={{ textTransform: 'capitalize' }}>{s.category}</Box>
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 0.25 }}>
+                          <Tooltip title="Edit"><IconButton size="small" onClick={() => { setEditingStationId(s.id); setEditStationForm({ station_id: s.station_id, username: s.username, category: s.category, station_name: s.station_name }); }} sx={{ color: 'text.secondary' }}><Icon name="Pencil" size={18} /></IconButton></Tooltip>
+                          <Tooltip title="Delete"><IconButton size="small" onClick={async () => {
+                            if (!confirm(`Delete station "${s.station_name}"?`)) return;
+                            const res = await adminFetch(`/api/v1/stations/${s.id}?site_id=${activeSite!.id}`, { method: 'DELETE' });
+                            if (res.ok) setSiteStations(siteStations.filter(x => x.id !== s.id));
+                          }} sx={{ color: 'text.secondary' }}><Icon name="Trash2" size={18} /></IconButton></Tooltip>
+                        </Box>
+                      </>
+                    )}
+                  </Box>
                 ))}
-                <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                  <TextField size="small" value={newDeviceName} onChange={e => setNewDeviceName(e.target.value)}
-                    placeholder="Add device..." sx={{ flex: 1, '& .MuiInputBase-root': { fontSize: 13 } }}
-                    onKeyDown={async e => {
-                      if (e.key === 'Enter' && newDeviceName.trim()) {
-                        const res = await adminFetch(`/api/v1/sites/${activeSite!.id}/devices`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newDeviceName.trim() }) });
-                        if (res.ok) { const c = await res.json(); setSiteDevices([...siteDevices, c]); setNewDeviceName(''); }
-                      }
-                    }}
-                  />
-                  <Button size="small" variant="contained" sx={{ minWidth: 36, px: 1 }}
-                    onClick={async () => {
-                      if (!newDeviceName.trim()) return;
-                      const res = await adminFetch(`/api/v1/sites/${activeSite!.id}/devices`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newDeviceName.trim() }) });
-                      if (res.ok) { const c = await res.json(); setSiteDevices([...siteDevices, c]); setNewDeviceName(''); }
-                    }}
-                  ><Icon name="Plus" size={20} /></Button>
-                </Box>
               </Box>
             </SectionCard>
           ) : (
@@ -724,12 +748,12 @@ function App() {
                       variant="outlined" sx={{ fontWeight: 700 }}
                     />
                     <StatusBadge status={bc.is_active ? 'active' : 'inactive'} />
-                    {bc.expires_at && <Typography variant="caption" sx={{ color: '#9CA3AF' }}>Expires: {new Date(bc.expires_at).toLocaleDateString()}</Typography>}
+                    {bc.expires_at && <Typography variant="caption" sx={{ color: 'text.secondary' }}>Expires: {new Date(bc.expires_at).toLocaleDateString()}</Typography>}
                   </Box>
                   <Typography variant="body1" sx={{ mb: 1 }}>{bc.message}</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Chip label={bc.target_all ? 'All Sites' : `Site #${bc.target_site_id}`} size="small" variant="outlined" />
-                    <Typography variant="caption" sx={{ color: '#9CA3AF' }}>{new Date(bc.created_at).toLocaleString()}</Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>{new Date(bc.created_at).toLocaleString()}</Typography>
                   </Box>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
@@ -758,11 +782,11 @@ function App() {
       <Dialog open={!!confirmDeleteBc} onClose={() => !deletingBc && setConfirmDeleteBc(null)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>Delete Broadcast?</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" sx={{ color: '#6B7280' }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             Are you sure you want to delete this broadcast? This cannot be undone.
           </Typography>
           {confirmDeleteBc && (
-            <Typography variant="body2" sx={{ mt: 1.5, p: 1.5, bgcolor: '#F3F4F6', borderRadius: 1, fontStyle: 'italic' }}>
+            <Typography variant="body2" sx={{ mt: 1.5, p: 1.5, bgcolor: 'action.hover', borderRadius: 1, fontStyle: 'italic' }}>
               "{confirmDeleteBc.message}"
             </Typography>
           )}
@@ -811,20 +835,20 @@ function App() {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {sites.map(site => {
             const conn = getConnectionStatus(site.last_sync);
-            const isOnline = conn.label === 'Live';
             return (
               <SectionCard key={site.id}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: isOnline ? '#16A34A' : '#9CA3AF' }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: conn.color }} />
                     <Box>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>{site.name}</Typography>
-                      <Typography variant="caption" sx={{ color: '#6B7280' }}>{site.location || ''}</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>{site.location || ''}</Typography>
+                      {site.last_sync && <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block' }}>{new Date(site.last_sync).toLocaleString()}</Typography>}
                     </Box>
-                    <Typography variant="caption" sx={{ color: conn.color, fontWeight: 600 }}>{conn.label}</Typography>
+                    <StatusBadge status={conn.statusKey} />
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button size="small" variant="outlined" disabled={!isOnline}
+                    <Button size="small" variant="outlined" disabled={conn.statusKey !== 'online'}
                       onClick={async () => {
                         if (!confirm(`Send "Restart Polling" to ${site.name}?`)) return;
                         try {
@@ -834,7 +858,7 @@ function App() {
                       }}
                       startIcon={<Icon name="RefreshCw" size={20} />}
                     >Restart Polling</Button>
-                    <Button size="small" variant="outlined" color="warning" disabled={!isOnline}
+                    <Button size="small" variant="outlined" color="warning" disabled={conn.statusKey !== 'online'}
                       onClick={async () => {
                         if (!confirm(`⚠️ Send "Reboot System" to ${site.name}? The PC will restart immediately.`)) return;
                         try {
@@ -844,7 +868,7 @@ function App() {
                       }}
                       startIcon={<Icon name="Power" size={20} />}
                     >Reboot PC</Button>
-                    <Button size="small" variant="outlined" color="error" disabled={!isOnline}
+                    <Button size="small" variant="outlined" color="error" disabled={conn.statusKey !== 'online'}
                       onClick={async () => {
                         if (!confirm(`☠️ Send "Factory Reset" to ${site.name}? ALL data on that PC will be erased!`)) return;
                         if (!confirm(`ARE YOU SURE? This will DESTROY all local data on ${site.name}.`)) return;
@@ -922,7 +946,7 @@ function App() {
                 </TableHead>
                 <TableBody>
                   {historyData.length === 0 ? (
-                    <TableRow><TableCell colSpan={3} align="center" sx={{ py: 6, color: '#9CA3AF' }}>No data in this range.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={3} align="center" sx={{ py: 6, color: 'text.secondary' }}>No data in this range.</TableCell></TableRow>
                   ) : historyData.map((p, i) => (
                     <TableRow key={p.id ?? i} hover>
                       <TableCell><Typography variant="caption" sx={{ fontFamily: 'mono' }}>{new Date(p.timestamp).toLocaleString()}</Typography></TableCell>
@@ -965,12 +989,12 @@ function App() {
                       <Typography variant="body1" sx={{ fontWeight: 600 }}>{site?.name || `Site #${lock.id}`}</Typography>
                       <StatusBadge status={isLocked ? 'locked' : 'unlocked'} />
                     </Box>
-                    {isLocked && lock.lock_reason && <Typography variant="caption" sx={{ color: '#6B7280' }}>Reason: {lock.lock_reason}</Typography>}
-                    {lock.lock_updated_at && <Typography variant="caption" sx={{ color: '#9CA3AF', display: 'block' }}>Updated: {new Date(lock.lock_updated_at).toLocaleString()}</Typography>}
+                    {isLocked && lock.lock_reason && <Typography variant="caption" sx={{ color: 'text.secondary' }}>Reason: {lock.lock_reason}</Typography>}
+                    {lock.lock_updated_at && <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>Updated: {new Date(lock.lock_updated_at).toLocaleString()}</Typography>}
                   </Box>
                   <Button variant="contained"
+                    color={isLocked ? 'success' : 'error'}
                     onClick={() => setLockModal({ id: lock.id, name: site?.name || `Site #${lock.id}`, status: isLocked ? 'unlocked' : 'manual_lock', reason: '' })}
-                    sx={{ backgroundColor: isLocked ? '#16A34A' : '#DC2626', '&:hover': { backgroundColor: isLocked ? '#15803D' : '#B91C1C' } }}
                   >{isLocked ? 'Unlock' : 'Lock'}</Button>
                 </Box>
               </SectionCard>
@@ -999,9 +1023,9 @@ function App() {
                     <Typography variant="h3" sx={{ fontSize: '32px', fontWeight: 700, color: '#2563EB', mb: 0.5 }}>
                       {site.total_records_synced_today?.toLocaleString() || 0}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#6B7280' }}>records synced today</Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>records synced today</Typography>
                     {site.last_tgpcb_sync && (
-                      <Typography variant="caption" sx={{ color: '#9CA3AF', display: 'block', mt: 1 }}>
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 1 }}>
                         Last sync: {new Date(site.last_tgpcb_sync).toLocaleString()}
                       </Typography>
                     )}
@@ -1023,13 +1047,13 @@ function App() {
                 <Box key={site.site_id}>
                   <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{site.site_name}</Typography>
                   {site.daily_counts.length === 0 ? (
-                    <Typography variant="caption" sx={{ color: '#9CA3AF' }}>No data in last 30 days.</Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>No data in last 30 days.</Typography>
                   ) : (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                       {site.daily_counts.map((d: any, i: number) => (
-                        <Box key={i} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', bgcolor: '#F9FAFB', borderRadius: 1, px: 1.5, py: 0.75, minWidth: 52 }}>
-                          <Typography variant="caption" sx={{ fontWeight: 700, color: '#2563EB', fontFamily: 'mono' }}>{d.record_count}</Typography>
-                          <Typography variant="caption" sx={{ fontSize: 10, color: '#9CA3AF' }}>{new Date(d.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Typography>
+                        <Box key={i} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', bgcolor: 'action.hover', borderRadius: 1, px: 1.5, py: 0.75, minWidth: 52 }}>
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: 'primary.main', fontFamily: 'mono' }}>{d.record_count}</Typography>
+                          <Typography variant="caption" sx={{ fontSize: 10, color: 'text.secondary' }}>{new Date(d.date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Typography>
                         </Box>
                       ))}
                     </Box>
@@ -1061,7 +1085,7 @@ function App() {
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                     <Box>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>{p.parameter_name}</Typography>
-                      <Typography variant="caption" sx={{ color: '#9CA3AF' }}>{p.tag_name}{p.unit ? ` (${p.unit})` : ''}</Typography>
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>{p.tag_name}{p.unit ? ` (${p.unit})` : ''}</Typography>
                     </Box>
                     <Chip label={`${p.total_points} points`} size="small" variant="outlined" />
                   </Box>
@@ -1125,13 +1149,13 @@ function App() {
       <PageHeader title="Notifications" subtitle="Active and recent alarms across all sites."
         action={alarmStats ? (
           <Box sx={{ display: 'flex', gap: 2 }}>
-            <Box sx={{ textAlign: 'center', px: 2, py: 1, bgcolor: '#FEE2E2', borderRadius: 2 }}>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: '#DC2626' }}>{alarmStats.total_active}</Typography>
-              <Typography variant="caption" sx={{ color: '#DC2626', fontWeight: 500 }}>Active</Typography>
+            <Box sx={{ textAlign: 'center', px: 2, py: 1, bgcolor: 'error.light', borderRadius: 2 }}>
+              <Typography variant="h4" sx={{ fontWeight: 700, color: 'error.main' }}>{alarmStats.total_active}</Typography>
+              <Typography variant="caption" sx={{ color: 'error.main', fontWeight: 500 }}>Active</Typography>
             </Box>
-            <Box sx={{ textAlign: 'center', px: 2, py: 1, bgcolor: '#F3F4F6', borderRadius: 2 }}>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: '#6B7280' }}>{alarmStats.total_today}</Typography>
-              <Typography variant="caption" sx={{ color: '#6B7280', fontWeight: 500 }}>Today</Typography>
+            <Box sx={{ textAlign: 'center', px: 2, py: 1, bgcolor: 'action.hover', borderRadius: 2 }}>
+              <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.secondary' }}>{alarmStats.total_today}</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500 }}>Today</Typography>
             </Box>
           </Box>
         ) : null}
@@ -1155,9 +1179,9 @@ function App() {
                   </Box>
                   <Typography variant="body2" sx={{ mb: 0.5 }}>{a.message}</Typography>
                   <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                    {a.parameter_id && <Typography variant="caption" sx={{ color: '#9CA3AF', fontFamily: 'mono' }}>Param #{a.parameter_id}</Typography>}
-                    {a.value != null && <Typography variant="caption" sx={{ color: '#9CA3AF', fontFamily: 'mono' }}>Value: {a.value}</Typography>}
-                    <Typography variant="caption" sx={{ color: '#9CA3AF' }}>{new Date(a.created_at).toLocaleString()}</Typography>
+                    {a.parameter_id && <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'mono' }}>Param #{a.parameter_id}</Typography>}
+                    {a.value != null && <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'mono' }}>Value: {a.value}</Typography>}
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>{new Date(a.created_at).toLocaleString()}</Typography>
                   </Box>
                 </Box>
                 <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
@@ -1178,7 +1202,7 @@ function App() {
                     >{alarmAcking === a.id ? '...' : 'Acknowledge'}</Button>
                   )}
                   {a.acknowledged_at && (
-                    <Typography variant="caption" sx={{ color: '#9CA3AF', alignSelf: 'center' }}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', alignSelf: 'center' }}>
                       Acked: {new Date(a.acknowledged_at).toLocaleString()}
                     </Typography>
                   )}
@@ -1191,6 +1215,10 @@ function App() {
     </>
   );
 
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
+
   const theme = getTheme(darkMode ? 'dark' : 'light');
 
   const mainApp = (
@@ -1202,7 +1230,11 @@ function App() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         darkMode={darkMode}
-        onToggleDark={() => setDarkMode(!darkMode)}
+        onToggleDark={() => setDarkMode(prev => {
+          const next = !prev;
+          localStorage.setItem('rajapi_dark', String(next));
+          return next;
+        })}
         notifPermission={notifPermission}
         onRequestNotif={requestNotificationPermission}
       >
@@ -1212,7 +1244,7 @@ function App() {
       {/* Dialogs */}
       <CreateSiteDialog open={showModal} onClose={() => setShowModal(false)} onCreate={handleCreateSite} />
       <EditSiteDialog open={!!editSiteModal} site={editSiteModal} onClose={() => setEditSiteModal(null)} onSave={handleUpdateSite} />
-      <BroadcastDialog open={showBcModal} editData={editingBc} sites={sites} onClose={() => { setShowBcModal(false); setEditingBc(null); }} onSave={async (payload) => {
+      <BroadcastDialog open={showBcModal} editData={editingBc} sites={sites} onClose={() => { setShowBcModal(false); setEditingBc(null); }} onSave={async (payload: any) => {
         const url = editingBc ? `/api/v1/broadcasts/${editingBc.id}` : '/api/v1/broadcasts/';
         const method = editingBc ? 'PUT' : 'POST';
         await adminFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -1225,11 +1257,11 @@ function App() {
       <Dialog open={!!confirmDeleteSite} onClose={() => !deletingSite && setConfirmDeleteSite(null)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>Delete Plant?</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" sx={{ color: '#6B7280' }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             Are you sure you want to permanently delete this plant and ALL of its telemetry data? This cannot be undone.
           </Typography>
           {confirmDeleteSite && (
-            <Typography variant="body2" sx={{ mt: 1.5, p: 1.5, bgcolor: '#F3F4F6', borderRadius: 1, fontWeight: 600 }}>
+            <Typography variant="body2" sx={{ mt: 1.5, p: 1.5, bgcolor: 'action.hover', borderRadius: 1, fontWeight: 600 }}>
               {confirmDeleteSite.name} ({confirmDeleteSite.location || 'No location'})
             </Typography>
           )}
@@ -1269,11 +1301,11 @@ function App() {
       <Dialog open={!!confirmRenewSite} onClose={() => !renewingSite && setConfirmRenewSite(null)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 700 }}>Renew AMC?</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" sx={{ color: '#6B7280' }}>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             Are you sure you want to renew the AMC? This will permanently invalidate the current API key and disconnect the client until they enter the new key.
           </Typography>
           {confirmRenewSite && (
-            <Typography variant="body2" sx={{ mt: 1.5, p: 1.5, bgcolor: '#F3F4F6', borderRadius: 1, fontWeight: 600 }}>
+            <Typography variant="body2" sx={{ mt: 1.5, p: 1.5, bgcolor: 'action.hover', borderRadius: 1, fontWeight: 600 }}>
               {confirmRenewSite.name}
             </Typography>
           )}

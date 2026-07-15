@@ -85,6 +85,32 @@ class BroadcastResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class StationCreate(BaseModel):
+    station_id: str
+    username: str
+    category: str
+    station_name: str
+
+class StationUpdate(BaseModel):
+    station_id: Optional[str] = None
+    username: Optional[str] = None
+    category: Optional[str] = None
+    station_name: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class StationResponse(BaseModel):
+    id: int
+    site_id: int
+    station_id: str
+    username: str
+    category: str
+    station_name: str
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class LockUpdate(BaseModel):
     lock_status: str = "unlocked"
     lock_reason: Optional[str] = None

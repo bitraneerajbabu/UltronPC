@@ -57,9 +57,16 @@ export const TrendsScreen = () => {
     };
   }, []);
 
-  const allStations = useMemo(() =>
-    stations.map(s => ({ id: String(s.id), name: s.name })),
-  [stations]);
+  const allStations = useMemo(() => {
+    return stations
+      .filter(st => {
+        return parameters.some(p => {
+          const dev = devices.find(d => String(d.id) === String(p.device_id));
+          return dev && String(dev.station_id) === String(st.id);
+        });
+      })
+      .map(s => ({ id: String(s.id), name: s.name }));
+  }, [stations, parameters, devices]);
 
   useEffect(() => {
     if (allStations.length && !stationId) setStationId(allStations[0].id);

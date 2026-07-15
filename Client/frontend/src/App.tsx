@@ -5,11 +5,9 @@ import './App.css';
 // Import Screens
 import { DashboardScreen } from './screens/DashboardScreen';
 import { DevicesScreen } from './screens/DevicesScreen';
-import { TrendsScreen } from './screens/TrendsScreen';
 import { ReportsScreen } from './screens/ReportsScreen';
-import { LogsScreen } from './screens/LogsScreen';
+
 import { SettingsScreen } from './screens/SettingsScreen';
-import { UsersScreen } from './screens/UsersScreen';
 import { CPCB } from './screens/CPCB';
 import { CalibrationScreen } from './screens/CalibrationScreen';
 import { ContactScreen } from './screens/ContactScreen';
@@ -36,11 +34,7 @@ const DevicesIcon = () => (
   </svg>
 );
 
-const TrendsIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-  </svg>
-);
+
 
 const ReportsIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
@@ -48,13 +42,6 @@ const ReportsIcon = () => (
     <polyline points="14 2 14 8 20 8" />
     <line x1="16" y1="13" x2="8" y2="13" />
     <line x1="16" y1="17" x2="8" y2="17" />
-  </svg>
-);
-
-const LogsIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <path d="M12 20h9" />
-    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
   </svg>
 );
 
@@ -114,15 +101,16 @@ const ContactIcon = () => (
   </svg>
 );
 
+
+
 // ─── Nav definitions ──────────────────────────────────────────────────────────
 const ALL_NAV = [
   { key: 'dashboardScreen', label: 'Dashboard Overview', Icon: DashboardIcon, roles: ['admin', 'client'] },
   { key: 'devicesScreen', label: 'Devices & Config', Icon: DevicesIcon, roles: ['admin'] },
-  { key: 'trendsScreen', label: 'Trends Analysis', Icon: TrendsIcon, roles: ['admin', 'client'] },
-  { key: 'reportsScreen', label: 'Reports Generator', Icon: ReportsIcon, roles: ['admin', 'client'] },
-  { key: 'logsScreen', label: 'System Logs', Icon: LogsIcon, roles: ['admin'] },
+  { key: 'reportsScreen', label: 'Reports & Trends', Icon: ReportsIcon, roles: ['admin', 'client'] },
+
   { key: 'settingsScreen', label: 'System Settings', Icon: SettingsIcon, roles: ['admin'] },
-  { key: 'usersScreen', label: 'User Management', Icon: UsersIcon, roles: ['admin'] },
+
   { key: 'cpcbScreen', label: 'Server Management', Icon: CPCBIcon, roles: ['admin'] },
   { key: 'calibrationScreen', label: 'Calibration', Icon: CalibrationIcon, roles: ['admin'] },
   { key: 'contactScreen', label: 'Contact', Icon: ContactIcon, roles: ['admin', 'client'] },
@@ -201,6 +189,8 @@ function App() {
   // Clock state
   const [timeStr, setTimeStr] = useState('');
 
+
+
   useEffect(() => {
     const updateClock = () => {
       const d = new Date();
@@ -263,8 +253,8 @@ function App() {
             <div style={{
               fontSize: '11px',
               fontWeight: '800',
-              color: '#0f766e',
-              background: 'rgba(15,118,110,0.08)',
+              color: '#0d4f49',
+              background: 'rgba(13,79,73,0.08)',
               padding: '3px 10px',
               borderRadius: '99px',
               display: 'inline-block',
@@ -355,11 +345,10 @@ function App() {
     switch (activeScreen) {
       case 'dashboardScreen': return <DashboardScreen />;
       case 'devicesScreen': return currentUserRole === 'admin' ? <DevicesScreen /> : <DashboardScreen />;
-      case 'trendsScreen': return <TrendsScreen />;
       case 'reportsScreen': return <ReportsScreen />;
-      case 'logsScreen': return currentUserRole === 'admin' ? <LogsScreen /> : <DashboardScreen />;
+
       case 'settingsScreen': return currentUserRole === 'admin' ? <SettingsScreen /> : <DashboardScreen />;
-      case 'usersScreen': return currentUserRole === 'admin' ? <UsersScreen /> : <DashboardScreen />;
+
       case 'cpcbScreen': return currentUserRole === 'admin' ? <CPCB /> : <DashboardScreen />;
       case 'calibrationScreen': return currentUserRole === 'admin' ? <CalibrationScreen /> : <DashboardScreen />;
       case 'contactScreen': return <ContactScreen />;
@@ -406,7 +395,7 @@ function App() {
         <header className="top-bar">
           <div className="top-left" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {/* System Live Clock */}
-            <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f766e', background: 'rgba(15,118,110,0.06)', padding: '6px 14px', borderRadius: '6px', border: '1px solid rgba(15,118,110,0.15)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+            <div style={{ fontSize: '14px', fontWeight: '600', color: '#0d4f49', background: 'rgba(13,79,73,0.06)', padding: '6px 14px', borderRadius: '6px', border: '1px solid rgba(13,79,73,0.15)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
               {timeStr}
             </div>
           </div>
@@ -421,7 +410,7 @@ function App() {
               />
             )}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: plantLogo ? 'flex-start' : 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: '700', color: '#0f766e', fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              <div style={{ fontSize: '16px', fontWeight: '700', color: '#0d4f49', fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                 {plantName}
               </div>
               {plantAddress && (
@@ -447,9 +436,9 @@ function App() {
                   fontWeight: '700',
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase',
-                  background: currentUserRole === 'admin' ? 'rgba(220,38,38,0.1)' : 'rgba(15,118,110,0.1)',
-                  color: currentUserRole === 'admin' ? '#dc2626' : '#0f766e',
-                  border: currentUserRole === 'admin' ? '1px solid rgba(220,38,38,0.3)' : '1px solid rgba(15,118,110,0.3)',
+                  background: currentUserRole === 'admin' ? 'rgba(220,38,38,0.1)' : 'rgba(13,79,73,0.1)',
+                  color: currentUserRole === 'admin' ? '#dc2626' : '#0d4f49',
+                  border: currentUserRole === 'admin' ? '1px solid rgba(220,38,38,0.3)' : '1px solid rgba(13,79,73,0.3)',
                 }}>
                   {currentUserRole === 'admin' ? 'Admin' : 'Client View'}
                 </span>
@@ -489,9 +478,9 @@ function App() {
             padding: '0 20px',
             fontWeight: '700',
             fontSize: '12px',
-            color: '#0f766e',
+            color: '#0d4f49',
             whiteSpace: 'nowrap',
-            borderRight: '1px solid rgba(15,118,110,0.2)',
+            borderRight: '1px solid rgba(13,79,73,0.2)',
             background: 'rgba(255, 255, 255, 0.4)',
             display: 'flex',
             flexDirection: 'column',
@@ -502,7 +491,7 @@ function App() {
             lineHeight: 1.4
           }}>
             <div style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'none', letterSpacing: '0.02em', lineHeight: 1.6 }}>
-              All &copy; 2026 rights reserved | All Rights Reserved to <a href="https://www.sunshinetechno.com" target="_blank" rel="noopener noreferrer" style={{ color: '#0f766e', textDecoration: 'underline' }}>Sunshinetechnologies</a>
+              All &copy; 2026 rights reserved | All Rights Reserved to <a href="https://www.sunshinetechno.com" target="_blank" rel="noopener noreferrer" style={{ color: '#0d4f49', textDecoration: 'underline' }}>Sunshinetechnologies</a>
               <br />Support: 7659091468, 9133377852, 853 &amp; Sales: 8801231166, 9133377854
             </div>
           </div>

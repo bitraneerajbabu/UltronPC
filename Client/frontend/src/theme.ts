@@ -6,12 +6,12 @@
 
 // ─── Core Palette ─────────────────────────────────────────────────────────────
 export const T = {
-  // Brand / Primary
-  primary:       '#0f766e',
+  // Brand / Primary — dark teal matching UltrON logo
+  primary:       '#0d4f49',
   primaryLight:  '#14b8a6',
-  primaryGlow:   'rgba(15,118,110,0.35)',
-  primaryBg:     'rgba(15,118,110,0.08)',
-  primaryBorder: 'rgba(15,118,110,0.18)',
+  primaryGlow:   'rgba(13,79,73,0.25)',
+  primaryBg:     'rgba(13,79,73,0.06)',
+  primaryBorder: 'rgba(13,79,73,0.12)',
 
   // Semantic
   success:    '#10b981',
@@ -24,24 +24,24 @@ export const T = {
   info:       '#38bdf8',
   infoBg:     'rgba(56,189,248,0.12)',
 
-  // Neutrals
+  // Neutrals — light mode, warm crema
   text:        '#0f172a',
   textMuted:   '#475569',
-  textFaint:   '#94a3b8',
-  textLabel:   '#64748b',
-  border:      'rgba(235, 225, 205, 0.8)',
-  borderSoft:  'rgba(15,118,110,0.1)',
+  textFaint:   '#7b6e5e',
+  textLabel:   '#475569',
+  border:      '#e2d8c8',
+  borderSoft:  'rgba(13,79,73,0.06)',
 
-  // Glass surfaces
-  glass:       'rgba(253, 250, 242, 0.65)',
-  glassHover:  'rgba(253, 250, 242, 0.82)',
-  glassDark:   'rgba(250, 244, 230, 0.45)',
+  // Surfaces — warm off-white crema
+  glass:       '#fefcf5',
+  glassHover:  '#fdf9ef',
+  glassDark:   '#f7f0e0',
 
-  // Shadows
-  shadowSm:    '0 2px 8px rgba(15,118,110,0.08)',
-  shadowMd:    '0 4px 16px rgba(15,118,110,0.14)',
-  shadowLg:    '0 8px 32px rgba(15,118,110,0.18)',
-  shadowGlow:  '0 0 20px rgba(15,118,110,0.25)',
+  // Shadows — neutral grey
+  shadowSm:    '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)',
+  shadowMd:    '0 4px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)',
+  shadowLg:    '0 8px 24px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04)',
+  shadowGlow:  '0 0 16px rgba(13,79,73,0.12)',
 
   // Radii
   r:           '10px',

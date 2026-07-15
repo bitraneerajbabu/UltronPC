@@ -2,8 +2,23 @@ import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { T, GLASS_CARD, BTN, INP } from '../theme';
 
+interface UserData { id?: number; username: string; full_name?: string; role: string; is_active: boolean; created_at?: string; created_by?: string; last_login?: string; }
+interface UserPayload { username?: string; password?: string; full_name?: string | null; role?: string; is_active?: boolean; }
+
+const ShieldIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>);
+const UserIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
+const PlusIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>);
+const EditIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>);
+const TrashIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>);
+
 export const SettingsScreen = () => {
-  const { API_BASE, showToast, loadAllData, authFetch } = useContext(AppContext);
+  const { API_BASE, showToast, loadAllData, authFetch, pendingStatus, usersList, loadUsers, addUser, editUser, deleteUser, currentUser, parseUtcDate } = useContext(AppContext);
+  const [settingsTab, setSettingsTab] = useState('system');
+
+  // ─── User Management state ───
+  const [userModal, setUserModal] = useState<{ mode: 'add' | 'edit'; user?: UserData } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<UserData | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [appInfo, setAppInfo] = useState(null);
   const [healthStatus, setHealthStatus] = useState(null);
   const [pollingStatus, setPollingStatus] = useState(null);
@@ -136,6 +151,9 @@ export const SettingsScreen = () => {
   };
 
   const handleSave = async () => {
+    const prevLocal = localStorage.getItem('ultron_local_settings');
+    const snapshot = { ...formData };
+    showToast('Saving...', 'info');
     try {
       const [plantRes, generalRes] = await Promise.all([
         authFetch(`${API_BASE}/settings/plant`, {
@@ -155,8 +173,9 @@ export const SettingsScreen = () => {
       ]);
       if (!plantRes.ok || !generalRes.ok) throw new Error('Save failed');
       showToast('Settings saved.', 'success');
-      loadInfo();
     } catch (e) {
+      setFormData(snapshot);
+      if (prevLocal) localStorage.setItem('ultron_local_settings', prevLocal);
       showToast(`Save failed: ${e.message}`, 'error');
     }
   };
@@ -244,6 +263,79 @@ export const SettingsScreen = () => {
     window.location.reload();
   };
 
+  // ─── User Management handlers ───
+  useEffect(() => { if (settingsTab === 'users') loadUsers(); }, [settingsTab]);
+
+  const filteredUsers = usersList.filter(u =>
+    u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (u.full_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleUserSave = async (payload: UserPayload) => {
+    let ok;
+    if (userModal.mode === 'add') ok = await addUser(payload);
+    else ok = await editUser(userModal.user.id, payload);
+    if (ok) setUserModal(null);
+  };
+
+  const handleUserDelete = async () => {
+    const ok = await deleteUser(deleteTarget.id);
+    if (ok) setDeleteTarget(null);
+  };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '—';
+    return parseUtcDate(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const RoleBadge = ({ role }: { role: string }) => {
+    const isAdmin = role === 'admin';
+    return (<span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', background: isAdmin ? 'rgba(220,38,38,0.1)' : 'rgba(15,118,110,0.1)', color: isAdmin ? '#dc2626' : '#0f766e', border: isAdmin ? '1px solid rgba(220,38,38,0.3)' : '1px solid rgba(15,118,110,0.3)' }}>{isAdmin ? <ShieldIcon /> : <UserIcon />} {isAdmin ? 'Admin' : 'Client'}</span>);
+  };
+
+  // ─── User Modal ───
+  const UserModal = ({ mode, user, onClose, onSave }: { mode: 'add' | 'edit'; user?: UserData; onClose: () => void; onSave: (p: UserPayload) => void }) => {
+    const [form, setForm] = useState({ username: user?.username || '', password: '', confirmPassword: '', full_name: user?.full_name || '', role: user?.role || 'client', is_active: user?.is_active !== undefined ? user.is_active : true });
+    const [showPwd, setShowPwd] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const set = (k: string, v: string | boolean) => setForm(prev => ({ ...prev, [k]: v }));
+    const validate = () => {
+      const e: Record<string, string> = {};
+      if (!form.username.trim()) e.username = 'Required';
+      if (mode === 'add' && !form.password) e.password = 'Required';
+      else if (form.password && form.password.length < 4) e.password = 'Min 4 chars';
+      if (form.password && form.password !== form.confirmPassword) e.confirmPassword = 'No match';
+      setErrors(e); return Object.keys(e).length === 0;
+    };
+    const handleSubmit = (ev: React.FormEvent) => {
+      ev.preventDefault();
+      if (!validate()) return;
+      const p: UserPayload = {};
+      if (mode === 'add') { p.username = form.username.trim(); p.password = form.password; p.role = form.role; p.full_name = form.full_name.trim() || null; p.is_active = form.is_active; }
+      else { if (form.password) p.password = form.password; p.full_name = form.full_name.trim() || null; p.is_active = form.is_active; p.role = form.role; }
+      onSave(p);
+    };
+    const ms = { position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(13,79,73,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' } as const;
+    const mc: React.CSSProperties = { background: '#0d4f49', border: '1px solid #1a7a6e', borderRadius: '16px', width: '460px', maxWidth: '95vw', padding: '28px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)' };
+    return (<div style={ms}>
+      <div style={mc}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#f1f5f9' }}>{mode === 'add' ? 'Create User' : 'Edit User'}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px', fontSize: '18px' }}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          {mode === 'add' && (<div className="form-group"><label className="form-label">Username *</label><input type="text" className={`form-input ${errors.username ? 'error' : ''}`} value={form.username} onChange={e => set('username', e.target.value)} placeholder="e.g. operator1" autoComplete="off" />{errors.username && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.username}</div>}</div>)}
+          <div className="form-group"><label className="form-label">Full Name</label><input type="text" className="form-input" value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Optional display name" /></div>
+          <div className="form-group"><label className="form-label">Role</label><select className="form-input form-select" value={form.role} onChange={e => set('role', e.target.value)}><option value="client">Client — Dashboard, Trends, Reports only</option><option value="admin">Admin — Full Access</option></select></div>
+          <div className="form-group"><label className="form-label">{mode === 'add' ? 'Password *' : 'New Password'}</label><div style={{ position: 'relative' }}><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.password ? 'error' : ''}`} value={form.password} onChange={e => set('password', e.target.value)} placeholder={mode === 'add' ? 'Min 4 chars' : 'Leave blank to keep'} style={{ paddingRight: '44px' }} autoComplete="new-password" /><button type="button" onClick={() => setShowPwd(v => !v)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>{showPwd ? '🙈' : '👁'}</button></div>{errors.password && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.password}</div>}</div>)
+          {form.password && (<div className="form-group"><label className="form-label">Confirm Password</label><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.confirmPassword ? 'error' : ''}`} value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} placeholder="Re-enter" />{errors.confirmPassword && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.confirmPassword}</div>}</div>)}
+          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><label className="form-label" style={{ margin: 0 }}>Active</label><label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}><input type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)} style={{ width: '16px', height: '16px' }} /><span style={{ fontSize: '13px', color: form.is_active ? '#10b981' : '#64748b' }}>{form.is_active ? 'Active' : 'Disabled'}</span></label></div>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}><button type="button" className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</button><button type="submit" className="btn btn-primary" style={{ flex: 2 }}>{mode === 'add' ? 'Create User' : 'Save Changes'}</button></div>
+        </form>
+      </div>
+    </div>);
+  };
+
   const handleShutdown = async () => {
     if (!window.confirm('Shutdown the UltrON server entirely? You will need to restart UltrON manually.')) return;
     try {
@@ -260,9 +352,13 @@ export const SettingsScreen = () => {
   const labelS = { fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: '4px' };
   const sectionTitleS = { fontSize: '13px', fontWeight: '700', color: T.primary, marginBottom: '10px', gridColumn: '1 / -1', borderBottom: `1.5px solid ${T.primaryBorder}`, paddingBottom: '6px' };
 
-  return (
-    <div className="screen active" id="settingsScreen" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+  const SUB_TABS = [
+    { key: 'system', label: 'System Settings', icon: '#0f766e' },
+    { key: 'users', label: 'User Management', icon: '#dc2626' },
+  ];
 
+  const renderSystemTab = () => (
+    <>
       {/* System Info */}
       <div style={{ ...GLASS_CARD, padding: '20px' }}>
         <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>System Information</div>
@@ -432,6 +528,100 @@ export const SettingsScreen = () => {
           </div>
         </div>
       </div>
+    </>
+  );
+
+  const renderUsersTab = () => {
+    const userCounts = { total: usersList.length, admins: usersList.filter(u => u.role === 'admin').length, clients: usersList.filter(u => u.role === 'client').length, disabled: usersList.filter(u => !u.is_active).length };
+    return (
+      <>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+          <div style={{ fontSize: '16px', fontWeight: '700', color: T.text }}>User Management</div>
+          <button className="btn btn-primary" onClick={() => setUserModal({ mode: 'add' })} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}><PlusIcon /> Add User</button>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', marginBottom: '14px' }}>
+          {[
+            { label: 'Total', value: userCounts.total, color: '#0f766e' },
+            { label: 'Admins', value: userCounts.admins, color: '#dc2626' },
+            { label: 'Clients', value: userCounts.clients, color: '#0f766e' },
+            { label: 'Disabled', value: userCounts.disabled, color: '#64748b' },
+          ].map(({ label, value, color }) => (
+            <div key={label} style={{ flex: 1, background: T.primaryBg, border: `1px solid ${T.primaryBorder}`, borderRadius: T.r, padding: '12px 16px' }}>
+              <div style={{ fontSize: '22px', fontWeight: '800', color, fontFamily: 'monospace' }}>{value}</div>
+              <div style={{ fontSize: '11px', color: T.textMuted }}>{label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginBottom: '12px' }}>
+          <input type="text" placeholder="Search users…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ ...INP, maxWidth: '300px' }} />
+        </div>
+        <div style={{ ...GLASS_CARD, padding: '0', overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${T.primaryBorder}`, background: T.primaryBg }}>
+                {['Username', 'Full Name', 'Role', 'Status', 'Created', 'Last Login', ''].map(h => (<th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '10px', fontWeight: '700', color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</th>))}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredUsers.length === 0 ? (
+                <tr><td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: T.textMuted }}>{searchTerm ? 'No match.' : 'No users.'}</td></tr>
+              ) : filteredUsers.map(u => (
+                <tr key={u.id} style={{ borderBottom: `1px solid ${T.primaryBorder}`, background: u.username === currentUser ? 'rgba(15,118,110,0.04)' : 'transparent' }}>
+                  <td style={{ padding: '10px 14px' }}><span style={{ fontWeight: '600', color: T.text }}>{u.username}{u.username === currentUser && <span style={{ marginLeft: '6px', fontSize: '10px', color: '#0f766e' }}>(you)</span>}</span></td>
+                  <td style={{ padding: '10px 14px', color: T.textMuted }}>{u.full_name || '—'}</td>
+                  <td style={{ padding: '10px 14px' }}><RoleBadge role={u.role} /></td>
+                  <td style={{ padding: '10px 14px' }}><span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: '600', background: u.is_active ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)', color: u.is_active ? '#059669' : '#64748b', border: u.is_active ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(100,116,139,0.3)' }}>{u.is_active ? '● Active' : '○ Disabled'}</span></td>
+                  <td style={{ padding: '10px 14px', color: T.textMuted, fontSize: '12px' }}>{formatDate(u.created_at)}{u.created_by ? <div style={{ fontSize: '11px', color: '#475569' }}>by {u.created_by}</div> : ''}</td>
+                  <td style={{ padding: '10px 14px', color: T.textMuted, fontSize: '12px' }}>{formatDate(u.last_login)}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <button className="btn btn-sm" onClick={() => setUserModal({ mode: 'edit', user: u })} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', padding: '4px 8px' }}><EditIcon /> Edit</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => setDeleteTarget(u)} disabled={u.username === currentUser} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', padding: '4px 8px' }}><TrashIcon /> Del</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ marginTop: '14px', padding: '12px 16px', background: T.primaryBg, border: `1px solid ${T.primaryBorder}`, borderRadius: T.r, display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#dc2626', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}><ShieldIcon /> Admin</div>
+            <div style={{ fontSize: '11px', color: T.textMuted }}>Dashboard · Stations · Devices · Trends · Reports · Logs · Settings · Users</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#0f766e', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}><UserIcon /> Client (read-only)</div>
+            <div style={{ fontSize: '11px', color: T.textMuted }}>Dashboard · Trends · Reports</div>
+          </div>
+        </div>
+        {userModal && <UserModal mode={userModal.mode} user={userModal.user} onClose={() => setUserModal(null)} onSave={handleUserSave} />}
+        {deleteTarget && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(13,79,73,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#0d4f49', border: '1px solid #1a7a6e', borderRadius: '16px', width: '380px', padding: '28px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)' }}>
+              <h3 style={{ margin: '0 0 12px', fontSize: '18px', fontWeight: '700', color: '#f1f5f9' }}>Delete User</h3>
+              <p style={{ color: '#94a3b8', fontSize: '14px', margin: '0 0 24px' }}>Delete <strong style={{ color: '#f1f5f9' }}>{deleteTarget.username}</strong>? Cannot undo.</p>
+              <div style={{ display: 'flex', gap: '10px' }}><button className="btn btn-secondary" onClick={() => setDeleteTarget(null)} style={{ flex: 1 }}>Cancel</button><button className="btn btn-danger" onClick={handleUserDelete} style={{ flex: 1 }}>Delete</button></div>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
+
+  return (
+    <div className="screen active" id="settingsScreen" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', gap: '4px', borderBottom: `1px solid ${T.primaryBorder}`, marginBottom: '4px' }}>
+        {SUB_TABS.map(t => (
+          <button key={t.key} onClick={() => setSettingsTab(t.key)} style={{
+            padding: '8px 16px', fontSize: '12px', fontWeight: '700', cursor: 'pointer',
+            border: 'none', borderBottom: `3px solid ${settingsTab === t.key ? t.icon : 'transparent'}`,
+            background: 'transparent', color: settingsTab === t.key ? t.icon : T.textMuted,
+            transition: 'all 0.15s',
+          }}>{t.label}</button>
+        ))}
+      </div>
+      {settingsTab === 'system' && renderSystemTab()}
+      {settingsTab === 'users' && renderUsersTab()}
     </div>
   );
 };

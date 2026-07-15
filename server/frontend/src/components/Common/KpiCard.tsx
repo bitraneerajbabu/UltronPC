@@ -42,14 +42,14 @@ export default function KpiCard({ icon, label, value, subtitle, trend, color = '
             </Typography>
           )}
         </Box>
-        <Typography variant="h3" sx={{ fontSize: '34px', fontWeight: 700, lineHeight: 1.1, color: '#111827' }}>
+        <Typography variant="h3" sx={{ fontSize: '34px', fontWeight: 700, lineHeight: 1.1, color: 'text.primary' }}>
           {value}
         </Typography>
-        <Typography variant="body2" sx={{ color: '#6B7280', fontWeight: 500 }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
           {label}
         </Typography>
         {subtitle && (
-          <Typography variant="caption" sx={{ color: '#9CA3AF', mt: -0.5 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', opacity: 0.7, mt: -0.5 }}>
             {subtitle}
           </Typography>
         )}

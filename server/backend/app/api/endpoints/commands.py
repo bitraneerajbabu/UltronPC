@@ -19,7 +19,8 @@ class CommandRequest(BaseModel):
 def _find_site(db: Session, station_id: Optional[str]):
     if not station_id:
         return None
-    return db.query(IndustrySite).filter(IndustrySite.api_key == station_id).first()
+    from app.api.deps import find_site_by_key
+    return find_site_by_key(db, station_id)
 
 
 @router.get("/supported")
