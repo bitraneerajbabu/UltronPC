@@ -219,7 +219,7 @@ class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.70"
+    APP_VERSION: str = "1.0.70.1"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
