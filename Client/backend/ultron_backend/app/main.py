@@ -72,6 +72,21 @@ async def _seed_admin():
             )
 
 
+async def _sync_admin_password():
+    from app.database import AsyncSessionLocal
+    from app.models.user import User
+    from app.core.security import verify_password, hash_password
+    from sqlalchemy import select
+
+    async with AsyncSessionLocal() as db:
+        res = await db.execute(select(User).where(User.username == settings.ADMIN_USERNAME))
+        admin = res.scalar_one_or_none()
+        if admin and not verify_password(settings.ADMIN_PASSWORD, admin.hashed_password):
+            admin.hashed_password = hash_password(settings.ADMIN_PASSWORD)
+            await db.commit()
+            log.info(f"Admin password synced from .env for user '{settings.ADMIN_USERNAME}'")
+
+
 
 # ─── LED Board Secondary HTTP Server (port 80) ───────────────────────────────
 async def _start_led_http_server(port: int):
@@ -165,6 +180,9 @@ async def lifespan(app: FastAPI):
 
     # 4. Seed default admin user if no users exist
     await _seed_admin()
+
+    # 4.1 Sync admin password from .env if it changed
+    await _sync_admin_password()
 
     # 4.25 Seed default CPCB parameter mappings
     from app.services.cpcb.mapping_service import seed_default_mappings
