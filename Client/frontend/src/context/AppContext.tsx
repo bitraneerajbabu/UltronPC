@@ -756,7 +756,13 @@ export const AppProvider = ({ children }) => {
     const result = await optimisticAdd(
       `device:new`, setDevices, optimistic,
       (signal) => authFetch(`${API_BASE}/devices/`, { method: 'POST', body: JSON.stringify(payload), signal }),
-      async (res) => { const d = await res.json(); showToast('Device added successfully.'); return d; },
+      async (res) => {
+        const d = await res.json();
+        showToast('Device added successfully.');
+        // Refresh stations list — backend may have created a new station from station_name
+        authFetch(`${API_BASE}/stations/`).then(r => { if (r.ok) r.json().then(s => setStations(s)); }).catch(() => {});
+        return d;
+      },
     );
     return result;
   };
@@ -765,7 +771,13 @@ export const AppProvider = ({ children }) => {
     return optimisticEdit(
       `device:${id}`, setDevices, devices, id, 'id', payload,
       (signal) => authFetch(`${API_BASE}/devices/${id}`, { method: 'PATCH', body: JSON.stringify(payload), signal }),
-      async (res) => { const updated = await res.json(); setDevices(prev => prev.map(d => d.id == id ? updated : d)); showToast('Device updated successfully.'); },
+      async (res) => {
+        const updated = await res.json();
+        setDevices(prev => prev.map(d => d.id == id ? updated : d));
+        showToast('Device updated successfully.');
+        // Refresh stations list — backend may have created/renamed a station from station_name
+        authFetch(`${API_BASE}/stations/`).then(r => { if (r.ok) r.json().then(s => setStations(s)); }).catch(() => {});
+      },
     );
   };
 

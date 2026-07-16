@@ -433,7 +433,7 @@ export const DashboardScreen = () => {
                   ticks: { color: T.textFaint, font: { size: 11 } }, 
                   grid: { color: '#f1f5f9' },
                   suggestedMax: maxLimit !== undefined ? maxLimit * 1.1 : undefined,
-                  suggestedMin: minLimit !== undefined ? Math.min(0, minLimit * 0.9) : 0
+                  suggestedMin: minLimit !== undefined ? Math.min(0, minLimit * 0.9) : undefined
                 }
               }
             },
