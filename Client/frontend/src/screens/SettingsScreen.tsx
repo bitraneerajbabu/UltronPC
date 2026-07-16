@@ -126,7 +126,7 @@ export const SettingsScreen = () => {
           }
         }
       } catch {}
-    }, 1000);
+    }, 3000);
     return () => clearInterval(iv);
   }, [fwProgress?.state]);
 

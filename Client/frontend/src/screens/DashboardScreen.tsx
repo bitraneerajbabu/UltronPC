@@ -231,16 +231,7 @@ export const DashboardScreen = () => {
     return new Set<number>(stored ? JSON.parse(stored) : []);
   });
 
-  // Poll latest telemetry every 5s, KPIs are pushed via WebSocket + cached on backend
-  useEffect(() => {
-    if (fetchLatestTelemetryAndKpis) {
-      fetchLatestTelemetryAndKpis();
-      const interval = setInterval(() => {
-        fetchLatestTelemetryAndKpis();
-      }, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [fetchLatestTelemetryAndKpis]);
+  // KPIs pushed via WebSocket — no HTTP poll needed
 
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
@@ -304,7 +295,7 @@ export const DashboardScreen = () => {
 
   useEffect(() => {
     fetch15MinAverages();
-    const interval = setInterval(fetch15MinAverages, 30000);
+    const interval = setInterval(fetch15MinAverages, 60000);
     return () => clearInterval(interval);
   }, [fetch15MinAverages]);
 

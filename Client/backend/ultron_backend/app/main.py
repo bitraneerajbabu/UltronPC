@@ -218,7 +218,7 @@ async def lifespan(app: FastAPI):
         run_server_push,
         args=["live"],
         trigger="interval",
-        seconds=5,
+        seconds=60,
         id="server_push_live",
         replace_existing=True,
     )
@@ -226,7 +226,7 @@ async def lifespan(app: FastAPI):
         run_server_push,
         args=["delay"],
         trigger="interval",
-        seconds=5,
+        seconds=60,
         id="server_push_delay",
         replace_existing=True,
     )
@@ -246,12 +246,12 @@ async def lifespan(app: FastAPI):
         id="heartbeat_monitor",
         replace_existing=True,
     )
-    # CPCB CAAQM Legacy Export — run every 5 seconds
+    # CPCB CAAQM Legacy Export — run every 60 seconds (CPCB spec is 15-min data)
     from app.services.cpcb.scheduler_service import run_cpcb_pipeline
     scheduler.add_job(
         run_cpcb_pipeline,
         trigger="interval",
-        seconds=5,
+        seconds=60,
         id="cpcb_export",
         replace_existing=True,
     )
