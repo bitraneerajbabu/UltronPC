@@ -11,7 +11,10 @@ from app.api.deps import AuthContext, get_auth_context
 router = APIRouter()
 
 @router.get("/", response_model=List[BroadcastResponse])
-def get_broadcasts(db: Session = Depends(get_db)):
+def get_broadcasts(
+    db: Session = Depends(get_db),
+    auth: AuthContext = Depends(get_auth_context),
+):
     return db.query(Broadcast).order_by(Broadcast.created_at.desc()).all()
 
 @router.get("/active", response_model=List[BroadcastResponse])

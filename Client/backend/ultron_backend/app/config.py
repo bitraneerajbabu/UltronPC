@@ -252,7 +252,7 @@ class Settings(BaseSettings):
     # ─── Security ─────────────────────────────────────────────
     SECRET_KEY: str = Field(default_factory=lambda: _load_or_create_secret_key())
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 5256000  # 10 years — effectively never expires
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
     ADMIN_USERNAME: str = Field(default="Master")
     ADMIN_PASSWORD: str = Field(default="")
 
