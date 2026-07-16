@@ -52,32 +52,45 @@ export const AppProvider = ({ children }) => {
   const pendingRequestsRef = useRef<Record<string, AbortController>>({});
   const [pendingStatus, setPendingStatus] = useState<Record<string, string>>({});
 
-  // ─── Startup token validation ───────────────────────────────────────────────
-  // On first load, if we have a stored token, verify it is still valid against
-  // the server. If the server returns 401 (e.g. server was restarted with a
-  // different key), silently clear localStorage and force re-login.
+  // ─── Startup token validation with auto-refresh ─────────────────────────────
+  // On first load, verify the stored token. If expired (401), try refresh.
+  // Only clear and force re-login if both token and refresh fail.
   useEffect(() => {
     const storedToken = localStorage.getItem('ultron_token');
     const storedUser  = localStorage.getItem('ultron_user');
-    if (!storedToken || !storedUser) return; // nothing to validate
+    if (!storedToken || !storedUser) return;
+    const doRefresh = async () => {
+      const rt = localStorage.getItem('ultron_refresh');
+      if (!rt) { clearAuth(); return; }
+      try {
+        const res = await fetch(`${API_BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: rt }),
+        });
+        if (!res.ok) { clearAuth(); return; }
+        const data = await res.json();
+        localStorage.setItem('ultron_token', data.access_token);
+        localStorage.setItem('ultron_refresh', data.refresh_token);
+        setAuthToken(data.access_token);
+      } catch { clearAuth(); }
+    };
+    const clearAuth = () => {
+      localStorage.removeItem('ultron_token');
+      localStorage.removeItem('ultron_refresh');
+      localStorage.removeItem('ultron_user');
+      localStorage.removeItem('ultron_role');
+      setAuthToken(null);
+      setCurrentUser(null);
+      setCurrentUserRole(null);
+    };
     fetch(`${API_BASE}/auth/me`, {
       headers: { 'Authorization': `Bearer ${storedToken}` },
     })
-      .then(res => {
-        if (res.status === 401) {
-          // Token rejected by server — clear everything and go to login
-          localStorage.removeItem('ultron_token');
-          localStorage.removeItem('ultron_user');
-          localStorage.removeItem('ultron_role');
-          setAuthToken(null);
-          setCurrentUser(null);
-          setCurrentUserRole(null);
-        }
-        // If ok, state is already hydrated from localStorage — no action needed
-      })
-      .catch(() => { /* server unreachable — leave as-is, user can retry */ });
+      .then(res => { if (res.status === 401) doRefresh(); })
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount only
+  }, []);
 
   // Show dynamic toast notifications
   const showToast = useCallback((msg, type = 'success') => {
@@ -94,30 +107,55 @@ export const AppProvider = ({ children }) => {
     }, 3800);
   }, []);
 
-  // ─── Authenticated fetch helper ────────────────────────────────────────────
-  const authFetch = useCallback(async (url: string, options: any = {}) => {
-    const token = localStorage.getItem('ultron_token');
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    };
+  // ─── Authenticated fetch helper with auto-refresh ──────────────────────────
+  const refreshToken = useCallback(async (): Promise<string | null> => {
+    const rt = localStorage.getItem('ultron_refresh');
+    if (!rt) return null;
     try {
-      const res = await fetch(url, { ...options, headers });
-      // Auto-logout on 401 — stale/invalid/expired token
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: rt }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      localStorage.setItem('ultron_token', data.access_token);
+      localStorage.setItem('ultron_refresh', data.refresh_token);
+      setAuthToken(data.access_token);
+      return data.access_token;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const authFetch = useCallback(async (url: string, options: any = {}) => {
+    const attempt = async (token: string | null): Promise<Response> => {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(options.headers || {}),
+      };
+      return fetch(url, { ...options, headers });
+    };
+    let token = localStorage.getItem('ultron_token');
+    let res = await attempt(token);
+    if (res.status === 401 && token) {
+      const newToken = await refreshToken();
+      if (newToken) {
+        res = await attempt(newToken);
+      }
       if (res.status === 401) {
         localStorage.removeItem('ultron_token');
+        localStorage.removeItem('ultron_refresh');
         localStorage.removeItem('ultron_user');
         localStorage.removeItem('ultron_role');
         setAuthToken(null);
         setCurrentUser(null);
         setCurrentUserRole(null);
       }
-      return res;
-    } catch (err) {
-      throw err;
     }
-  }, [showToast]);
+    return res;
+  }, [refreshToken]);
 
   // ─── Shared API error extractor ───────────────────────────────────────────
   // Reads the JSON body from a non-ok response and returns the detail string.
@@ -579,6 +617,7 @@ export const AppProvider = ({ children }) => {
         return false;
       }
       localStorage.setItem('ultron_token', data.access_token);
+      localStorage.setItem('ultron_refresh', data.refresh_token);
       localStorage.setItem('ultron_user', data.username);
       localStorage.setItem('ultron_role', data.role);
       setAuthToken(data.access_token);
@@ -610,6 +649,7 @@ export const AppProvider = ({ children }) => {
       // Ignore network errors on logout
     }
     localStorage.removeItem('ultron_token');
+    localStorage.removeItem('ultron_refresh');
     localStorage.removeItem('ultron_user');
     localStorage.removeItem('ultron_role');
     setAuthToken(null);
