@@ -507,13 +507,18 @@ export const DashboardScreen = () => {
     }
     
     const labelsCount = dataPointsRef.current.labels.length;
+    const _chartVal = (tag: string) => {
+      const v = liveData[tag]?.value;
+      const n = v != null ? parseFloat(v) : NaN;
+      return isNaN(n) ? null : Number(n.toFixed(2));
+    };
+
     if (labelsCount > 0 && dataPointsRef.current.labels[labelsCount - 1] === presentTimeStr) {
       parameters.forEach(p => {
         if (!dataPointsRef.current.datasets[p.tag_name]) {
           dataPointsRef.current.datasets[p.tag_name] = [];
         }
-        const val = parseFloat(liveData[p.tag_name]?.value) || 0;
-        dataPointsRef.current.datasets[p.tag_name][labelsCount - 1] = Number(val.toFixed(2));
+        dataPointsRef.current.datasets[p.tag_name][labelsCount - 1] = _chartVal(p.tag_name);
       });
     } else {
       dataPointsRef.current.labels.push(presentTimeStr);
@@ -525,8 +530,7 @@ export const DashboardScreen = () => {
         if (!dataPointsRef.current.datasets[p.tag_name]) {
           dataPointsRef.current.datasets[p.tag_name] = [];
         }
-        const val = parseFloat(liveData[p.tag_name]?.value) || 0;
-        dataPointsRef.current.datasets[p.tag_name].push(Number(val.toFixed(2)));
+        dataPointsRef.current.datasets[p.tag_name].push(_chartVal(p.tag_name));
         if (dataPointsRef.current.datasets[p.tag_name].length > 20) {
           dataPointsRef.current.datasets[p.tag_name].shift();
         }
