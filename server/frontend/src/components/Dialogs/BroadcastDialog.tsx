@@ -118,7 +118,7 @@ export default function BroadcastDialog({ open, editData, sites, onClose, onSave
         <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
           <Button onClick={onClose} disabled={loading}>Cancel</Button>
           <Button type="submit" variant="contained" disabled={loading}>
-            {loading ? 'Saving...' : 'Save'}
+            {loading ? <span className="loader"></span> : 'Save'}
           </Button>
         </DialogActions>
       </form>

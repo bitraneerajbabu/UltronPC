@@ -25,7 +25,7 @@ import KpiCard from './components/Common/KpiCard'
 import StatusBadge from './components/Common/StatusBadge'
 import SectionCard from './components/Common/SectionCard'
 import EmptyState from './components/Common/EmptyState'
-import { TableSkeleton, ListSkeleton } from './components/Common/SkeletonLoader'
+
 import CreateSiteDialog from './components/Dialogs/CreateSiteDialog'
 import EditSiteDialog from './components/Dialogs/EditSiteDialog'
 import BroadcastDialog from './components/Dialogs/BroadcastDialog'
@@ -611,7 +611,7 @@ function App() {
                     </TableHead>
                     <TableBody>
                       {liveDataLoading && liveData.length === 0 ? (
-                        <TableRow><TableCell colSpan={4}><TableSkeleton rows={4} /></TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} sx={{ textAlign: 'center', py: 4 }}><div className="loader"></div></TableCell></TableRow>
                       ) : liveData.map((pt) => {
                         const isGood = pt.quality?.toLowerCase() === 'good';
                         const ago = pt.timestamp ? (() => {
@@ -1077,7 +1077,7 @@ function App() {
             Back to site summary
           </Button>
           {qualityDetail === null ? (
-            <ListSkeleton rows={4} />
+            <Box sx={{ textAlign: 'center', py: 4 }}><div className="loader"></div></Box>
           ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {qualityDetail.map(p => (

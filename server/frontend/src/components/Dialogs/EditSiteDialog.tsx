@@ -56,7 +56,7 @@ export default function EditSiteDialog({ open, site, onClose, onSave }: EditSite
         <DialogActions>
           <Button onClick={onClose} disabled={loading}>Cancel</Button>
           <Button type="submit" variant="contained" disabled={loading || !name.trim() || !location.trim()}>
-            {loading ? 'Saving...' : 'Save Changes'}
+            {loading ? <span className="loader"></span> : 'Save Changes'}
           </Button>
         </DialogActions>
       </form>

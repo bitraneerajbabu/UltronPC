@@ -343,7 +343,7 @@ export const TrendsScreen = () => {
           <button className="btn" onClick={downloadPDF} disabled={loading}>Export PDF</button>
           <button className="btn" onClick={exportCSV} disabled={loading}>Export CSV</button>
         </div>
-        {loading && <div className="spinner" style={{ marginTop: '12px' }}>Loading...</div>}
+        {loading && <div className="loader" style={{ marginTop: '12px' }}></div>}
       </div>
 
       <div className="card">

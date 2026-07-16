@@ -91,7 +91,7 @@ export default function CreateSiteDialog({ open, onClose, onCreate }: CreateSite
         <DialogActions>
           <Button onClick={handleClose} disabled={loading}>Cancel</Button>
           <Button type="submit" variant="contained" disabled={loading || !name.trim() || !location.trim()}>
-            {loading ? 'Registering...' : 'Register Plant'}
+            {loading ? <span className="loader"></span> : 'Register Plant'}
           </Button>
         </DialogActions>
       </form>

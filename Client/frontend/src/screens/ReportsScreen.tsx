@@ -87,7 +87,7 @@ const ReportSection = ({
 }: ReportSectionProps) => (
   <div className="card" style={{ marginTop: '18px' }}>
     <div className="section-title">{title}</div>
-    {loading && <div className="spinner" style={{ margin: '12px 0' }}>Loading...</div>}
+    {loading && <div className="loader" style={{ margin: '12px 0' }}></div>}
     <div className="filter-grid">
       <div className="form-group">
         <label className="form-label">Interval</label>
@@ -648,7 +648,7 @@ export const ReportsScreen = () => {
           <button className="btn" onClick={downloadTrendPDF} disabled={trendLoading}>Export PDF</button>
           <button className="btn" onClick={exportTrendCSV} disabled={trendLoading}>Export CSV</button>
         </div>
-        {trendLoading && <div className="spinner" style={{ marginTop: '12px' }}>Loading...</div>}
+        {trendLoading && <div className="loader" style={{ marginTop: '12px' }}></div>}
       </div>
 
       <div className="card">

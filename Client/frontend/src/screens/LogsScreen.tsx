@@ -82,7 +82,7 @@ export const LogsScreen = () => {
             <div style={{ fontSize: '11px', color: T.textFaint, fontWeight: '600', marginTop: '2px' }}>Monitor SPCB pushes, connectivity, and system events</div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button style={BTN.primary} onClick={fetchLogs} disabled={loading}>{loading ? 'Loading...' : 'Refresh'}</button>
+            <button style={BTN.primary} onClick={fetchLogs} disabled={loading}>{loading ? <span className="loader"></span> : 'Refresh'}</button>
             <button style={BTN.danger} onClick={handlePurge}>Purge Old Logs</button>
           </div>
         </div>
@@ -139,7 +139,7 @@ export const LogsScreen = () => {
               {logsList.length === 0 ? (
                 <tr>
                   <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: T.textFaint, fontWeight: '600' }}>
-                    {loading ? 'Loading logs...' : 'No logs match the selected filters.'}
+                    {loading ? <div className="loader"></div> : 'No logs match the selected filters.'}
                   </td>
                 </tr>
               ) : (

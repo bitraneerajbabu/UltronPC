@@ -130,7 +130,7 @@ export const AlarmsInspectorModal = ({ isOpen, onClose }) => {
           {activeTab === 'threshold' ? (
             <div>
               {loadingAlarms ? (
-                <div style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>Loading active alarms...</div>
+                <div className="loader" style={{ margin: '20px auto' }}></div>
               ) : activeAlarmsList.length === 0 ? (
                 <div className="alarm-empty-state">
                   <div className="alarm-empty-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

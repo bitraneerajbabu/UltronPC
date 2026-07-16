@@ -69,7 +69,7 @@ export default function LockDialog({ open, site, onClose, onSave }: LockDialogPr
           onClick={handleSubmit}
           disabled={loading}
         >
-          {loading ? 'Processing...' : isUnlocking ? 'Unlock' : 'Lock'}
+          {loading ? <span className="loader"></span> : isUnlocking ? 'Unlock' : 'Lock'}
         </Button>
       </DialogActions>
     </Dialog>
