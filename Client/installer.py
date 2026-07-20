@@ -104,35 +104,7 @@ def get_release_by_tag(repo, tag):
         return None
 
 
-def choose_release(releases):
-    """Prompt the user to pick a release. Enter defaults to the newest release."""
-    print()
-    print("Available UltrON versions:")
-    for idx, release in enumerate(releases, start=1):
-        marker = " [pre-release]" if release["prerelease"] else ""
-        published = f" - {release['published_at']}" if release["published_at"] else ""
-        latest = " (latest)" if idx == 1 else ""
-        print(f"  {idx}. {release['tag']}{latest}{marker}{published}")
 
-    print()
-    print("Press Enter for latest, type a number, or type an exact tag like v1.0.6.")
-    choice = input("Install version: ").strip()
-    if not choice:
-        return releases[0]
-
-    if choice.isdigit():
-        index = int(choice)
-        if 1 <= index <= len(releases):
-            return releases[index - 1]
-        print(f"[WARNING] Invalid selection '{choice}', using latest.")
-        return releases[0]
-
-    for release in releases:
-        if release["tag"].lower() == choice.lower() or release["tag"].lower().lstrip("v") == choice.lower().lstrip("v"):
-            return release
-
-    print(f"[INFO] Looking up exact release tag: {choice}")
-    return get_release_by_tag(GITHUB_REPO, choice)
 
 
 def get_desktop_path() -> Path:
@@ -264,7 +236,7 @@ def main():
         if not releases:
             selected_release = None
         else:
-            selected_release = choose_release(releases)
+            selected_release = releases[0]
 
     if not selected_release or not selected_release.get("download_url"):
         print("\n[ERROR] Could not find UltrON.exe for the selected GitHub release.")

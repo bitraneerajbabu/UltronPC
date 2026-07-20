@@ -123,7 +123,9 @@ async def test_rajapi_connection(db: AsyncSession = Depends(get_db)):
     """Test connection to RajAPI with stored token."""
     result = await db.execute(select(RajAPIConfig))
     config = result.scalars().first()
-    if not config or not config.auth_token:
+    
+    auth_token = config.auth_token if (config and config.auth_token) else settings.RAJAPI_API_KEY
+    if not auth_token:
         raise HTTPException(status_code=400, detail="No auth token configured")
 
     try:
@@ -132,7 +134,7 @@ async def test_rajapi_connection(db: AsyncSession = Depends(get_db)):
         gateway_id = settings.RAJAPI_STATION_ID or "default"
         payload = {
             "gateway_id": gateway_id,
-            "device_secret": config.auth_token,
+            "device_secret": auth_token,
             "version": settings.APP_VERSION,
             "heartbeat_ts": datetime.now(timezone.utc).isoformat(),
             "status": "online",

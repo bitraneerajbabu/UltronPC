@@ -12,7 +12,7 @@ set REMOTE=/home/pi/rajapi_server
 echo [1/5] Uploading backend API endpoints...
 scp "%~dp0server\backend\app\api\endpoints\downloads.py" %PI%:%REMOTE%/backend/app/api/endpoints/
 scp "%~dp0server\backend\app\api\endpoints\sites.py" %PI%:%REMOTE%/backend/app/api/endpoints/
-scp "%~dp0server\backend\app\api\endpoints\tgpcb_sync.py" %PI%:%REMOTE%/backend/app/api/endpoints/
+scp "%~dp0server\backend\app\api\endpoints\spcb_sync.py" %PI%:%REMOTE%/backend/app/api/endpoints/
 scp "%~dp0server\backend\app\api\endpoints\sync.py" %PI%:%REMOTE%/backend/app/api/endpoints/
 scp "%~dp0server\backend\app\api\endpoints\broadcasts.py" %PI%:%REMOTE%/backend/app/api/endpoints/
 

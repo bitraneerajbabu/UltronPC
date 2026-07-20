@@ -118,6 +118,8 @@ async def _execute_command(cmd: dict):
 
 async def _load_rajapi_config(db) -> tuple[str | None, str | None]:
     """Load auth token and station ID from DB config (fallback to env)."""
+    if settings.CENTRAL_API_KEY:
+        return settings.CENTRAL_API_KEY, settings.RAJAPI_STATION_ID or "default"
     from app.models.rajapi import RajAPIConfig
     result = await db.execute(select(RajAPIConfig).where(RajAPIConfig.is_enabled == True))
     config = result.scalars().first()

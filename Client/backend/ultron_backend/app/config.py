@@ -275,6 +275,7 @@ class Settings(BaseSettings):
     RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/heartbeat"
     RAJAPI_COMMANDS_URL: str = "https://rajapi.com/api/v1/commands/pending"
     CENTRAL_API_URL: str = "https://rajapi.com/api/v1/sync/"
+    CENTRAL_API_KEY: str = ""
 
     # ─── RajAPI Central Sync (background, invisible to user) ────
     RAJAPI_API_KEY: str = ""                  # Legacy API key — kept for backward compatibility

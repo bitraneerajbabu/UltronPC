@@ -89,7 +89,6 @@ class SecretsVault:
         env_enc = APP_DIR / ".env.enc"
         if env_enc.is_file():
             try:
-                from app.core.config_crypt import decrypt_file_to_string
                 import dotenv, io
                 decrypted = decrypt_file_to_string(str(env_enc))
                 config = dotenv.dotenv_values(stream=io.StringIO(decrypted))
@@ -234,3 +233,32 @@ def validate_secrets_on_startup():
         )
         sys.exit(1)
     log.info(f"Secrets vault initialized: {len(vault._secrets)} secret(s) loaded")
+
+
+# ─── File Encryption Utilities ──────────────────────────────────────────────
+
+def _get_secret_key_from_file() -> str:
+    import sys, secrets
+    IS_FROZEN = getattr(sys, "frozen", False)
+    app_dir = Path(sys.executable).parent.resolve() if IS_FROZEN else Path(__file__).parent.parent.parent.resolve()
+    key_file = app_dir / "secret.key"
+    try:
+        if key_file.is_file() and (k := key_file.read_text(encoding="utf-8").strip()): return k
+        k = secrets.token_urlsafe(64); key_file.write_text(k, encoding="utf-8"); return k
+    except Exception: return ""
+
+def get_fernet_key() -> bytes:
+    import base64
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    file_key = _get_secret_key_from_file()
+    if not file_key: raise RuntimeError("No secret.key found.")
+    salt_path = Path(__file__).parent.parent.parent / "secret.salt"
+    if salt_path.is_file(): salt = base64.urlsafe_b64decode(salt_path.read_text(encoding="utf-8").strip())
+    else: salt = os.urandom(16); salt_path.write_text(base64.urlsafe_b64encode(salt).decode("utf-8"), encoding="utf-8")
+    return base64.urlsafe_b64encode(PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=100000).derive(file_key.encode("utf-8")))
+
+def decrypt_file_to_string(cipher_file_path: str) -> str:
+    from cryptography.fernet import Fernet
+    if not os.path.exists(cipher_file_path): raise FileNotFoundError(f"Encrypted file not found: {cipher_file_path}")
+    with open(cipher_file_path, "rb") as f: return Fernet(get_fernet_key()).decrypt(f.read()).decode("utf-8")

@@ -3,7 +3,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List
-from app.models.telemetry import DataQuality, AverageType
+from app.models.telemetry import DataQuality, AverageType, AlarmState
 
 
 # ─── Telemetry ────────────────────────────────────────────────────────────────

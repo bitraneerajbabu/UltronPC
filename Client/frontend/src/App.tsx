@@ -133,10 +133,63 @@ function App() {
     broadcasts,
     amcExpiry,
     API_BASE,
+    isLicensed,
+    setIsLicensed,
+    lockStatus,
+    setLockStatus,
+    lockReason,
   } = useContext(AppContext);
 
   const [refreshing, setRefreshing] = useState(false);
   const [localVersion, setLocalVersion] = useState('');
+
+  // Activation & lock screen states
+  const [activationKey, setActivationKey] = useState('');
+  const [activating, setActivating] = useState(false);
+  const [activationError, setActivationError] = useState('');
+
+  const [passcode, setPasscode] = useState('');
+  const [passcodeError, setPasscodeError] = useState('');
+  const [bypassed, setBypassed] = useState(false);
+
+  const handleActivationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activationKey.trim()) {
+      setActivationError('API Key is required.');
+      return;
+    }
+    setActivationError('');
+    setActivating(true);
+    try {
+      const res = await fetch(`${API_BASE}/license/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: activationKey }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIsLicensed(true);
+        if (showToast) showToast('License activated successfully!', 'success');
+        window.location.reload();
+      } else {
+        setActivationError(data.detail || 'Activation failed.');
+      }
+    } catch {
+      setActivationError('Failed to connect to the backend server.');
+    } finally {
+      setActivating(false);
+    }
+  };
+
+  const handlePasscodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passcode === 'Ultronpoiu') {
+      setBypassed(true);
+      if (showToast) showToast('Technician Lock Bypass Active.', 'warning');
+    } else {
+      setPasscodeError('Invalid technician passcode.');
+    }
+  };
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -189,8 +242,6 @@ function App() {
   // Clock state
   const [timeStr, setTimeStr] = useState('');
 
-
-
   useEffect(() => {
     const updateClock = () => {
       const d = new Date();
@@ -241,6 +292,83 @@ function App() {
       }
     }
   }, [currentUserRole, activeScreen, setActiveScreen]);
+
+  // ─── License Setup Screen ──────────────────────────────────────────────────
+  if (!isLicensed) {
+    return (
+      <div className="login-screen" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', color: '#f8fafc', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <div className="login-card" style={{ maxWidth: '450px', width: '100%', padding: '40px', background: 'rgba(30, 41, 59, 0.7)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <img src="/assets/Ultron_logo.png" className="login-logo" alt="UltrON Logo" style={{ height: '70px', marginBottom: '16px', objectFit: 'contain' }} />
+            <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '6px', color: '#38bdf8' }}>License Activation</h2>
+            <p style={{ fontSize: '13px', color: '#94a3b8' }}>Please activate your UltrON installation with your station key.</p>
+          </div>
+          <form onSubmit={handleActivationSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ fontSize: '12px', fontWeight: '600', color: '#94a3b8' }}>Station API Key</label>
+              <input
+                type="text"
+                placeholder="Enter API Key (e.g. IN_UltronSST_...)"
+                value={activationKey}
+                onChange={e => setActivationKey(e.target.value)}
+                style={{ padding: '12px 16px', borderRadius: '10px', border: '1.5px solid rgba(255,255,255,0.1)', background: 'rgba(15, 23, 42, 0.6)', color: '#fff', fontSize: '13px', outline: 'none' }}
+                disabled={activating}
+              />
+            </div>
+            {activationError && (
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#f87171', fontSize: '12px', fontWeight: '500' }}>
+                ⚠️ {activationError}
+              </div>
+            )}
+            <button type="submit" disabled={activating} style={{ padding: '14px', borderRadius: '10px', border: 'none', background: '#0284c7', color: '#fff', fontSize: '14px', fontWeight: '700', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)' }}>
+              {activating ? 'Activating Installation...' : 'Activate System'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Remote Administrator Lock Screen ──────────────────────────────────────
+  if ((lockStatus === 'manual_lock' || lockStatus === 'amc_expired') && !bypassed) {
+    return (
+      <div className="login-screen" style={{ background: 'linear-gradient(135deg, #180505 0%, #2a0808 100%)', color: '#f8fafc', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <div className="login-card" style={{ maxWidth: '450px', width: '100%', padding: '40px', background: 'rgba(40, 10, 10, 0.7)', backdropFilter: 'blur(16px)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '50px', marginBottom: '12px' }}>🔒</div>
+            <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '8px', color: '#f87171' }}>System Locked</h2>
+            <p style={{ fontSize: '13px', color: '#fca5a5', lineHeight: '1.5' }}>
+              {lockStatus === 'amc_expired' 
+                ? 'Your AMC License has expired. Please contact Neeraj for renewal.' 
+                : (lockReason || 'This system has been locked remotely by the administrator.')}
+            </p>
+          </div>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '20px' }}>
+            <form onSubmit={handlePasscodeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', color: '#fca5a5', fontWeight: '600' }}>Technician Bypass Passcode</label>
+                <input
+                  type="password"
+                  placeholder="Enter passcode to unlock locally"
+                  value={passcode}
+                  onChange={e => setPasscode(e.target.value)}
+                  style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '13px', outline: 'none' }}
+                />
+              </div>
+              {passcodeError && (
+                <div style={{ color: '#f87171', fontSize: '11px', fontWeight: '500' }}>
+                  ❌ {passcodeError}
+                </div>
+              )}
+              <button type="submit" style={{ padding: '10px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
+                Unlock Temporarily
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ─── Login Screen ──────────────────────────────────────────────────────────
   if (!currentUser) {

@@ -28,6 +28,9 @@ export const AppProvider = ({ children }) => {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [broadcasts, setBroadcasts] = useState<any[]>([]);
   const [amcExpiry, setAmcExpiry] = useState<string | null>(null);
+  const [isLicensed, setIsLicensed] = useState<boolean>(true);
+  const [lockStatus, setLockStatus] = useState<string>('unlocked');
+  const [lockReason, setLockReason] = useState<string | null>(null);
 
   // User management state (admin only)
   const [usersList, setUsersList] = useState([]);
@@ -456,7 +459,10 @@ export const AppProvider = ({ children }) => {
         const licRes = await authFetch(`${API_BASE}/license/status`);
         if (licRes.ok) {
           const licData = await licRes.json();
+          setIsLicensed(licData.licensed);
           if (licData.amc_expiry) setAmcExpiry(licData.amc_expiry);
+          if (licData.lock_status) setLockStatus(licData.lock_status);
+          if (licData.lock_reason) setLockReason(licData.lock_reason);
         }
       } catch {}
 
@@ -869,7 +875,8 @@ export const AppProvider = ({ children }) => {
       loadAllData, fetchLatestTelemetryAndKpis, showToast, API_BASE, WS_BASE, authFetch,
       plantName, plantAddress, plantLogo, saveLocalSettings, pendingStatus,
       loading, parseUtcDate, hasLoadedOnce,
-      broadcasts, amcExpiry
+      broadcasts, amcExpiry,
+      isLicensed, setIsLicensed, lockStatus, setLockStatus, lockReason, setLockReason
     }}>
       {children}
     </AppContext.Provider>

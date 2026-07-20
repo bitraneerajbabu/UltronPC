@@ -57,15 +57,15 @@ const formatError = (detail: unknown, fallback: string): string => {
 };
 
 const SUB_TABS = [
+  { key: 'rajapi', label: 'RajAPI Server', icon: '#2563eb' },
   { key: 'spcb', label: 'SPCB server', icon: '#0f766e' },
   { key: 'cpcb', label: 'CPCB TXT File Generation', icon: '#ca8a04' },
   { key: 'led', label: 'LED Board (LAN)', icon: '#ea580c' },
-  { key: 'rajapi', label: 'RajAPI Sync', icon: '#7c3aed' },
 ];
 
 export const CPCB = () => {
   const { API_BASE, showToast, authFetch, currentUser } = useContext(AppContext);
-  const [subTab, setSubTab] = useState('spcb');
+  const [subTab, setSubTab] = useState('rajapi');
 
   // ─── Push Servers (SPCB / CPCB / Central Sync / LED) ───
   const [servers, setServers] = useState<PushServer[]>([]);
@@ -84,32 +84,26 @@ export const CPCB = () => {
   const [generatingHistorical, setGeneratingHistorical] = useState<Record<number, boolean>>({});
 
   // ─── RajAPI Sync ───
-  const [rajapiToken, setRajapiToken] = useState('');
+  const [rajapiPasscode, setRajapiPasscode] = useState('');
+  const [rajapiUnlocked, setRajapiUnlocked] = useState(false);
+  
+  const [rajapiGlobalStationId, setRajapiGlobalStationId] = useState('');
+  const [rajapiGlobalApiKey, setRajapiGlobalApiKey] = useState('');
   const [rajapiEnabled, setRajapiEnabled] = useState(false);
-  const [rajapiStations, setRajapiStations] = useState<any[]>([]);
-  const [rajapiStationConfigs, setRajapiStationConfigs] = useState<Record<number, { enabled: boolean; custom_station_id: string; username: string }>>({});
-  const [rajapiLoading, setRajapiLoading] = useState(false);
+
   const [rajapiTesting, setRajapiTesting] = useState(false);
   const [rajapiTestResult, setRajapiTestResult] = useState<{ success: boolean; status_code: number; message: string } | null>(null);
-
-
 
   useEffect(() => { loadPushData(); loadRajapiConfig(); }, []);
 
   const loadRajapiConfig = async () => {
     try {
-      const res = await authFetch(`${API_BASE}/rajapi/config`);
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data.length > 0) {
-        const cfg = data[0];
-        setRajapiToken(cfg.auth_token || '');
-        setRajapiEnabled(cfg.is_enabled);
-        const configMap: Record<number, any> = {};
-        (cfg.stations || []).forEach((st: any) => {
-          configMap[st.station_id] = { enabled: st.enabled, custom_station_id: st.custom_station_id || '', username: st.username || '' };
-        });
-        setRajapiStationConfigs(configMap);
+      const res = await authFetch(`${API_BASE}/settings/rajapi`);
+      if (res.ok) {
+        const data = await res.json();
+        setRajapiGlobalApiKey(data.rajapi_api_key || '');
+        setRajapiGlobalStationId(data.rajapi_station_id || '');
+        setRajapiEnabled(data.rajapi_sync_enabled ?? true);
       }
     } catch {}
   };
@@ -125,33 +119,49 @@ export const CPCB = () => {
   const handleSaveRajapi = async () => {
     setSaving(true);
     try {
-      const res = await authFetch(`${API_BASE}/rajapi/config`, {
-        method: 'PUT',
-        body: JSON.stringify({ auth_token: rajapiToken, is_enabled: rajapiEnabled }),
+      // 1. Save global settings
+      const res = await authFetch(`${API_BASE}/settings/rajapi`, {
+        method: 'POST',
+        body: JSON.stringify({
+          rajapi_api_key: rajapiGlobalApiKey,
+          rajapi_station_id: rajapiGlobalStationId,
+          rajapi_sync_enabled: rajapiEnabled,
+        }),
       });
-      if (!res.ok) throw new Error('Failed to save RajAPI config');
+      if (!res.ok) throw new Error('Failed to save RajAPI settings');
 
-      // Save station configs
-      const stationList = Object.entries(rajapiStationConfigs)
-        .filter(([_, cfg]) => cfg.enabled)
-        .map(([stationId, cfg]) => ({
-          station_id: Number(stationId),
-          enabled: cfg.enabled,
-          custom_station_id: cfg.custom_station_id,
-          username: cfg.username,
-        }));
+      // 2. Also call the regular server mapping save for the RajAPI server mappings
+      await handleSave('rajapi');
 
-      const stRes = await authFetch(`${API_BASE}/rajapi/stations`, {
-        method: 'PUT',
-        body: JSON.stringify({ stations: stationList }),
-      });
-      if (!stRes.ok) throw new Error('Failed to save station configs');
-
-      showToast('RajAPI config saved.', 'success');
-      loadRajapiConfig();
+      showToast('RajAPI settings saved successfully.', 'success');
     } catch (e: unknown) {
       showToast(`Save failed: ${(e as Error).message}`, 'error');
     } finally { setSaving(false); }
+  };
+
+  const handleApplyRajapiToAll = () => {
+    const rajapiServer = servers.find(s => s.name === 'RajAPI');
+    if (!rajapiServer) {
+        showToast('RajAPI server not found yet. Please reload.', 'error');
+        return;
+    }
+    const srvKey = rajapiServer.id ?? rajapiServer._tempId;
+    if (!srvKey) return;
+    
+    setEditedMappings((prev) => {
+      const next = { ...prev };
+      mappings.forEach(param => {
+        if (!next[param.parameter_id]) next[param.parameter_id] = {};
+        next[param.parameter_id][srvKey] = {
+          ...(next[param.parameter_id][srvKey] || {} as MappingEdit),
+          is_active: true,
+          api_id: rajapiGlobalStationId,
+          api_name: rajapiGlobalApiKey,
+        };
+      });
+      return next;
+    });
+    showToast('Applied to all parameters. Remember to save!', 'success');
   };
 
   const handleTestRajapi = async () => {
@@ -373,7 +383,7 @@ export const CPCB = () => {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'flex-end' }}>
           <div style={{ flex: '1 1 160px' }}>
             <label style={s()}>Server Name</label>
-            <input type="text" name="name" value={conf.name || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="e.g. TGPCB Gujarat" style={ipt} />
+            <input type="text" name="name" value={conf.name || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="e.g. SPCB Gujarat" style={ipt} />
           </div>
           {extraFields}
           <div style={{ flexShrink: 0, display: 'flex', gap: '4px', paddingBottom: '2px' }}>
@@ -408,7 +418,7 @@ export const CPCB = () => {
             <div key={srv.id ?? srv._tempId}>
               <div style={{ padding: '10px 14px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', fontSize: '12px', fontWeight: '700', color: '#0f766e', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {srv.name || <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>Unsaved Server</span>}
-                <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: isLed ? '#fff7ed' : isCpcb ? '#fef3c7' : '#f0fdfa', color: isLed ? '#ea580c' : isCpcb ? '#ca8a04' : '#0f766e' }}>{isLed ? 'LED' : isCpcb ? 'CPCB' : isBoth ? 'Both' : 'TGPCB'}</span>
+                <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: isLed ? '#fff7ed' : isCpcb ? '#fef3c7' : '#f0fdfa', color: isLed ? '#ea580c' : isCpcb ? '#ca8a04' : '#0f766e' }}>{isLed ? 'LED' : isCpcb ? 'CPCB' : isBoth ? 'Both' : 'SPCB'}</span>
                 {!srv.id && <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: '#fef3c7', color: '#92400e' }}>⚠ Save server first to enable Test Push</span>}
               </div>
 
@@ -599,125 +609,121 @@ export const CPCB = () => {
 
   // ─── RajAPI Sync Section ───
   const renderRajapiSection = () => {
-    if (!rajapiStations.length) loadRajapiStations();
     return (
       <div className="card" style={{ padding: '20px' }}>
-        {sectionHeader(3, 'RajAPI Sync', 'Authenticate and push data to RajAPI central server', '#7c3aed', handleSaveRajapi)}
+        {sectionHeader(3, 'RajAPI Server', 'Authenticate and push data to RajAPI central server', '#2563eb', handleSaveRajapi)}
 
         <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', background: '#fff', marginBottom: '14px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>Enable RajAPI Sync</span>
-              <Toggle checked={rajapiEnabled} onChange={() => setRajapiEnabled(!rajapiEnabled)} />
-            </div>
-
-            <div>
-              <label style={s()}>Auth Token</label>
-              <input
-                type="password"
-                value={rajapiToken}
-                onChange={e => setRajapiToken(e.target.value)}
-                placeholder="Paste RajAPI auth token"
-                style={ipt}
-              />
-              <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#94a3b8' }}>
-                Paste the RajAPI login token (e.g. N@9493poiu). Leave empty to use .env config.
+          
+          {/* Unlock Passcode Box */}
+          {!rajapiUnlocked ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
+              <label style={s()}>Unlock RajAPI Settings</label>
+              <div style={{ display: 'flex', gap: '8px', width: '100%', maxWidth: '300px' }}>
+                <input
+                  type="password"
+                  value={rajapiPasscode}
+                  onChange={e => setRajapiPasscode(e.target.value)}
+                  placeholder="Enter passcode"
+                  style={{ ...ipt, flex: 1 }}
+                />
+                <button
+                  onClick={() => {
+                    if (rajapiPasscode === 'N@9493poiu') {
+                      setRajapiUnlocked(true);
+                      showToast('Unlocked RajAPI Settings', 'success');
+                    } else {
+                      showToast('Invalid passcode', 'error');
+                    }
+                  }}
+                  style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', padding: '0 16px', fontWeight: '700', cursor: 'pointer' }}
+                >Unlock</button>
+              </div>
+              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#dc2626', fontWeight: '600' }}>
+                RajAPI Server settings are locked. Enter passcode to edit.
               </p>
             </div>
-
-            <div>
-              <button
-                onClick={handleTestRajapi}
-                disabled={rajapiTesting || !rajapiToken}
-                style={{
-                  background: '#7c3aed', color: '#fff', border: 'none',
-                  borderRadius: '8px', padding: '8px 16px', fontSize: '12px',
-                  fontWeight: '700', cursor: rajapiTesting ? 'not-allowed' : 'pointer',
-                  opacity: rajapiTesting || !rajapiToken ? 0.6 : 1,
-                }}
-              >
-                {rajapiTesting ? 'Testing...' : 'Test Connection'}
-              </button>
-            </div>
-
-            {rajapiTestResult && (
-              <div style={{
-                padding: '10px 12px', borderRadius: '8px',
-                background: rajapiTestResult.success ? '#f0fdf4' : '#fef2f2',
-                border: `1px solid ${rajapiTestResult.success ? '#86efac' : '#fecaca'}`,
-                fontSize: '12px', color: rajapiTestResult.success ? '#15803d' : '#b91c1c',
-              }}>
-                <strong>{rajapiTestResult.success ? 'OK' : 'Failed'}</strong> (HTTP {rajapiTestResult.status_code}): {rajapiTestResult.message}
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#334155' }}>Enable RajAPI Sync</span>
+                <Toggle checked={rajapiEnabled} onChange={() => setRajapiEnabled(!rajapiEnabled)} />
               </div>
-            )}
-          </div>
+
+              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 200px' }}>
+                  <label style={s()}>Custom Station ID (Device ID)</label>
+                  <input
+                    type="text"
+                    value={rajapiGlobalStationId}
+                    onChange={e => setRajapiGlobalStationId(e.target.value)}
+                    placeholder="e.g. STN-01"
+                    style={ipt}
+                  />
+                </div>
+                <div style={{ flex: '1 1 200px' }}>
+                  <label style={s()}>API Key (Username)</label>
+                  <input
+                    type="password"
+                    value={rajapiGlobalApiKey}
+                    onChange={e => setRajapiGlobalApiKey(e.target.value)}
+                    placeholder="Paste API Key here"
+                    style={ipt}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+                <button
+                  onClick={handleApplyRajapiToAll}
+                  style={{
+                    background: '#f8fafc', color: '#2563eb', border: '1px solid #2563eb',
+                    borderRadius: '8px', padding: '8px 16px', fontSize: '12px',
+                    fontWeight: '700', cursor: 'pointer',
+                  }}
+                >
+                  Apply to Mapped Parameters
+                </button>
+                <button
+                  onClick={handleTestRajapi}
+                  disabled={rajapiTesting || !rajapiGlobalApiKey}
+                  style={{
+                    background: '#2563eb', color: '#fff', border: 'none',
+                    borderRadius: '8px', padding: '8px 16px', fontSize: '12px',
+                    fontWeight: '700', cursor: rajapiTesting ? 'not-allowed' : 'pointer',
+                    opacity: rajapiTesting || !rajapiGlobalApiKey ? 0.6 : 1,
+                  }}
+                >
+                  {rajapiTesting ? 'Testing...' : 'Test Connection'}
+                </button>
+              </div>
+
+              {rajapiTestResult && (
+                <div style={{
+                  padding: '10px 12px', borderRadius: '8px',
+                  background: rajapiTestResult.success ? '#f0fdf4' : '#fef2f2',
+                  border: `1px solid ${rajapiTestResult.success ? '#86efac' : '#fecaca'}`,
+                  fontSize: '12px', color: rajapiTestResult.success ? '#15803d' : '#b91c1c',
+                }}>
+                  <strong>{rajapiTestResult.success ? 'OK' : 'Failed'}</strong> (HTTP {rajapiTestResult.status_code}): {rajapiTestResult.message}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {rajapiEnabled && (
-          <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', background: '#fff' }}>
-            <h4 style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: '800', color: '#0f172a' }}>Station Configurations</h4>
-            <p style={{ margin: '0 0 12px', fontSize: '11px', color: '#94a3b8' }}>
-              Select stations to sync and set custom Station IDs & usernames.
-            </p>
-
-            {rajapiStations.length === 0 ? (
-              <p style={{ fontSize: '12px', color: '#94a3b8' }}>No stations found.</p>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#fafafa' }}>
-                      <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', textAlign: 'left' }}>Sync</th>
-                      <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', textAlign: 'left' }}>Station Name</th>
-                      <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', textAlign: 'left' }}>Custom Station ID</th>
-                      <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', textAlign: 'left' }}>Username</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rajapiStations.map((st: any) => {
-                      const cfg = rajapiStationConfigs[st.id] || { enabled: false, custom_station_id: '', username: '' };
-                      return (
-                        <tr key={st.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={{ padding: '6px 10px' }}>
-                            <Toggle
-                              checked={!!cfg.enabled}
-                              onChange={() => setRajapiStationConfigs(prev => ({
-                                ...prev,
-                                [st.id]: { ...cfg, enabled: !cfg.enabled },
-                              }))}
-                            />
-                          </td>
-                          <td style={{ padding: '6px 10px', fontSize: '12px', fontWeight: '600', color: '#334155' }}>{st.name}</td>
-                          <td style={{ padding: '4px 6px' }}>
-                            <input
-                              style={{ width: '100%', boxSizing: 'border-box', padding: '5px 6px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '12px', fontFamily: T.fontMono }}
-                              placeholder="Auto (use station name)"
-                              value={cfg.custom_station_id || ''}
-                              onChange={e => setRajapiStationConfigs(prev => ({
-                                ...prev,
-                                [st.id]: { ...cfg, custom_station_id: e.target.value },
-                              }))}
-                            />
-                          </td>
-                          <td style={{ padding: '4px 6px' }}>
-                            <input
-                              style={{ width: '100%', boxSizing: 'border-box', padding: '5px 6px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '12px', fontFamily: T.fontMono }}
-                              placeholder="Username for params"
-                              value={cfg.username || ''}
-                              onChange={e => setRajapiStationConfigs(prev => ({
-                                ...prev,
-                                [st.id]: { ...cfg, username: e.target.value },
-                              }))}
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+        {/* Display Mapping Table for RajAPI */}
+        <h4 style={{ margin: '10px 0', fontSize: '14px', fontWeight: '800', color: '#0f172a' }}>RajAPI Parameter Mappings</h4>
+        <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#64748b' }}>
+          Select which parameters to sync to RajAPI. Click "Apply to Mapped Parameters" above to auto-fill the custom Station ID and API Key.
+        </p>
+        
+        {servers.filter(s => s.name === 'RajAPI').length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px', border: '1.5px dashed #e2e8f0', borderRadius: '10px' }}>
+            RajAPI server profile is initializing. Please save or reload page.
           </div>
+        ) : (
+          renderMappingTable((s) => s.name === 'RajAPI')
         )}
       </div>
     );

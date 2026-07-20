@@ -7,7 +7,7 @@ import {
   Box, Typography, TextField, Button, Alert, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, IconButton, Tooltip, Select, MenuItem,
   FormControl, InputLabel, Chip, Grid, Card, CardContent,
-  Dialog, DialogTitle, DialogContent, DialogActions,
+  Dialog, DialogTitle, DialogContent, DialogActions, Skeleton,
 } from '@mui/material'
 import Icon from './components/Common/Icon'
 import { getTheme } from './theme'
@@ -43,6 +43,7 @@ function getConnectionStatus(last_sync?: string): { label: string; color: string
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(sessionStorage.getItem('rajapi_auth') === 'true')
+  const [initialLoading, setInitialLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('dashboard')
   const [sites, setSites] = useState<Site[]>([])
   const [locks, setLocks] = useState<LockSummary[]>([])
@@ -259,15 +260,18 @@ function App() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
-    const load = () => {
-      adminFetch('/api/v1/sites/').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setSites(data)).catch(() => {});
-      adminFetch('/api/v1/broadcasts/').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setBroadcasts(data)).catch(() => {});
-      adminFetch('/api/v1/sites/locks/summary').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setLocks(data)).catch(() => {});
-      adminFetch('/api/v1/cpcb/status').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setCpcbStatus(data)).catch(() => {});
-      adminFetch('/api/v1/cpcb/summary').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setCpcbSummary(data)).catch(() => {});
-      adminFetch('/api/v1/quality/').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setQualitySummary(data)).catch(() => {});
-      adminFetch('/api/v1/alarms/').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setAlarms(data)).catch(() => {});
-      adminFetch('/api/v1/alarms/stats').then(res => res.ok ? res.json() : null).then(data => data && setAlarmStats(data)).catch(() => {});
+    const load = async () => {
+      await Promise.all([
+        adminFetch('/api/v1/sites/').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setSites(data)).catch(() => {}),
+        adminFetch('/api/v1/broadcasts/').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setBroadcasts(data)).catch(() => {}),
+        adminFetch('/api/v1/sites/locks/summary').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setLocks(data)).catch(() => {}),
+        adminFetch('/api/v1/cpcb/status').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setCpcbStatus(data)).catch(() => {}),
+        adminFetch('/api/v1/cpcb/summary').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setCpcbSummary(data)).catch(() => {}),
+        adminFetch('/api/v1/quality/').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setQualitySummary(data)).catch(() => {}),
+        adminFetch('/api/v1/alarms/').then(res => res.ok ? res.json() : []).then(data => Array.isArray(data) && setAlarms(data)).catch(() => {}),
+        adminFetch('/api/v1/alarms/stats').then(res => res.ok ? res.json() : null).then(data => data && setAlarmStats(data)).catch(() => {})
+      ]);
+      setInitialLoading(false);
     };
     load();
     const interval = setInterval(load, 30000);
@@ -429,7 +433,32 @@ function App() {
   ];
 
 
+  const renderSkeleton = () => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box>
+        <Skeleton variant="text" width="40%" height={40} />
+        <Skeleton variant="text" width="60%" height={24} />
+      </Box>
+      <Grid container spacing={3}>
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <Grid key={i} size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
+            <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 2 }} />
+          </Grid>
+        ))}
+      </Grid>
+      <Box sx={{ display: 'flex', gap: 3, mt: 2, flexDirection: { xs: 'column', lg: 'row' } }}>
+        <Box sx={{ flex: 2 }}>
+          <Skeleton variant="rectangular" height={400} sx={{ borderRadius: 2 }} />
+        </Box>
+        <Box sx={{ flex: 1 }}>
+          <Skeleton variant="rectangular" height={400} sx={{ borderRadius: 2 }} />
+        </Box>
+      </Box>
+    </Box>
+  );
+
   const renderContent = () => {
+    if (initialLoading) return renderSkeleton();
     switch (activeTab) {
       case 'dashboard': return renderDashboard();
       case 'broadcasts': return renderBroadcasts();

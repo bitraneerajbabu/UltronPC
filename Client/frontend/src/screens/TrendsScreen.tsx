@@ -185,7 +185,7 @@ export const TrendsScreen = () => {
                 ticks: { color: '#94a3b8', font: { size: 11 } },
                 grid: { color: '#f1f5f9' },
                 suggestedMax: maxLimit !== undefined ? maxLimit * 1.1 : undefined,
-                suggestedMin: minLimit !== undefined ? Math.min(0, minLimit * 0.9) : 0
+                suggestedMin: minLimit !== undefined ? Math.min(0, minLimit * 0.9) : undefined
               }
             }
           },
@@ -309,14 +309,14 @@ export const TrendsScreen = () => {
             <label className="form-label">Resolution</label>
             <select className="form-select" value={resolution} onChange={e => setResolution(e.target.value)}>
               <option value="raw">1 Minute Raw</option>
-              <option value="avg_5min">5 Minute Average</option>
-              <option value="avg_15min">15 Minute Average</option>
-              <option value="avg_30min">30 Minute Average</option>
-              <option value="avg_1hr">1 Hour Average</option>
-              <option value="avg_3hr">3 Hour Average</option>
-              <option value="avg_6hr">6 Hour Average</option>
-              <option value="avg_12hr">12 Hour Average</option>
-              <option value="avg_24hr">24 Hour Average</option>
+              <option value="avg_5min">5 Minute Raw</option>
+              <option value="avg_15min">15 Minute Raw</option>
+              <option value="avg_30min">30 Minute Raw</option>
+              <option value="avg_1hr">1 Hour Raw</option>
+              <option value="avg_3hr">3 Hour Raw</option>
+              <option value="avg_6hr">6 Hour Raw</option>
+              <option value="avg_12hr">12 Hour Raw</option>
+              <option value="avg_24hr">24 Hour Raw</option>
             </select>
           </div>
           <div className="form-group">

@@ -262,10 +262,11 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
     return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
 
 
-from app.api.endpoints import sync, sites, downloads, tgpcb_sync, broadcasts, commands, quality, alarms, cpcb, ota, stations
+from app.api.endpoints import sync, sites, downloads, spcb_sync, broadcasts, commands, quality, alarms, cpcb, ota, stations
 
 app.include_router(sync.router, prefix=f"{settings.API_V1_STR}/sync", tags=["sync"])
-app.include_router(tgpcb_sync.router, prefix=f"{settings.API_V1_STR}/tgpcb", tags=["tgpcb-sync"])
+app.include_router(sync.heartbeat_router, prefix=f"{settings.API_V1_STR}/heartbeat", tags=["heartbeat"])
+app.include_router(spcb_sync.router, prefix=f"{settings.API_V1_STR}/spcb", tags=["spcb-sync"])
 app.include_router(sites.router, prefix=f"{settings.API_V1_STR}/sites", tags=["sites"])
 app.include_router(downloads.router, prefix=f"{settings.API_V1_STR}/downloads", tags=["downloads"])
 app.include_router(broadcasts.router, prefix=f"{settings.API_V1_STR}/broadcasts", tags=["broadcasts"])

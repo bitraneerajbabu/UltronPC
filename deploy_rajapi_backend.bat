@@ -10,8 +10,10 @@ set /p PI_IP="Enter Raspberry Pi IP Address (e.g. 192.168.1.100): "
 
 echo.
 echo Uploading updated backend files to %PI_IP%...
+scp "%~dp0server\backend\app\main.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/main.py
 scp "%~dp0server\backend\app\schemas\api_models.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/schemas/api_models.py
 scp "%~dp0server\backend\app\api\endpoints\sites.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/api/endpoints/sites.py
+scp "%~dp0server\backend\app\api\endpoints\spcb_sync.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/api/endpoints/spcb_sync.py
 scp "%~dp0server\backend\app\api\endpoints\sync.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/api/endpoints/sync.py
 scp "%~dp0server\backend\app\api\endpoints\broadcasts.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/api/endpoints/broadcasts.py
 scp "%~dp0server\backend\app\models\core.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/models/core.py

@@ -2,7 +2,7 @@
 UltrON — Server Push Engine
 
 Supports two push protocols:
-  • TGPCB  — HTTP POST JSON (like TGPCB / CPCB online portals that accept JSON)
+  • SPCB  — HTTP POST JSON (like SPCB / CPCB online portals that accept JSON)
              Live push  : every 1 minute  → live_url
              Delay push : every 15 minutes → delay_url
 
@@ -49,12 +49,12 @@ def _cpcb_row(station_name: str, param_code: str, local_from: datetime, value: f
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TGPCB — JSON HTTP Push
+# SPCB — JSON HTTP Push
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _build_tgpcb_payloads(db, server_id: int, mode: str = "live") -> list:
+async def _build_spcb_payloads(db, server_id: int, mode: str = "live") -> list:
     """
-    Build TGPCB-style JSON payload list.
+    Build SPCB-style JSON payload list.
     Groups parameters by (api_id, api_name, api_password) → one payload per group.
     
     If mode == "delay", fetches the latest 15-minute average value and sets
@@ -72,11 +72,10 @@ async def _build_tgpcb_payloads(db, server_id: int, mode: str = "live") -> list:
     if not mappings:
         return []
 
-    # Group by (api_id, api_name, api_password) — each group = one JSON POST
-    grouped = defaultdict(list)
-    for m in mappings:
-        key = (m.api_id, m.api_name, m.api_password)
-        grouped[key].append(m)
+        grouped = defaultdict(list)
+        for m in mappings:
+            key = (m.api_id, m.api_name, m.api_password)
+            grouped[key].append(m)
 
     payloads = []
     for (api_id, api_name, api_password), maps in grouped.items():
@@ -159,21 +158,21 @@ async def _build_tgpcb_payloads(db, server_id: int, mode: str = "live") -> list:
     return payloads
 
 
-async def _push_tgpcb(config: ServerConfig, db, mode: str):
-    """HTTP POST each payload to the configured TGPCB URL."""
+async def _push_spcb(config: ServerConfig, db, mode: str):
+    """HTTP POST each payload to the configured SPCB URL."""
     target_url = config.live_url if mode == "live" else config.delay_url
     if not target_url:
         if mode == "delay":
             log.warning(
-                f"[TGPCB/DELAY] ⚠ Server '{config.name}' has no Delay URL configured — "
+                f"[SPCB/DELAY] ⚠ Server '{config.name}' has no Delay URL configured — "
                 f"delay push skipped. Set a Delay URL in Server Push Mappings to fix this."
             )
         return
 
     try:
-        payloads = await _build_tgpcb_payloads(db, config.id, mode)
+        payloads = await _build_spcb_payloads(db, config.id, mode)
         if not payloads:
-            log.debug(f"[TGPCB/{mode.upper()}] No active mappings for '{config.name}' — skipping.")
+            log.debug(f"[SPCB/{mode.upper()}] No active mappings for '{config.name}' — skipping.")
             return
 
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -194,17 +193,17 @@ async def _push_tgpcb(config: ServerConfig, db, mode: str):
                     res = await client.post(target_url, json=payload)
                     if res.status_code < 300:
                         log.info(
-                            f"[TGPCB/{mode.upper()}] [OK] DeviceID={device_id} → '{config.name}' HTTP {res.status_code}. "
+                            f"[SPCB/{mode.upper()}] [OK] DeviceID={device_id} → '{config.name}' HTTP {res.status_code}. "
                             f"Parameters Posted: [{param_summary}]"
                         )
                     else:
                         log.warning(
-                            f"[TGPCB/{mode.upper()}] [FAIL] DeviceID={device_id} → '{config.name}' HTTP {res.status_code}: {res.text[:200]}. "
+                            f"[SPCB/{mode.upper()}] [FAIL] DeviceID={device_id} → '{config.name}' HTTP {res.status_code}: {res.text[:200]}. "
                             f"Parameters Attempted: [{param_summary}]"
                         )
                 except Exception as e:
                     log.error(
-                        f"[TGPCB/{mode.upper()}] Push error DeviceID={device_id} → "
+                        f"[SPCB/{mode.upper()}] Push error DeviceID={device_id} → "
                         f"'{config.name}' (Parameters: [{param_summary}]): {e}"
                     )
                     # Queue the failed payload for retry
@@ -217,7 +216,7 @@ async def _push_tgpcb(config: ServerConfig, db, mode: str):
                     ))
                     await db.commit()
     except Exception as e:
-        log.error(f"[TGPCB/{mode.upper()}] Build/push failed for '{config.name}': {e}")
+        log.error(f"[SPCB/{mode.upper()}] Build/push failed for '{config.name}': {e}")
 
 
 
@@ -572,8 +571,17 @@ async def retry_pending_uploads(db):
         for p in pending:
             cfg = configs.get(p.server_config_id)
             target_url = cfg.delay_url if (cfg and cfg.delay_url) else p.url
+            if not target_url:
+                continue
+
+            headers = {}
+            if target_url == settings.CENTRAL_API_URL or "api/v1/sync" in target_url:
+                api_key, _ = await _load_rajapi_auth()
+                if api_key:
+                    headers["X-API-Key"] = api_key
+
             try:
-                res = await client.post(target_url, json=p.payload)
+                res = await client.post(target_url, json=p.payload, headers=headers)
                 if res.status_code < 300:
                     await db.delete(p)
                     log.info(f"[RETRY] [OK] Delivered pending #{p.id} via {target_url}")
@@ -669,6 +677,100 @@ async def _poll_remote_commands():
         log.debug(f"[CMD] Poll failed: {e}")
 
 
+async def _push_telemetry_to_rajapi(db, mode: str):
+    """
+    Push client telemetry to RajAPI for data analysis and compliance.
+    Pushes live values when mode == "live", and 15-minute averages when mode == "delay".
+    """
+    from app.config import settings
+    api_key = settings.CENTRAL_API_KEY
+    station_id = settings.RAJAPI_STATION_ID or "default_station"
+    if not api_key:
+        return
+
+    target_url = settings.CENTRAL_API_URL
+    if not target_url:
+        return
+
+    points = []
+    try:
+        if mode == "live":
+            ld_stmt = select(LiveData).options(selectinload(LiveData.parameter))
+            ld_res = await db.execute(ld_stmt)
+            live_data_list = ld_res.scalars().all()
+            for ld in live_data_list:
+                if ld.parameter:
+                    try:
+                        v = float(ld.value) if ld.value is not None else None
+                    except (ValueError, TypeError):
+                        v = None
+                    q = ld.quality.value if hasattr(ld.quality, "value") else str(ld.quality)
+                    points.append({
+                        "tag_name": ld.parameter.tag_name,
+                        "value": v,
+                        "quality": q,
+                        "timestamp": ld.timestamp.isoformat() if hasattr(ld.timestamp, "isoformat") else str(ld.timestamp)
+                    })
+        elif mode == "delay":
+            cutoff = datetime.utcnow() - timedelta(minutes=30)
+            avg_stmt = select(Averages).options(selectinload(Averages.parameter)).where(
+                Averages.avg_type == AverageType.avg_15min,
+                Averages.timestamp >= cutoff
+            )
+            avg_res = await db.execute(avg_stmt)
+            averages_list = avg_res.scalars().all()
+            for avg in averages_list:
+                if avg.parameter:
+                    try:
+                        v = float(avg.value) if avg.value is not None else None
+                    except (ValueError, TypeError):
+                        v = None
+                    q = avg.quality.value if hasattr(avg.quality, "value") else str(avg.quality)
+                    points.append({
+                        "tag_name": avg.parameter.tag_name,
+                        "value": v,
+                        "quality": q,
+                        "timestamp": avg.timestamp.isoformat() if hasattr(avg.timestamp, "isoformat") else str(avg.timestamp)
+                    })
+
+        if not points:
+            return
+
+        payload = {
+            "client_id": station_id,
+            "points": points
+        }
+
+        headers = {"X-API-Key": api_key}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.post(target_url, json=payload, headers=headers)
+            if res.status_code < 300:
+                log.info(f"[RajAPI/{mode.upper()}] [OK] Pushed {len(points)} telemetry points to RajAPI.")
+            else:
+                log.warning(f"[RajAPI/{mode.upper()}] [FAIL] RajAPI HTTP {res.status_code}: {res.text[:200]}")
+                db.add(PendingUpload(
+                    server_config_id=None,
+                    url=target_url,
+                    payload=payload,
+                    mode=mode,
+                    last_error=f"HTTP {res.status_code}"
+                ))
+                await db.commit()
+    except Exception as e:
+        log.error(f"[RajAPI/{mode.upper()}] Sync error: {e}")
+        try:
+            db.add(PendingUpload(
+                server_config_id=None,
+                url=target_url,
+                payload=payload,
+                mode=mode,
+                last_error=str(e)[:500]
+            ))
+            await db.commit()
+        except Exception:
+            pass
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main scheduler entry point
 # ─────────────────────────────────────────────────────────────────────────────
@@ -676,8 +778,8 @@ async def _poll_remote_commands():
 async def run_server_push(mode: str = "live"):
     """
     Called by APScheduler:
-      mode="live"  → every  1 minute  — TGPCB live push, check CPCB files
-      mode="delay" → every 15 minutes — TGPCB delay push, check CPCB files
+      mode="live"  → every  1 minute  — SPCB live push, check CPCB files
+      mode="delay" → every 15 minutes — SPCB delay push, check CPCB files
 
     When lock is active or AMC expired:
       - Polling continues (device reading NEVER stops)
@@ -732,13 +834,16 @@ async def run_server_push(mode: str = "live"):
 
             elif proto == "both":
                 if mode == "live":
-                    await _push_tgpcb(config, db, "live")
+                    await _push_spcb(config, db, "live")
                 elif mode == "delay":
-                    await _push_tgpcb(config, db, "delay")
+                    await _push_spcb(config, db, "delay")
                 await _push_cpcb(config, db)
 
             else:
-                await _push_tgpcb(config, db, mode)
+                await _push_spcb(config, db, mode)
+
+        # Sync telemetry to RajAPI
+        await _push_telemetry_to_rajapi(db, mode)
 
         # Poll for pending remote commands from rajapi.com
         if mode == "live":

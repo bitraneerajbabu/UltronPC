@@ -23,7 +23,27 @@ router = APIRouter(prefix="/server-config", tags=["Server Config"])
 @router.get("/", response_model=List[ServerConfigResponse], dependencies=[Depends(require_admin)])
 async def get_all_servers(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(ServerConfig).order_by(ServerConfig.id))
-    return result.scalars().all()
+    servers = result.scalars().all()
+    
+    # Check if RajAPI exists, if not, auto-create it
+    rajapi = next((s for s in servers if s.name == "RajAPI"), None)
+    if not rajapi:
+        rajapi = ServerConfig(
+            name="RajAPI",
+            protocol="tspcb",
+            live_url="https://rajapi.com/api/v1/tgpcb/",
+            delay_url="https://rajapi.com/api/v1/tgpcb/",
+            is_active=True,
+            is_cpcb_active=False
+        )
+        db.add(rajapi)
+        await db.commit()
+        await db.refresh(rajapi)
+        # Fetch list again
+        result = await db.execute(select(ServerConfig).order_by(ServerConfig.id))
+        servers = result.scalars().all()
+
+    return servers
 
 @router.post("/", response_model=ServerConfigResponse, dependencies=[Depends(require_admin)])
 async def create_server(config_in: ServerConfigCreate, db: AsyncSession = Depends(get_db)):

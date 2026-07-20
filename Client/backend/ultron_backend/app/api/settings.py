@@ -350,6 +350,61 @@ async def save_general_settings(payload: GeneralSettingsSchema):
         raise HTTPException(status_code=500, detail=f"Failed to save general settings: {str(e)}")
 
 
+# ─── RajAPI Global Settings ───────────────────────────────────────────────────
+class RajapiSettingsSchema(BaseModel):
+    rajapi_api_key: str
+    rajapi_station_id: str
+    rajapi_sync_enabled: bool = True
+
+@router.get("/rajapi")
+async def get_rajapi_settings():
+    return {
+        "rajapi_api_key": settings.RAJAPI_API_KEY,
+        "rajapi_station_id": settings.RAJAPI_STATION_ID,
+        "rajapi_sync_enabled": settings.RAJAPI_SYNC_ENABLED,
+    }
+
+@router.post("/rajapi", dependencies=[Depends(require_admin)])
+async def save_rajapi_settings(payload: RajapiSettingsSchema):
+    try:
+        # Update settings singleton dynamically
+        settings.RAJAPI_API_KEY = payload.rajapi_api_key
+        settings.RAJAPI_STATION_ID = payload.rajapi_station_id
+        settings.RAJAPI_SYNC_ENABLED = payload.rajapi_sync_enabled
+        
+        # Write directly to .env
+        def _write_env_var(key: str, val: str):
+            env_path = APP_DIR / ".env"
+            lines = []
+            if env_path.is_file():
+                with open(env_path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+            
+            found = False
+            for idx, line in enumerate(lines):
+                if line.strip().startswith(f"{key}="):
+                    lines[idx] = f"{key}={val}\n"
+                    found = True
+                    break
+            if not found:
+                if lines and not lines[-1].endswith("\n"):
+                    lines[-1] += "\n"
+                lines.append(f"{key}={val}\n")
+                
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+
+        _write_env_var("RAJAPI_API_KEY", payload.rajapi_api_key)
+        _write_env_var("RAJAPI_STATION_ID", payload.rajapi_station_id)
+        _write_env_var("RAJAPI_SYNC_ENABLED", "true" if payload.rajapi_sync_enabled else "false")
+        
+        audit.info("RajAPI settings updated via /settings/rajapi")
+        return {"success": True}
+    except Exception as e:
+        log.error(f"Error saving RajAPI settings: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save RajAPI settings: {str(e)}")
+
+
 # ─── Push Engine Status ────────────────────────────────────────────────────────
 @router.get("/push-status")
 async def push_engine_status():
