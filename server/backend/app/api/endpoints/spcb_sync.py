@@ -16,13 +16,17 @@ We use the 'Name' field from the SPCB payload as the X-API-Key to identify the s
 This means the client sets their RajAPI api_key as the 'Site Name' (api_name) field.
 """
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from typing import Optional, Any, List
 from pydantic import BaseModel
 from app.db.database import get_db
-from app.models.core import IndustrySite, TelemetryData, Parameter, Device, Broadcast
+from app.api.deps import _get_or_create_param
+from app.models.core import TelemetryData, Broadcast
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -42,35 +46,6 @@ class SpcbPayload(BaseModel):
     Password: Optional[str] = ""
     additionalInfo: Optional[dict] = {}
     Variables: Optional[List[SpcbVariable]] = []
-
-
-def _get_or_create_param(db: Session, site: IndustrySite, tag_name: str, unit: str = "") -> Parameter:
-    """Find or create a parameter for this site."""
-    param = db.query(Parameter).filter(
-        Parameter.tag_name == tag_name,
-        Parameter.device.has(site_id=site.id)
-    ).first()
-
-    if not param:
-        generic_device = db.query(Device).filter(
-            Device.site_id == site.id,
-            Device.name == "Default Sync Device"
-        ).first()
-        if not generic_device:
-            generic_device = Device(site_id=site.id, name="Default Sync Device", status="online")
-            db.add(generic_device)
-            db.flush()
-
-        param = Parameter(
-            tag_name=tag_name,
-            name=tag_name,
-            unit=unit or "",
-            device_id=generic_device.id
-        )
-        db.add(param)
-        db.flush()
-
-    return param
 
 
 @router.post("/")
@@ -99,8 +74,9 @@ def spcb_sync(payload: SpcbPayload, db: Session = Depends(get_db)):
     if not site.is_active:
         site.last_error = "Site is inactive"
         site.last_error_at = datetime.now(timezone.utc)
+        logger.warning("Rejected SPCB sync: site %s (%s) is inactive", site.id, site.name)
         db.commit()
-        raise HTTPException(status_code=401, detail="Site is inactive")
+        raise HTTPException(status_code=403, detail="Invalid API key — site not found on RajAPI")
 
     now = datetime.now(timezone.utc)
 
@@ -108,8 +84,9 @@ def spcb_sync(payload: SpcbPayload, db: Session = Depends(get_db)):
     if site.amc_expiry and site.amc_expiry.replace(tzinfo=timezone.utc) < now:
         site.last_error = "AMC expired"
         site.last_error_at = now
+        logger.warning("Rejected SPCB sync: site %s (%s) AMC expired", site.id, site.name)
         db.commit()
-        raise HTTPException(status_code=401, detail="AMC expired. Please contact support.")
+        raise HTTPException(status_code=403, detail="Invalid API key — site not found on RajAPI")
 
     # Stamp last_sync and clear any previous error
     site.last_sync = now
@@ -147,7 +124,7 @@ def spcb_sync(payload: SpcbPayload, db: Session = Depends(get_db)):
             site_id=site.id,
             parameter_id=param.id,
             value=val,
-            quality="good" if val is not None else "bad",
+            quality="U" if val is not None else "O",  # CPCB quality codes: U=Valid, O=Operational
             timestamp=ts
         )
         db.add(telemetry)

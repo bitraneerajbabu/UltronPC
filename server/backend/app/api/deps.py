@@ -4,18 +4,49 @@ from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.db.database import get_db
-from app.models.core import IndustrySite, Device
+from app.models.core import IndustrySite, Device, Parameter
 from app.core.config import settings
 
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=True)
 
 
 def _validate_site(site: IndustrySite, status_code: int = 403):
-    """Check site is active and AMC hasn't expired."""
+    """Check site is active and AMC hasn't expired (generic message to prevent enumeration)."""
     if not site.is_active:
-        raise HTTPException(status_code=status_code, detail="Site is inactive")
+        raise HTTPException(status_code=status_code, detail="Could not validate API Key")
     if site.amc_expiry and site.amc_expiry.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-        raise HTTPException(status_code=status_code, detail="AMC has expired. Please contact support.")
+        raise HTTPException(status_code=status_code, detail="Could not validate API Key")
+
+
+def _get_or_create_param(db: Session, site: IndustrySite, tag_name: str, unit: str = "") -> Parameter:
+    """Find or create a parameter for this site, optionally updating unit."""
+    param = db.query(Parameter).filter(
+        Parameter.tag_name == tag_name,
+        Parameter.device.has(site_id=site.id)
+    ).first()
+
+    if not param:
+        generic_device = db.query(Device).filter(
+            Device.site_id == site.id,
+            Device.name == "Default Sync Device"
+        ).first()
+        if not generic_device:
+            generic_device = Device(site_id=site.id, name="Default Sync Device", status="online")
+            db.add(generic_device)
+            db.flush()
+
+        param = Parameter(
+            tag_name=tag_name,
+            name=tag_name,
+            unit=unit or "",
+            device_id=generic_device.id
+        )
+        db.add(param)
+        db.flush()
+    elif not param.unit and unit:
+        param.unit = unit
+
+    return param
 
 
 class AuthContext:
@@ -94,12 +125,12 @@ def get_current_site(
 ) -> IndustrySite:
     site = find_site_by_key(db, api_key)
     if site:
-        _validate_site(site, status_code=status.HTTP_401_UNAUTHORIZED)
+        _validate_site(site)
         return site
 
     device = find_device_by_key(db, api_key)
     if device and device.site:
-        _validate_site(device.site, status_code=status.HTTP_401_UNAUTHORIZED)
+        _validate_site(device.site)
         return device.site
 
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Could not validate API Key")

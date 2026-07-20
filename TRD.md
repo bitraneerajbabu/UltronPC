@@ -74,7 +74,7 @@
 | ORM | SQLAlchemy 2.x (async) | SQLAlchemy 2.x |
 | DB Driver | aiosqlite + sqlite3 | asyncpg |
 | DB | SQLite 3 (WAL, single-file) | PostgreSQL 15 (Docker) |
-| Auth | JWT (PyJWT, 10yr expiry) | Static API Key (header-based) |
+| Auth | JWT (24h access + 7d refresh token rotation) | Static API Key + bcrypt admin username/password login |
 | Serialization | Pydantic v2 | Pydantic v2 |
 | Frontend | React 18 + TypeScript + Vite | React 18 + TypeScript + Vite |
 | Charts | react-chartjs-2 (Chart.js 4) | react-chartjs-2 (Chart.js 4) |
@@ -264,21 +264,32 @@ Login ──→ POST /auth/login ──→ JWT ──→ localStorage
 
 ```
 Client Sync ──→ POST /api/v1/sync ──→ Header: X-API-Key ──→ DB lookup by key
-Admin UI ──→ Login ──→ POST /api/login ──→ admin_key in sessionStorage ──→ Header: X-Admin-Key
+Admin Login ──→ POST /api/v1/auth/login ──→ username + password
+                  │
+                  ├── bcrypt.checkpw against ADMIN_PASSWORD_HASH (config-time hash)
+                  ├── OR key == ADMIN_KEY (legacy backward compat)
+                  ├── OR find_site_by_key(db, key) + check is_active
+                  └── OR find_device_by_key(db, key) + check parent site is_active
+                  │
+                  └── Rate limited: 5 req/60s per-IP, 10 failures → 15min key lockout
+Admin UI ──→ Login success ──→ sessionStorage ──→ Header: X-Admin-Key
 ```
 
 ### 4.3 Security Gaps (Known)
 
 | Issue | Impact | Mitigation Status |
 |-------|--------|-------------------|
-| Static API keys in DB plaintext | Key leak = full site access | Open — migrate to JWT |
+| Static API keys in DB plaintext | Key leak = full site access | Open — migrate to JWT. Mitigated: bcrypt admin login added |
 | No HTTPS on Pi origin | HTTP between cloudflared → uvicorn | Open — Let's Encrypt pending |
 | CPCB file path traversal | Arbitrary file read/write via export_path | Open — validate path |
 | API keys in URL query params | Logged in nginx/cloudflare access logs | Open — move to headers |
 | Hardcoded encryption key | `.env.enc` obfuscation can be reversed | Open — hardware binding |
-| 10-year JWT expiry | Stolen token usable for a decade | Open — add revocation |
+| JWT expiry | Stolen token usable | Mitigated: 24h + refresh token rotation (client), 7d (server) |
 | `.env` on Pi world-readable | Secrets readable by any process | Open — chmod 600 |
 | PostgreSQL exposed to LAN | Brute-force on 5432 | Open — firewall |
+| User enumeration | Distinct error codes leak valid keys | Fixed — uniform 401/403 responses |
+| Missing rate limiting | Brute-force login | Fixed — per-IP (5/60s) + per-key lockout (10/15min) + API limit (200/min) |
+| Weak default passwords | Guessable template defaults | Fixed — bcrypt hashing, `Ultron@2026` / `Ultron123.0` |
 
 ---
 
@@ -396,3 +407,10 @@ Ordered by impact/effort:
 6. **Database migration versioning** — Alembic or manual version table (1 day)
 7. **PostgreSQL LAN firewall** — Bind to 127.0.0.1 or firewall rule (30 min)
 8. **Remove API key echo from responses** — Stop leaking keys in sync response (2 hrs)
+
+### Completed hardening (this sprint):
+- ✅ **User enumeration** — Uniform error responses for all key types
+- ✅ **Rate limiting** — Per-IP login (5/60s) + per-key lockout (10/15min) + API rate (200/min)
+- ✅ **Weak passwords** — bcrypt hashing for server admin login; default passwords updated
+- ✅ **Account lockout** — 5 failed attempts → 15min auto-clear lock
+- ✅ **JWT 10yr → 24h** — Access token reduced; refresh token rotation (7d)

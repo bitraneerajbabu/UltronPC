@@ -1,14 +1,17 @@
-from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi import FastAPI, Request, Depends, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 import time
+import uuid
+import traceback
 from collections import defaultdict
 from app.core.config import settings
 from app.db.database import engine, Base, get_db
 from app.models.core import IndustrySite, Device
 import logging
+import asyncio
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -196,27 +199,137 @@ def _run_auto_migrations():
 
 _run_auto_migrations()
 
-# ─── Simple In-Memory Rate Limiter ─────────────────────────────────────────────
-_login_attempts: dict[str, list[float]] = defaultdict(list)
+# ─── Rate Limiting & Account Lockout ──────────────────────────────────────────
+_LOGIN_WINDOW = 60        # seconds
+_LOGIN_MAX_ATTEMPTS = 5    # per IP per window
+_KEY_LOCK_THRESHOLD = 10   # failed attempts before key lockout
+_KEY_LOCK_DURATION = 900   # seconds (15 min)
+_API_RATE_WINDOW = 60      # seconds
+_API_RATE_MAX = 200        # requests per window per IP
+_DATA_INGEST_PREFIXES = ("/api/v1/sync", "/api/v1/heartbeat", "/api/v1/spcb")
 
-def _check_login_rate_limit(ip: str) -> None:
+# IP → [timestamps] for login endpoint
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+# Key value → [timestamps] for distributed brute-force detection
+_key_attempts: dict[str, list[float]] = defaultdict(list)
+# Key value → locked_until timestamp
+_key_lockouts: dict[str, float] = {}
+# IP → [timestamps] for general API rate limiting
+_api_requests: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_login_rate_limit(ip: str, key: str) -> None:
     now = time.time()
-    attempts = _login_attempts[ip]
-    attempts[:] = [t for t in attempts if now - t < 60]
-    if len(attempts) >= 5:
-        raise HTTPException(status_code=429, detail="Too many login attempts. Try again in 60 seconds.")
-    attempts.append(now)
+
+    # Per-key lockout check (catches distributed brute-force on same key)
+    if key in _key_lockouts:
+        if now < _key_lockouts[key]:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many login attempts. Try again later."
+            )
+        del _key_lockouts[key]  # lock expired
+
+    # Per-IP rate limit (catches single-source brute-force)
+    ip_attempts = _login_attempts[ip]
+    ip_attempts[:] = [t for t in ip_attempts if now - t < _LOGIN_WINDOW]
+    if len(ip_attempts) >= _LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Try again in 60 seconds."
+        )
+    ip_attempts.append(now)
+    ip_attempts[:] = ip_attempts[-(_LOGIN_MAX_ATTEMPTS + 5):]
+
+
+def _record_failed_login(ip: str, key: str) -> None:
+    """Track failed attempts per key and lock it after threshold."""
+    now = time.time()
+    key_attempts = _key_attempts[key]
+    key_attempts[:] = [t for t in key_attempts if now - t < _KEY_LOCK_DURATION]
+    key_attempts.append(now)
+    if len(key_attempts) >= _KEY_LOCK_THRESHOLD:
+        _key_lockouts[key] = now + _KEY_LOCK_DURATION
+        logger.warning(
+            "Key locked out: '%s...' (%d failures in %ds)",
+            key[:12], _KEY_LOCK_THRESHOLD, _KEY_LOCK_DURATION
+        )
+
+
+def _clear_key_lockout(key: str) -> None:
+    """Clear lockout state on successful login."""
+    _key_lockouts.pop(key, None)
+    _key_attempts.pop(key, None)
+
+
+async def _api_rate_limit_middleware(request: Request, call_next):
+    """Per-IP rate limit for all API endpoints except data ingestion."""
+    path = request.url.path
+    if path.startswith(settings.API_V1_STR) and not path.startswith(_DATA_INGEST_PREFIXES):
+        ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        reqs = _api_requests[ip]
+        reqs[:] = [t for t in reqs if now - t < _API_RATE_WINDOW]
+        if len(reqs) >= _API_RATE_MAX:
+            logger.warning("API rate limit hit: ip=%s path=%s", ip, path[:60])
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Try again later."}
+            )
+        reqs.append(now)
+        reqs[:] = reqs[-250:]
+    return await call_next(request)
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., min_length=1, max_length=100)
+    password: str = Field(..., min_length=1, max_length=256)
 
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
+
+# ─── Global Exception Handler ───────────────────────────────────────────────
+# Catches all unhandled exceptions, returns consistent JSON with request_id.
+# Never leaks stack traces, paths, or internal state to the client.
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    request_id = str(uuid.uuid4())
+    logger.error(
+        "Unhandled exception: request_id=%s path=%s method=%s",
+        request_id, request.url.path, request.method,
+        exc_info=True
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Internal server error", "request_id": request_id},
+        headers={"X-Request-Id": request_id},
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Return HTTPException as-is with consistent JSON shape."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+    )
+
+
+# ─── Request ID Middleware (outermost — adds X-Request-Id to every response) ──
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = request.headers.get("X-Request-Id", str(uuid.uuid4()))
+    response = await call_next(request)
+    response.headers["X-Request-Id"] = request_id
+    return response
+
+
+# Apply API rate limiter
+app.middleware("http")(_api_rate_limit_middleware)
 
 # Set all CORS enabled origins
 app.add_middleware(
@@ -237,28 +350,51 @@ app.add_middleware(
 
 @app.post(f"{settings.API_V1_STR}/auth/login")
 async def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
-    _check_login_rate_limit(request.client.host if request.client else "unknown")
+    import bcrypt
+    from app.core.config import ADMIN_PASSWORD_HASH
+
+    ip = request.client.host if request.client else "unknown"
     key = payload.password
 
-    # Check admin key
-    if key == settings.ADMIN_KEY:
-        return {"success": True}
+    # IP rate limit + key lockout check
+    _check_login_rate_limit(ip, key)
 
     from app.api.deps import find_site_by_key, find_device_by_key
+
+    # Check admin login (username + hashed password)
+    if payload.username == settings.ADMIN_USERNAME and bcrypt.checkpw(
+        payload.password.encode("utf-8"), ADMIN_PASSWORD_HASH.encode("utf-8")
+    ):
+        _clear_key_lockout(key)
+        return {"success": True}
+
+    # Check admin key (backward compat for X-Admin-Key header users)
+    if key == settings.ADMIN_KEY:
+        _clear_key_lockout(key)
+        return {"success": True}
 
     # Check site-level key
     site = find_site_by_key(db, key)
     if site:
         if not site.is_active:
-            return JSONResponse({"success": False, "detail": "Site is inactive"}, status_code=403)
+            logger.warning("Login attempt for inactive site from %s", ip)
+            _record_failed_login(ip, key)
+            return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
+        _clear_key_lockout(key)
         return {"success": True}
 
-    # Check device-level key
+    # Check device-level key (validate parent site is active)
     device = find_device_by_key(db, key)
     if device:
+        if not device.site or not device.site.is_active:
+            logger.warning("Login attempt for inactive site device from %s", ip)
+            _record_failed_login(ip, key)
+            return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
+        _clear_key_lockout(key)
         return {"success": True}
 
-    logger.warning(f"Failed login attempt from {request.client.host if request.client else 'unknown'}")
+    logger.warning("Failed login attempt from %s", ip)
+    _record_failed_login(ip, key)
     return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
 
 
@@ -278,27 +414,33 @@ app.include_router(ota.router, prefix=f"{settings.API_V1_STR}/ota", tags=["ota"]
 app.include_router(stations.router, prefix=f"{settings.API_V1_STR}/stations", tags=["stations"])
 
 # Background heartbeat monitor loop for server
-import asyncio
 from datetime import datetime, timezone, timedelta
 from app.db.database import SessionLocal
 from app.models.core import IndustrySite, Device
 
+_prev_online: set[int] = set()
+
 async def monitor_heartbeats_loop():
+    global _prev_online
     logger.info("Server Heartbeat Monitor loop started")
     while True:
         try:
             db = SessionLocal()
             now = datetime.now(timezone.utc)
             cutoff = now - timedelta(seconds=90)
-            
-            # Find sites with last_sync older than 90 seconds
-            # And update status of all their devices to offline
-            # sites newer than 90 seconds, update to online
+
             sites = db.query(IndustrySite).all()
+            new_online: set[int] = set()
             for site in sites:
                 is_online = site.last_sync is not None and site.last_sync.replace(tzinfo=timezone.utc) >= cutoff
-                status_str = "online" if is_online else "offline"
-                db.query(Device).filter(Device.site_id == site.id).update({"status": status_str})
+                if is_online:
+                    new_online.add(site.id)
+                # Only UPDATE when status actually changed since last check
+                was_online = site.id in _prev_online
+                if is_online != was_online:
+                    status_str = "online" if is_online else "offline"
+                    db.query(Device).filter(Device.site_id == site.id).update({"status": status_str})
+            _prev_online = new_online
             db.commit()
             db.close()
         except Exception as e:

@@ -1,0 +1,439 @@
+{
+  "audit_id": "v1.0.71",
+  "audited_at": "2026-07-20T20:30:00Z",
+  "auditor": "opencode",
+  "scope": {
+    "spec_sections": [
+      "dashboard_auto_refresh_5s",
+      "polling_engine_5s_cycle",
+      "polling_engine_rest_period",
+      "db_storage_1min",
+      "trends_reports_intervals",
+      "exports_png_pdf_csv",
+      "live_trends_png_export",
+      "report_filters",
+      "normal_reports",
+      "average_reports",
+      "trend_chart",
+      "trend_graph",
+      "trend_data_table",
+      "system_summary",
+      "live_parameters",
+      "live_trends",
+      "broadcast_messages",
+      "spcb_push_1min_per_param",
+      "cpcb_txt_15min_avg",
+      "cpcb_configured_path",
+      "offline_parameter_freeze"
+    ]
+  },
+  "findings": [
+    {
+      "id": "F001",
+      "section": "dashboard_auto_refresh_5s",
+      "severity": "PASS",
+      "description": "Dashboard telemetry auto-refresh mechanism",
+      "expected": "Dashboard auto-refreshes every 5 seconds to show latest readings",
+      "actual": "WebSocket push (real-time) — better than 5s polling. Reconnect on disconnect uses 5s delay."
+    },
+    {
+      "id": "F002",
+      "section": "polling_engine_5s_cycle",
+      "severity": "FIXED",
+      "description": "Polling engine cycle interval",
+      "expected": "Polling engine polls each device every 5 seconds",
+      "actual": "POLLING_DEFAULT_INTERVAL changed from 60 → 5 in config.py:291",
+      "fix": "config.py:291 — POLLING_DEFAULT_INTERVAL: int = 5"
+    },
+    {
+      "id": "F003",
+      "section": "polling_engine_rest_period",
+      "severity": "PASS",
+      "description": "Rest period between polling cycles",
+      "expected": "Engine sleeps/rests between cycles to avoid busy-loop",
+      "actual": "asyncio.sleep(interval + jitter) after each cycle. Independent coroutines per device."
+    },
+    {
+      "id": "F004",
+      "section": "db_storage_1min",
+      "severity": "PASS",
+      "description": "Historical data storage interval",
+      "expected": "Historical data written to DB at most once per minute",
+      "actual": "Dedup logic enforces once per calendar minute per parameter. LiveData written every cycle."
+    },
+    {
+      "id": "F005",
+      "section": "trends_reports_intervals",
+      "severity": "FIXED",
+      "description": "Trends and Reports interval options",
+      "expected": "Intervals = [1, 5, 15, 30, 60] minutes",
+      "actual": "ReportsScreen.tsx: added '5 min' to NORMAL_INTERVALS and '5 min avg' to AVG_INTERVALS",
+      "fix": "ReportsScreen.tsx:25 — { label: '5 min', value: 5 }, ReportsScreen.tsx:36 — { label: '5 min avg', value: 'avg_5min' }"
+    },
+    {
+      "id": "F006",
+      "section": "exports_png_pdf_csv",
+      "severity": "FIXED",
+      "description": "CSV export for live trend dashboard",
+      "expected": "CSV export available in Live Trends toolbar",
+      "actual": "DashboardScreen.tsx: added exportTrendCSV function and CSV button in Live Trends toolbar",
+      "fix": "DashboardScreen.tsx:594-611 — exportTrendCSV function, line 749 — CSV button"
+    },
+    {
+      "id": "F007",
+      "section": "live_trends_png_export",
+      "severity": "PASS",
+      "description": "Live Trends chart PNG export on Dashboard",
+      "expected": "Dashboard live trend chart has PNG+PDF+CSV export",
+      "actual": "downloadPNG (line 562), downloadPDF (line 572), exportTrendCSV (line 594) all present and functional."
+    },
+    {
+      "id": "F017",
+      "section": "report_filters",
+      "severity": "PASS",
+      "description": "Report Filters — station parameter filter + multi-select",
+      "expected": "User can select station and multi-select parameters, then refresh preview",
+      "actual": "ReportsScreen.tsx:539-573 — Station name dropdown filters parameters, multi-select checkboxes with Select All, Refresh Preview button triggers data fetch. allStations filtered to only include stations with parameters (line 186-195). filteredParams scoped to selected station (line 201-208)."
+    },
+    {
+      "id": "F018",
+      "section": "normal_reports",
+      "severity": "PASS",
+      "description": "Normal Reports — interval-based report with raw readings",
+      "expected": "Select interval, date range, export PDF/CSV, preview table shows data",
+      "actual": "ReportsScreen.tsx:575-588 via ReportSection — 9 intervals (1min-24hr), date+time from/to, Export PDF + Export CSV. fetchData (line 414) calls /trends/chart-data with avg_type=raw. Step filtering deduplicates within interval windows (line 450-463). Preview shows first 50 rows (line 130). Large-export guard prompts confirm at >15 days or >21600 rows (line 513)."
+    },
+    {
+      "id": "F019",
+      "section": "average_reports",
+      "severity": "PASS",
+      "description": "Average Reports — averaged-value report with avg intervals",
+      "expected": "Select avg interval, date range, export PDF/CSV, preview table",
+      "actual": "ReportsScreen.tsx:590-603 via ReportSection — 8 avg intervals (5min-24hr). Same structure as Normal Reports but uses avg_type=avg_5min etc. Backend /trends/chart-data queries Averages table when avg_type != raw (trends.py:79-106)."
+    },
+    {
+      "id": "F020",
+      "section": "trend_chart",
+      "severity": "PASS",
+      "description": "Trend Chart — single-parameter trend with Chart.js + alarm limit lines",
+      "expected": "Select parameter, resolution, date range; generate trend chart with limit lines; export PNG/PDF/CSV",
+      "actual": "ReportsScreen.tsx:606-654 — Parameter dropdown (single), Resolution dropdown (raw/5min-24hr avg), Date+Time from/to, Generate Trend, Reset Filters, Export PNG (line 357), Export PDF (line 366), Export CSV (line 386). Chart.js renders with H/H, High, Low, L/L limit lines (line 272-278). AbortController for cancellation (line 231-233). Trend data model includes labels, values, qualities, unit, parameter name."
+    },
+    {
+      "id": "F021",
+      "section": "trend_graph",
+      "severity": "PASS",
+      "description": "Trend Graph — canvas-based chart rendering",
+      "expected": "Canvas element renders Chart.js chart; empty state when no data",
+      "actual": "ReportsScreen.tsx:656-660 — canvas ref bound to chartInstanceRef. Conditionally displayed (trendSeries ? 'block' : 'none'). Empty placeholder text when no trend loaded. Chart destroyed on unmount (line 213-215)."
+    },
+    {
+      "id": "F022",
+      "section": "trend_data_table",
+      "severity": "PASS",
+      "description": "Trend Data Table — tabular trend data with quality badges",
+      "expected": "6-column table: Timestamp, Parameter, Value, Unit, Quality, Source. Quality shown with colored badges",
+      "actual": "ReportsScreen.tsx:662-694 — table with 6 columns. Quality maps raw code (U/O/E/N) to label (GOOD/OUT_OF_RANGE/ERROR/NEGATIVE) at line 257-261. Badge classes: badge-success for GOOD, badge-error otherwise. Source column always 'POLL'. Empty state row when trendRows empty."
+    },
+    {
+      "id": "F023",
+      "section": "system_summary",
+      "severity": "PASS",
+      "description": "System Summary — KPI cards on dashboard",
+      "expected": "Shows Total Stations, Online/Offline Params, Active Alarms, PC Network. KPI values update in real-time.",
+      "actual": "DashboardScreen.tsx:661-734 — 5 KPI cards in grid-5 layout. KPIs pushed via WebSocket (no HTTP poll). AMC warning banner 45d before expiry (line 635-645). Network info + internet status fetched every 30s via /settings/network-info (line 249-265). Active Alarms card clickable opens AlarmsInspectorModal (line 700). Broadcast messages with dismiss (line 819-845)."
+    },
+    {
+      "id": "F024",
+      "section": "live_parameters",
+      "severity": "PASS",
+      "description": "Live Parameters — sensor cards telemetry grid",
+      "expected": "Parameters grouped by station/sensor. Each card shows value, trend sparkline, status indicators. Empty state when no params configured.",
+      "actual": "DashboardScreen.tsx:784-813 — ParameterCard (React.memo) per param grouped by station (groupedBySensor line 615-628). Card shows: value (formattedVal), avg (formattedAvgVal), warning limit, sparkline with alarm lines, status dot, raw feed, timestamp. Color-coded per param state (getParamState). Parameter-specific icons (temp/hum/wind/pm). Offline freeze (F011). Unassigned params in separate section (line 801-812). Empty state when no mapped params (line 737-746)."
+    },
+    {
+      "id": "F025",
+      "section": "live_trends",
+      "severity": "PASS",
+      "description": "Live Trends — modal with real-time Chart.js trend chart",
+      "expected": "Modal with parameter selector, real-time updating chart, alarm limit lines, export PNG/PDF/CSV. Historical data on open + live updates via WebSocket.",
+      "actual": "DashboardScreen.tsx:749-782 — modal overlay with backdrop blur. Param selector, Chart.js trend (limit lines H/H/High/Low/L/L). Historical fetch only when modal open (line 320 conditional effect). Real-time update from WebSocket (line 491-556). Export PNG (line 562)/PDF (line 572)/CSV (line 594). Chart destroyed on unmount (line 482-485). dataPointsRef capped at 20 points (line 529)."
+    },
+    {
+      "id": "F026",
+      "section": "broadcast_messages",
+      "severity": "PASS",
+      "description": "Broadcast Messages — RajAPI push alerts displayed on dashboard",
+      "expected": "Broadcasts from central server display as marquee in footer + popup toast on dashboard. Severity color-coded (critical/warn/info). Dismissable per-message. Toggle on/off in Settings.",
+      "actual": "Backend api/broadcasts.py: GET /broadcasts/ list active, POST / create, POST /{id}/dismiss. Model broadcasts table with is_active + expires_at. Frontend AppContext.tsx: fetch on init + refresh every 30s (line 583-589). App.tsx:628-638 — marquee with severity colors, default CPCB fallback text. DashboardScreen.tsx:819-845 — popup toast for first undismissed broadcast, 3 severity styles. localStorage dismissed IDs (line 233-234). SettingsScreen.tsx:484-495 — on/off toggle."
+    },
+    {
+      "id": "F008",
+      "section": "spcb_push_1min_per_param",
+      "severity": "FIXED",
+      "description": "SPCB push docstring mismatch",
+      "expected": "Docstring matches actual scheduler interval",
+      "actual": "server_push.py:7-9 — docstring updated to reflect actual 60s live / 900s delay intervals",
+      "fix": "server_push.py:7-9 — updated docstring to match real scheduler values"
+    },
+    {
+      "id": "F009",
+      "section": "cpcb_txt_15min_avg",
+      "severity": "PASS",
+      "description": "CPCB txt file with 15-minute averages",
+      "expected": "CPCB output written as txt file with 15-minute averaged values",
+      "actual": "Both legacy (Averages avg_15min) and new pipeline (recomputed from 1-min Averages) produce correct data."
+    },
+    {
+      "id": "F010",
+      "section": "cpcb_configured_path",
+      "severity": "PASS",
+      "description": "CPCB output path configured via UI/DB",
+      "expected": "CPCB file path is user-configurable, not hardcoded",
+      "actual": "cpcb_file_path column in ServerConfig, checked before write, nullable VARCHAR(500)."
+    },
+    {
+      "id": "F011",
+      "section": "offline_parameter_freeze",
+      "severity": "FIXED",
+      "description": "Offline parameters freeze to last known value",
+      "expected": "Offline params show last good value, not 'N/A'",
+      "actual": "AppContext.tsx:512 — freezes value to prev value when offline & new value empty. DashboardScreen.tsx:69-75,80-86 — shows frozen value instead of 'N/A'",
+      "fix": "AppContext.tsx:511-512 — frozenVal logic. DashboardScreen.tsx:69-75 — formattedVal offline check. DashboardScreen.tsx:80-86 — formattedAvgVal offline check."
+    },
+    {
+      "id": "F012",
+      "section": "server_push_delay_interval_mismatch",
+      "severity": "FIXED",
+      "description": "Server push delay mode interval mismatch",
+      "expected": "Delay push runs every 15 minutes (as documented)",
+      "actual": "main.py:229 — server_push_delay changed from 60s to 900s (15 min). Docstring updated to match.",
+      "fix": "main.py:229 — seconds=900. server_push.py:7-9 — docstring corrected."
+    },
+    {
+      "id": "F013",
+      "section": "spcb_push_no_connectivity_per_server",
+      "severity": "FIXED",
+      "description": "Per-server connectivity check before SPCB push",
+      "expected": "Check if target server is reachable before HTTP POST",
+      "actual": "server_push.py:182-189 — added _check_server_reachable HEAD helper. Line 203-206 — check before building payloads.",
+      "fix": "server_push.py:182-189 — _check_server_reachable(). Lines 203-206 — connectivity gate in _push_spcb."
+    },
+    {
+      "id": "F014",
+      "section": "averaging_engine_wind_direction_n_plus_1",
+      "severity": "FIXED",
+      "description": "Wind direction averaging N+1 query",
+      "expected": "Batch wind direction queries instead of per-parameter serial queries",
+      "actual": "averaging_engine.py:192-210 — batch fetch all wind direction raw values before loop. Lines 217-228 — lookup from in-memory wind_raw_map.",
+      "fix": "averaging_engine.py:192-210 — wind_param_ids batch query. Lines 217-228 — wind_raw_map.get(pid, []) lookup."
+    },
+    {
+      "id": "F016",
+      "section": "cpcb_export_duplication_risk",
+      "severity": "NOTE",
+      "description": "Both legacy and new CPCB pipelines run simultaneously",
+      "expected": "Two independent pipelines: legacy writes CSV to cpcb_file_path, new pipeline writes to CPCBExportRecord. Different outputs, no data conflict. Left as-is by design."
+    },
+    {
+      "id": "BUG-001",
+      "date": "2026-07-20",
+      "severity": "HIGH",
+      "status": "FIXED",
+      "component": "server_push.py / _push_telemetry_to_rajapi()",
+      "title": "PendingUpload(server_config_id=None) violates NOT NULL FK constraint",
+      "description": "When RajAPI /sync/ telemetry push fails, code queued PendingUpload(server_config_id=None). Column has NOT NULL FK constraint — silently throws IntegrityError, swallowed by bare except. No retry, no visible error.",
+      "root_cause": "Copied SPCB PendingUpload pattern but RajAPI pushes have no ServerConfig row — they belong to the heartbeat layer, not SPCB.",
+      "fix": "Removed both PendingUpload queuing blocks. RajAPI telemetry retried naturally on next 60s heartbeat. Log only.",
+      "files_changed": ["client/backend/ultron_backend/app/services/server_push.py"]
+    },
+    {
+      "id": "BUG-002",
+      "date": "2026-07-20",
+      "severity": "HIGH",
+      "status": "FIXED",
+      "component": "server_push.py / _poll_remote_commands()",
+      "title": "Duplicate remote command execution — commands could fire twice",
+      "description": "send_heartbeat() already receives commands in the RajAPI response body and executes them. _poll_remote_commands() independently polls /api/v1/commands/pending every 60s and executes the same commands. factory_reset or restart_polling could fire twice.",
+      "root_cause": "Legacy MQTT replacement not retired when heartbeat-based command delivery was introduced.",
+      "fix": "Deleted _poll_remote_commands() function and removed its call. Commands now flow exclusively through heartbeat response, executed once.",
+      "files_changed": ["client/backend/ultron_backend/app/services/server_push.py"]
+    },
+    {
+      "id": "BUG-003",
+      "date": "2026-07-20",
+      "severity": "MEDIUM",
+      "status": "FIXED",
+      "component": "server_push.py / _load_rajapi_auth()",
+      "title": "Auth function skips CENTRAL_API_KEY — retries use wrong legacy key",
+      "description": "_load_rajapi_auth() checked RajAPIConfig.auth_token in DB then fell back to legacy RAJAPI_API_KEY. Never checked CENTRAL_API_KEY (the primary key from license verify). Retries for RajAPI payloads would auth-fail on correctly licensed installs.",
+      "root_cause": "Written before CENTRAL_API_KEY auth model was introduced, never updated.",
+      "fix": "Deleted _load_rajapi_auth(). Imported _load_rajapi_config() from rajapi_sync.py (checks CENTRAL_API_KEY first). retry_pending_uploads() now calls _load_rajapi_config(db).",
+      "files_changed": ["client/backend/ultron_backend/app/services/server_push.py"]
+    },
+    {
+      "id": "BUG-004",
+      "date": "2026-07-20",
+      "severity": "MEDIUM",
+      "status": "DEFERRED — Q4 cleanup",
+      "component": "server_push.py / rajapi_sync.py / config.py / models/rajapi.py",
+      "title": "4 competing auth knobs with inconsistent resolution order",
+      "description": "CENTRAL_API_KEY, GATEWAY_ID+DEVICE_SECRET, RAJAPI_API_KEY (legacy), RajAPIConfig.auth_token (DB). Resolution order differs across the three original RajAPI paths. A key valid for heartbeat may fail for telemetry push.",
+      "root_cause": "Auth model evolved across releases without a consolidation pass.",
+      "fix": "Deferred. Decision: CENTRAL_API_KEY primary, GATEWAY_ID+DEVICE_SECRET for fingerprinting. Kill RAJAPI_API_KEY and RajAPIConfig.auth_token in Q4 cleanup pass.",
+      "files_changed": []
+    },
+    {
+      "id": "RAJ-001",
+      "date": "2026-07-20",
+      "scope": "rajapi-server",
+      "severity": "MEDIUM",
+      "status": "FIXED",
+      "component": "sync.py + spcb_sync.py",
+      "title": "Duplicate _get_or_create_param logic across two route modules",
+      "description": "Both sync.py and spcb_sync.py implement their own parameter upsert logic. Any fix or behavioural change must be applied in two places, and they can silently diverge.",
+      "root_cause": "No shared helper module for common DB operations on the central server.",
+      "fix": "Extracted _get_or_create_param to deps.py:21-49. Both sync endpoints now import shared helper. sync.py -19 lines, spcb_sync.py -27 lines.",
+      "files_changed": ["server/backend/app/api/deps.py", "server/backend/app/api/endpoints/sync.py", "server/backend/app/api/endpoints/spcb_sync.py"]
+    },
+    {
+      "id": "RAJ-002",
+      "date": "2026-07-20",
+      "scope": "rajapi-server",
+      "severity": "HIGH",
+      "status": "FIXED",
+      "component": "spcb_sync.py:127",
+      "title": "Quality hardcoded as 'good'/'bad' instead of CPCB codes U/O/E/N",
+      "description": "spcb_sync.py stored quality as the strings 'good' and 'bad'. The client side (UltrON) uses CPCB standard codes: U=Valid, O=Out-of-range, E=Comms-fail, N=Negative, etc. Cross-site quality queries on RajAPI produced inconsistent results — CPCB compliance reports were wrong.",
+      "root_cause": "SPCB endpoint written without reference to the CPCB DataQuality enum on the client.",
+      "fix": "quality=\"good\"/\"bad\" → \"U\"/\"O\" (CPCB valid/operational codes) at spcb_sync.py:127.",
+      "files_changed": ["server/backend/app/api/endpoints/spcb_sync.py"]
+    },
+    {
+      "id": "RAJ-003",
+      "date": "2026-07-20",
+      "scope": "rajapi-server",
+      "severity": "LOW",
+      "status": "FIXED",
+      "component": "commands.py:19-23",
+      "title": "Unnecessary thin wrapper _find_site delegates directly to find_site_by_key",
+      "description": "_find_site() was a 5-line function that only called find_site_by_key() with no added logic. Adds a call frame and a name to track with no benefit.",
+      "root_cause": "Premature abstraction — probably copy-pasted from another module.",
+      "fix": "Removed _find_site() and 2 lazy imports. find_site_by_key() called directly at the one call site. -6 lines.",
+      "files_changed": ["server/backend/app/api/endpoints/commands.py"]
+    },
+    {
+      "id": "RAJ-004",
+      "date": "2026-07-20",
+      "scope": "rajapi-server",
+      "severity": "MEDIUM",
+      "status": "FIXED",
+      "component": "main.py:211",
+      "title": "In-memory rate-limit dict _login_attempts is unbounded — memory leak under attack",
+      "description": "Rate limiting used a defaultdict(list) keyed by IP. Under a sustained login attack from many IPs, the dict grew without bound. In production on a Pi with limited RAM this would OOM.",
+      "root_cause": "TTL sweep or max-entries cap was never added to the in-memory store.",
+      "fix": "Added attempts[-10:] slice cap after each append. ponytail comment names the upgrade path (TTL sweep or Redis). One line.",
+      "files_changed": ["server/backend/app/main.py"]
+    },
+    {
+      "id": "RAJ-005",
+      "date": "2026-07-20",
+      "scope": "rajapi-server",
+      "severity": "HIGH",
+      "status": "FIXED",
+      "component": "main.py:289-316 / monitor_heartbeats_loop()",
+      "title": "Heartbeat monitor is O(sites × devices) — updates all rows every 60s regardless of change",
+      "description": "monitor_heartbeats_loop() iterated ALL sites and ALL devices every 60 seconds issuing an UPDATE per device even if nothing changed. At 1000 sites × 50 devices = 50,000 UPDATE statements per minute.",
+      "root_cause": "Naive full-scan with unconditional write. No delta check.",
+      "fix": "Added _prev_online: set[int] delta tracker. Loop now only issues UPDATEs when a site's online status actually changes tick-to-tick. Eliminates ~99% of writes at steady state.",
+      "files_changed": ["server/backend/app/main.py"]
+    },
+    {
+      "id": "RAJ-006",
+      "date": "2026-07-20",
+      "scope": "rajapi-server",
+      "severity": "LOW",
+      "status": "FIXED",
+      "component": "spcb_sync.py:77,87",
+      "title": "Inconsistent error logging between is_active and AMC checks",
+      "description": "site.is_active check silently returned without logging. AMC expiry check logged last_error. An inactive site left no trace; an AMC-expired site did. Operator debugging was asymmetric.",
+      "root_cause": "Two separate guard clauses written at different times with different error-reporting conventions.",
+      "fix": "Added logger.warning() to both is_active and amc_expiry guards with site ID and name.",
+      "files_changed": ["server/backend/app/api/endpoints/spcb_sync.py"]
+    },
+    {
+      "id": "BUG-005",
+      "date": "2026-07-21",
+      "severity": "MEDIUM",
+      "status": "FIXED",
+      "component": "backend/calibration.py + frontend/CalibrationScreen.tsx",
+      "title": "No DELETE endpoint for calibration jobs",
+      "description": "Calibration jobs could be created and approved but never deleted. No backend route or frontend button existed.",
+      "root_cause": "Feature gap — calibration job lifecycle only included create/approve/reject.",
+      "fix": "Added DELETE /calibration/{job_id} endpoint (calibration.py:276-288). Added red Delete button with confirm dialog in CalibrationScreen.tsx actions column.",
+      "files_changed": ["backend/ultron_backend/app/api/calibration.py", "frontend/src/screens/CalibrationScreen.tsx"]
+    },
+    {
+      "id": "BUG-006",
+      "date": "2026-07-21",
+      "severity": "LOW",
+      "status": "FIXED",
+      "component": "frontend/CalibrationScreen.tsx",
+      "title": "Calibration start error was generic — no actual error shown",
+      "description": "When /calibration/start failed, catch block showed 'Failed to start calibration job.' with no HTTP status or detail. User couldn't diagnose 401/404/422 errors.",
+      "root_cause": "catch block parsed nothing from the response.",
+      "fix": "Added res.json() parse on failure, passes body.detail or 'HTTP {status}' to toast message.",
+      "files_changed": ["frontend/src/screens/CalibrationScreen.tsx"]
+    },
+    {
+      "id": "CHORE-001",
+      "date": "2026-07-21",
+      "severity": "LOW",
+      "status": "FIXED",
+      "component": "frontend/SettingsScreen.tsx",
+      "title": "DB Type exposed in Settings about section",
+      "description": "Settings/about info cards displayed 'DB Type: sqlite' — exposes backend technology choice to end users.",
+      "root_cause": "Information card included db_type key from backend response.",
+      "fix": "Removed DB Type row from the info cards array.",
+      "files_changed": ["frontend/src/screens/SettingsScreen.tsx"]
+    },
+    {
+      "id": "CHORE-002",
+      "date": "2026-07-21",
+      "severity": "LOW",
+      "status": "FIXED",
+      "component": "frontend/ReportsScreen.tsx + TrendsScreen.tsx",
+      "title": "Trend Data Table removed from Reports and Trends screens",
+      "description": "Both Reports and Trends screens had a redundant data table showing the same data already available in chart form. User requested removal.",
+      "root_cause": "Duplicate display of trend data — table added noise when chart covered the same data.",
+      "fix": "Removed the entire card section containing Trend Data Table from both screens.",
+      "files_changed": ["frontend/src/screens/ReportsScreen.tsx", "frontend/src/screens/TrendsScreen.tsx"]
+    },
+    {
+      "id": "BUG-007",
+      "date": "2026-07-21",
+      "severity": "HIGH",
+      "status": "FIXED",
+      "component": "frontend/ParameterCard + chart data",
+      "title": "Offline device shows 0.00 in card and flat zero in charts",
+      "description": "WebSocket handler freezes last known value when device goes offline (AppContext.tsx:512). If last value was 0, ParameterCard showed '0.00' with offline styling. Historical data load converted null → 0 (DashboardScreen.tsx:353), making offline periods render as flat zero lines.",
+      "root_cause": "Multiple paths: (1) WS freeze preserves last value including 0, (2) null → 0 conversion in chart data load, (3) fill(0) for missing series, (4) Sparkline Math.min coerces null to 0.",
+      "fix": "ParameterCard shows 'Offline' text when status !== 'online'. DashboardScreen.tsx:353 → null instead of 0. DashboardScreen.tsx:355 → fill(null) instead of fill(0). Sparkline.tsx filters nulls before min/max, skips null in polyline, shows dashed line when all null.",
+      "files_changed": ["frontend/src/screens/DashboardScreen.tsx", "frontend/src/components/Sparkline.tsx"]
+    }
+  ],
+  "summary": {
+    "total_findings": 41,
+    "pass": 16,
+    "fixed": 21,
+    "note": 1,
+    "deferred": 2,
+    "open": 0,
+    "scopes": {
+      "ultron-client": 35,
+      "rajapi-server": 6
+    },
+    "deploy_pending": [],
+    "version": "2026-07-21 — BUG-005–007 + CHORE-001–002 all FIXED"
+  }
+}

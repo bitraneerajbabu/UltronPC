@@ -6,6 +6,7 @@ interface UserData { id?: number; username: string; full_name?: string; role: st
 interface UserPayload { username?: string; password?: string; full_name?: string | null; role?: string; is_active?: boolean; }
 
 const ShieldIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>);
+const KeyIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>);
 const UserIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
 const PlusIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>);
 const EditIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>);
@@ -30,6 +31,10 @@ export const SettingsScreen = () => {
   const [fwProgress, setFwProgress] = useState(null);
   const [fwChecking, setFwChecking] = useState(false);
   const [customUrl, setCustomUrl] = useState('');
+  const [licenseStatus, setLicenseStatus] = useState(null);
+  const [newLicenseKey, setNewLicenseKey] = useState('');
+  const [activating, setActivating] = useState(false);
+  const [activationError, setActivationError] = useState('');
   const [broadcastEnabled, setBroadcastEnabled] = useState(() => localStorage.getItem('ultron_broadcast_enabled') !== 'false');
 
   const [formData, setFormData] = useState({
@@ -42,14 +47,16 @@ export const SettingsScreen = () => {
   const loadInfo = async () => {
     setLoading(true);
     try {
-      const [infoRes, healthRes, pollRes, plantRes, generalRes, pushRes] = await Promise.all([
+      const [infoRes, healthRes, pollRes, plantRes, generalRes, pushRes, licRes] = await Promise.all([
         authFetch(`${API_BASE}/settings/info`),
         authFetch(`${API_BASE}/settings/health`),
         authFetch(`${API_BASE}/settings/polling-status`),
         authFetch(`${API_BASE}/settings/plant`),
         authFetch(`${API_BASE}/settings/general`),
         authFetch(`${API_BASE}/settings/push-status`),
+        authFetch(`${API_BASE}/license/status`),
       ]);
+      if (licRes.ok) setLicenseStatus(await licRes.json());
       if (infoRes.ok) setAppInfo(await infoRes.json());
       if (healthRes.ok) setHealthStatus(await healthRes.json());
       if (pollRes.ok) setPollingStatus(await pollRes.json());
@@ -352,8 +359,82 @@ export const SettingsScreen = () => {
   const labelS = { fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: '4px' };
   const sectionTitleS = { fontSize: '13px', fontWeight: '700', color: T.primary, marginBottom: '10px', gridColumn: '1 / -1', borderBottom: `1.5px solid ${T.primaryBorder}`, paddingBottom: '6px' };
 
+  const handleLicenseReverify = async () => {
+    if (!newLicenseKey.trim()) { showToast('Enter a license key.', 'warn'); return; }
+    setActivating(true); setActivationError('');
+    try {
+      const res = await authFetch(`${API_BASE}/license/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: newLicenseKey.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('License updated!', 'success');
+        setNewLicenseKey('');
+        const r = await authFetch(`${API_BASE}/license/status`);
+        if (r.ok) setLicenseStatus(await r.json());
+      } else {
+        setActivationError(data.detail || 'Verification failed.');
+      }
+    } catch { setActivationError('Cannot reach backend.'); }
+    finally { setActivating(false); }
+  };
+
+  const s = licenseStatus || {};
+  const renderLicenseTab = () => (
+    <>
+      <div style={{ ...GLASS_CARD, padding: '20px' }}>
+        <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>License Status</div>
+        <div style={{ display: 'grid', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+            <span style={{ color: T.textMuted }}>Status</span>
+            <span style={{ color: s.licensed ? '#22c55e' : '#ef4444', fontWeight: '700' }}>{s.licensed ? 'ACTIVE' : 'INACTIVE'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+            <span style={{ color: T.textMuted }}>License Key</span>
+            <span style={{ color: T.text, fontFamily: 'monospace' }}>{s.key || '—'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+            <span style={{ color: T.textMuted }}>Server URL</span>
+            <span style={{ color: T.text }}>{s.server_url || '—'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+            <span style={{ color: T.textMuted }}>Lock Status</span>
+            <span style={{ color: T.text }}>{s.lock_status || 'unlocked'}</span>
+          </div>
+          {s.lock_reason && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+              <span style={{ color: T.textMuted }}>Lock Reason</span>
+              <span style={{ color: '#f59e0b' }}>{s.lock_reason}</span>
+            </div>
+          )}
+          {s.amc_expiry && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+              <span style={{ color: T.textMuted }}>AMC Expiry</span>
+              <span style={{ color: T.text }}>{s.amc_expiry}</span>
+            </div>
+          )}
+        </div>
+      </div>
+      <div style={{ ...GLASS_CARD, padding: '20px' }}>
+        <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>Update License Key</div>
+        <input
+          type="text" placeholder="Enter new license key"
+          value={newLicenseKey} onChange={e => setNewLicenseKey(e.target.value)}
+          style={{ ...INP, width: '100%', boxSizing: 'border-box', marginBottom: '10px' }}
+        />
+        {activationError && <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '8px' }}>{activationError}</div>}
+        <button className="btn btn-primary" onClick={handleLicenseReverify} disabled={activating} style={{ padding: '8px 20px' }}>
+          {activating ? 'Verifying…' : 'Verify & Save'}
+        </button>
+      </div>
+    </>
+  );
+
   const SUB_TABS = [
     { key: 'system', label: 'System Settings', icon: '#0f766e' },
+    { key: 'license', label: 'License', icon: '#eab308' },
     { key: 'users', label: 'User Management', icon: '#dc2626' },
   ];
 
@@ -381,7 +462,6 @@ export const SettingsScreen = () => {
             { label: 'Stations', value: appInfo?.stations ?? 0 },
             { label: 'Devices', value: appInfo?.devices ?? 0 },
             { label: 'Parameters', value: appInfo?.parameters ?? 0 },
-            { label: 'DB Type', value: appInfo?.db_type || '…' },
           ].map(item => (
             <div key={item.label} style={{ padding: '8px 14px', background: T.primaryBg, borderRadius: T.r }}>
               <div style={{ fontSize: '10px', fontWeight: '600', color: T.textMuted }}>{item.label}</div>
@@ -621,6 +701,7 @@ export const SettingsScreen = () => {
         ))}
       </div>
       {settingsTab === 'system' && renderSystemTab()}
+      {settingsTab === 'license' && renderLicenseTab()}
       {settingsTab === 'users' && renderUsersTab()}
     </div>
   );

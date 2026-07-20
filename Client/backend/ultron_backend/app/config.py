@@ -219,7 +219,7 @@ class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.70.7"
+    APP_VERSION: str = "1.0.71"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -254,7 +254,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
     ADMIN_USERNAME: str = Field(default="Master")
-    ADMIN_PASSWORD: str = Field(default="")
+    ADMIN_PASSWORD: str = Field(default="Ultron123.0")
 
     @field_validator("SECRET_KEY", mode="before")
     @classmethod
@@ -288,7 +288,7 @@ class Settings(BaseSettings):
     DEVICE_SECRET: str = ""
 
     # ─── Polling Engine ───────────────────────────────────────
-    POLLING_DEFAULT_INTERVAL: int = 60
+    POLLING_DEFAULT_INTERVAL: int = 5
     POLLING_MAX_RETRIES: int = 3
     POLLING_RETRY_DELAY: int = 5
 

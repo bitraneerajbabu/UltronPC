@@ -130,13 +130,16 @@ export const CalibrationScreen = () => {
       const res = await authFetch(`${API_BASE}/calibration/start`, {
         method: 'POST', body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `HTTP ${res.status}`);
+      }
       showToast('Calibration job started successfully.');
       setStartJobName('');
       setActiveTab('jobs');
       fetchJobs();
-    } catch {
-      showToast('Failed to start calibration job.', 'error');
+    } catch (e: any) {
+      showToast('Failed: ' + (e.message || 'unknown error'), 'error');
     }
   };
 
@@ -369,6 +372,14 @@ export const CalibrationScreen = () => {
                                 onClick={() => { setSelectedJob(job); setActiveTab('results'); handleViewResults(job.id); }}
                                 disabled={resultsLoading}>{resultsLoading ? '…' : 'Approve'}</button>
                             )}
+                            <button className="table action-btn" style={{ color: '#d32f2f', borderColor: '#d32f2f' }}
+                              onClick={async () => {
+                                if (!window.confirm(`Delete job "${job.job_name}"?`)) return;
+                                const r = await authFetch(`${API_BASE}/calibration/${job.id}`, { method: 'DELETE' });
+                                if (!r.ok) { const b = await r.json().catch(() => ({})); showToast(b.detail || 'Delete failed', 'error'); return; }
+                                showToast('Job deleted.');
+                                fetchJobs();
+                              }}>Delete</button>
                           </div>
                         </td>
                       </tr>

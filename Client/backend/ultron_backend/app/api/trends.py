@@ -44,8 +44,13 @@ async def get_chart_data(
 
     if not end:
         end = datetime.utcnow()
+    elif end.tzinfo is not None:
+        end = end.replace(tzinfo=None)
+
     if not start:
         start = end - timedelta(hours=24)
+    elif start.tzinfo is not None:
+        start = start.replace(tzinfo=None)
 
     param_result = await db.execute(
         select(Parameter).where(Parameter.id.in_(ids))
@@ -124,8 +129,13 @@ async def get_statistics(
     """Min / Max / Avg / StdDev / Count for a parameter in a time range."""
     if not end:
         end = datetime.utcnow()
+    elif end.tzinfo is not None:
+        end = end.replace(tzinfo=None)
+
     if not start:
         start = end - timedelta(hours=24)
+    elif start.tzinfo is not None:
+        start = start.replace(tzinfo=None)
 
     model = HistoricalData if avg_type == AverageType.raw else Averages
     conditions = [
@@ -179,8 +189,13 @@ async def export_trend_csv(
 
     if not end:
         end = datetime.utcnow()
+    elif end.tzinfo is not None:
+        end = end.replace(tzinfo=None)
+
     if not start:
         start = end - timedelta(hours=24)
+    elif start.tzinfo is not None:
+        start = start.replace(tzinfo=None)
 
     model = HistoricalData if avg_type == AverageType.raw else Averages
 

@@ -71,7 +71,7 @@ const renderCsvPattern = (pattern) => {
 };
 
 export const DevicesScreen = () => {
-  const { parameters, devices, stations, addParameter, editParameter, deleteParameter, addDevice, editDevice, showToast, testParameterConnection } = useContext(AppContext);
+  const { parameters, devices, stations, addParameter, editParameter, deleteParameter, addDevice, editDevice, deleteDevice, showToast, testParameterConnection } = useContext(AppContext);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingIdx, setEditingIdx] = useState(null);
@@ -347,7 +347,8 @@ export const DevicesScreen = () => {
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                           <button onClick={() => { if (testingId) return; setTestingId(p.id); showToast('Testing connection...', 'info'); testParameterConnection(p.id).finally(() => setTestingId(null)); }} disabled={testingId === p.id} title="Test" style={{ background: 'none', border: 'none', color: '#10b981', cursor: testingId === p.id ? 'not-allowed' : 'pointer', padding: '4px', opacity: testingId === p.id ? 0.4 : 1 }}><Bolt /></button>
                           <button onClick={() => openEdit(i)} title="Edit" style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '4px' }}><Edit /></button>
-                          <button onClick={() => deleteParameter(p.id)} title="Delete" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}><Trash /></button>
+                          <button onClick={() => deleteParameter(p.id)} title="Delete param" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}><Trash /></button>
+                          {dev && <button onClick={() => { if (window.confirm('Delete device "' + dev.name + '" and all its parameters?')) deleteDevice(dev.id); }} title="Delete device" style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', padding: '4px', opacity: 0.7 }}><Trash /></button>}
                         </div>
                       </td>
                     </tr>

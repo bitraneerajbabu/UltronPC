@@ -66,18 +66,20 @@ interface ParameterCardProps {
 const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, deviceName, isSelected, onClick }: ParameterCardProps) => {
   const isOffline = !data || data.status !== 'online';
   const valFloat = parseFloat(data?.value);
-  const formattedVal = isOffline 
-    ? 'N/A' 
-    : (!isNaN(valFloat) 
+  const formattedVal = isOffline
+    ? 'Offline'
+    : (!isNaN(valFloat)
         ? valFloat.toFixed(2)
         : '0.00');
   const displayTimestamp = isOffline ? (data?.timestamp && data?.timestamp !== '—' ? data.timestamp : '—') : currentTime;
   const state = getParamState(p, data);
 
   const avgFloat = parseFloat(avgVal);
-  const formattedAvgVal = isOffline 
-    ? 'N/A' 
-    : (!isNaN(avgFloat) 
+  const formattedAvgVal = isOffline
+    ? (avgVal != null && avgVal !== '' && !isNaN(parseFloat(avgVal))
+        ? parseFloat(avgVal).toFixed(2)
+        : 'N/A')
+    : (!isNaN(avgFloat)
         ? avgFloat.toFixed(2)
         : '0.00');
 
@@ -348,9 +350,9 @@ export const DashboardScreen = () => {
           parameters.forEach(p => {
             const s = seriesList.find(ser => ser.parameter_id == p.id);
             if (s && s.values) {
-              datasets[p.tag_name] = s.values.map(v => v !== null ? Number(parseFloat(v).toFixed(2)) : 0);
+              datasets[p.tag_name] = s.values.map(v => v !== null ? Number(parseFloat(v).toFixed(2)) : null);
             } else {
-              datasets[p.tag_name] = new Array(labels.length).fill(0);
+              datasets[p.tag_name] = new Array(labels.length).fill(null);
             }
           });
         }
@@ -587,6 +589,26 @@ export const DashboardScreen = () => {
     showToast('PDF print dialog opened.');
   };
 
+  const exportTrendCSV = () => {
+    if (!selectedParam || !dataPointsRef.current.labels) {
+      showToast('Generate a trend first.', 'warn');
+      return;
+    }
+    const headers = ['Time', selectedParam];
+    const rows = dataPointsRef.current.labels.map((label, i) => {
+      const val = dataPointsRef.current.datasets[selectedParam]?.[i];
+      return `${label},${val != null ? val : ''}`;
+    });
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `LiveTrend_${selectedParam}_${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast('Live trend CSV exported.');
+  };
+
   // Performance memoizations
   const groupedBySensor = useMemo(() => {
     const grouped = {};
@@ -746,7 +768,7 @@ export const DashboardScreen = () => {
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button onClick={downloadPNG} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PNG</button>
                       <button onClick={downloadPDF} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PDF</button>
-
+                      <button onClick={exportTrendCSV} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>CSV</button>
                     </div>
                   </div>
                 </div>

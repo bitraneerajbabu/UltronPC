@@ -1,6 +1,7 @@
 import os
 import sys
 from pydantic_settings import BaseSettings, SettingsConfigDict
+import bcrypt
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "RajAPI Central Server v1.0.10"
@@ -16,13 +17,26 @@ class Settings(BaseSettings):
     # IMPORTANT: Set DATABASE_URL in .env for production
     DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
 
-    # Admin key for protected endpoints (site creation, deletion)
+    # Admin login credentials (username + hashed password)
+    ADMIN_USERNAME: str = os.environ.get("ADMIN_USERNAME", "admin")
+    ADMIN_PASSWORD: str = os.environ.get("ADMIN_PASSWORD", "Ultron@2026")
+
+    # Admin key for protected API endpoints (site creation, deletion)
     # Set ADMIN_KEY in server .env — must match what's in client_manager.py
     ADMIN_KEY: str = os.environ.get("ADMIN_KEY", "")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+
 settings = Settings()
+
+
+def _hash_admin_password() -> str:
+    """Pre-hash the admin password at import time so login uses constant-time bcrypt check."""
+    return bcrypt.hashpw(settings.ADMIN_PASSWORD.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+ADMIN_PASSWORD_HASH: str = _hash_admin_password()
 
 if not settings.SECRET_KEY:
     raise RuntimeError(

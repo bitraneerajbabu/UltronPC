@@ -352,47 +352,6 @@ export const TrendsScreen = () => {
         <canvas ref={chartRef} id="historicalTrendChart" height="100" style={{ display: seriesData ? 'block' : 'none' }}></canvas>
       </div>
 
-      <div className="card">
-        <div className="section-title">Trend Data Table</div>
-        <div className="table-wrapper">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>Parameter</th>
-                <th>Value</th>
-                <th>Unit</th>
-                <th>Quality</th>
-                <th>Source</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tableRows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="table-empty">
-                    Configure filters and click "Generate Trend" to load telemetry points.
-                  </td>
-                </tr>
-              ) : (
-                tableRows.map((r, idx) => (
-                  <tr key={idx}>
-                    <td>{r.timestamp}</td>
-                    <td>{r.parameter}</td>
-                    <td><strong>{r.value}</strong></td>
-                    <td>{r.unit}</td>
-                    <td>
-                      <span className={r.quality === 'GOOD' ? 'badge-success' : 'badge-error'}>
-                        {r.quality}
-                      </span>
-                    </td>
-                    <td>{r.source}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 };

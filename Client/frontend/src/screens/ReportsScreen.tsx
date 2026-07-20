@@ -22,6 +22,7 @@ interface ReportSectionProps {
 
 const NORMAL_INTERVALS = [
   { label: '1 min', value: 1 },
+  { label: '5 min', value: 5 },
   { label: '15 min', value: 15 },
   { label: '30 min', value: 30 },
   { label: '1 hr', value: 60 },
@@ -32,6 +33,7 @@ const NORMAL_INTERVALS = [
 ];
 
 const AVG_INTERVALS = [
+  { label: '5 min avg', value: 'avg_5min' },
   { label: '15 min avg', value: 'avg_15min' },
   { label: '30 min avg', value: 'avg_30min' },
   { label: '1 hr avg', value: 'avg_1hr' },
@@ -657,39 +659,6 @@ export const ReportsScreen = () => {
         <canvas ref={chartRef} id="trendChart" height="100" style={{ display: trendSeries ? 'block' : 'none' }}></canvas>
       </div>
 
-      <div className="card">
-        <div className="section-title">Trend Data Table</div>
-        <div className="table-wrapper">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Timestamp</th>
-                <th>Parameter</th>
-                <th>Value</th>
-                <th>Unit</th>
-                <th>Quality</th>
-                <th>Source</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trendRows.length === 0 ? (
-                <tr><td colSpan={6} className="table-empty">Set filters and click "Generate Trend".</td></tr>
-              ) : (
-                trendRows.map((r, idx) => (
-                  <tr key={idx}>
-                    <td>{r.timestamp}</td>
-                    <td>{r.parameter}</td>
-                    <td><strong>{r.value}</strong></td>
-                    <td>{r.unit}</td>
-                    <td><span className={r.quality === 'GOOD' ? 'badge-success' : 'badge-error'}>{r.quality}</span></td>
-                    <td>{r.source}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 };

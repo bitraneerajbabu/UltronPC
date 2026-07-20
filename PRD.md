@@ -124,6 +124,7 @@ The 15-minute regulatory pipeline:
 - Receives: pending commands, active broadcasts, lock/AMC status, OTA deployment info
 - Updates local `lock_store.json` — stops CPCB pushes when site is locked
 - Two-way command channel for remote fleet management
+- Auth: bcrypt admin username/password login, static API key per site (legacy), per-key lockout after 10 failures in 15min
 
 ### 4.9 Central Server — RajAPI
 
@@ -176,11 +177,15 @@ The 15-minute regulatory pipeline:
 
 | Feature | Description |
 |---------|-------------|
-| JWT Auth (Client) | Login returns 10-year JWT, stored in localStorage |
+| JWT Auth (Client) | Login returns JWT + refresh token, stored in localStorage |
 | Role-based Access (Client) | admin (full CRUD) vs client (read-only) |
 | API Key Auth (Server) | Static key per site, X-API-Key header |
-| Admin Key Auth (Server) | Login returns key in sessionStorage |
-| AMC Expiry | 403 on expired sites |
+| Admin Key Auth (Server) | Login returns key in sessionStorage; also bcrypt-based admin username/password login |
+| Rate Limiting (Server) | Per-IP login rate limit (5 req/60s); per-key lockout (10 failures → 15min); API rate limiter (200 req/min, exempts sync/heartbeat/spcb) |
+| Account Lockout (Client) | Per-username tracking, 5 failed attempts → 15min lock, auto-clear on expiry |
+| Password Hashing (Server) | bcrypt at config load, constant-time verification, DB sync on first login |
+| User Enumeration Protection | Same generic error message for invalid credentials regardless of key type, inactive site returns 401 not 403 |
+| AMC Expiry | 403 on expired sites, generic "Could not validate API Key" |
 | Remote Lock | Admin locks site → stops CPCB pushes |
 | License Verification | Key verified against RajAPI, encrypted in `.env.enc` |
 | SQLite Concurrency | Semaphore + randomized backoff + jitter for write contention |
@@ -283,13 +288,17 @@ The 15-minute regulatory pipeline:
 
 | Requirement | Status |
 |-------------|--------|
-| JWT token expiry | 10 years (configurable) — effectively never expires |
+| JWT token expiry | 24h (access) + 7d refresh token (rotation) |
 | Role-based access | admin / client |
 | HTTPS on client UI | No (localhost-bound) |
 | HTTPS on server | Edge only (cloudflare → HTTP origin) |
 | Secrets at rest | `.env.enc` with obfuscated key |
 | DB encryption | None (SQLite file access = full access) |
 | Input validation | Pydantic + path traversal checks (CPCB export) |
+| Rate limiting (server) | Per-IP login (5/60s), per-key lockout (10/15min), API (200/min) |
+| Account lockout (client) | 5 failed → 15min lock, auto-clear |
+| Password hashing | bcrypt at config load (server), bcrypt+verify (client) |
+| User enumeration | Fixed — generic error messages, uniform status codes |
 
 ### 6.4 Compatibility
 
@@ -354,6 +363,11 @@ The 15-minute regulatory pipeline:
 **Fixed issues seen in audits:**
 - `.env.bak` committed to git → deleted + `.gitignore` updated (Critical)
 - `DataQuality` enum bug (all codes → "U") → fixed (Medium)
+- User enumeration via distinct error codes → fixed; uniform 401/403 responses (High)
+- Missing rate limiting on auth endpoints → implemented per-IP (5/60s) + per-key lockout (High)
+- Weak guessable passwords → strengthened defaults; bcrypt hashing added (Medium)
+- Username enumeration in RajAPI login → generic "Invalid credentials" for all paths (Medium)
+- `_sync_admin_password` race on empty DB → error caught safely (Low)
 
 ---
 
@@ -365,7 +379,7 @@ The 15-minute regulatory pipeline:
 | JWT vs sessions | JWT avoids server-side state | Accepted |
 | No refresh tokens | Inline with infinite-session model | Accepted, but should revisit |
 | 10-year token expiry | Matches "never log out" product assumption | Accepted, but should revisit |
-| Static API keys vs JWTs for server | Legacy, simplest v1 auth | Should migrate to JWTs |
+| Static API keys vs JWTs for server | Legacy, simplest v1 auth | In progress — bcrypt admin login added; migrate site keys to JWTs next |
 | No message broker | Acceptable for single-machine deployment | Accepted |
 | Synced averaging vs event-driven | Tick-based for deterministic CPCB windows | Accepted |
 

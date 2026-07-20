@@ -115,19 +115,15 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Account lockout check
+    # Password is valid — check account state (same 401 response to
+    # prevent username enumeration via distinct status codes)
     locked_reason = await check_account_locked(user)
-    if locked_reason:
-        audit.warning(f"Locked login attempt for username='{payload.username}' ip='{ip_address}'")
+    if locked_reason or not user.is_active:
+        audit.warning(f"Blocked login: username='{payload.username}' reason='locked_or_disabled' ip='{ip_address}'")
         raise HTTPException(
-            status_code=status.HTTP_423_LOCKED,
-            detail=locked_reason,
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is disabled. Contact your administrator.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     # Success — reset attempts, update login time

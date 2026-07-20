@@ -305,6 +305,9 @@ Types:
 - **Elements:** UltrON logo icon, app name, version badge, username input, password input, login button, copyright footer
 - **Error state:** Red border on inputs + error message below form
 - **Loading state:** Button shows spinner, inputs disabled
+- **Lockout state:** After 5 failed attempts, account locked for 15min — show countdown timer
+- **Rate limit state:** After 5 rapid attempts, show "Too many attempts. Try again in 60s."
+- **Password change prompt:** On first login or admin-enforced change, redirect to password change form
 
 ---
 
@@ -340,3 +343,6 @@ Types:
 | Toast DOM-created | AppContext | Not React-idiomatic; hard to test | React portal-based toast |
 | No focus trap in Modal | Modal.tsx | Keyboard navigation escape | Add focus trap library |
 | No React Router | App.tsx | No deep-linking, no browser history | Add react-router-dom |
+| NaN on negative number input | DevicesScreen.tsx:129-137 | `Number("-")` → NaN → blank field | Fixed — store string, convert to number at save time |
+| `description` overwrite on save | DevicesScreen.tsx:196-207 | Param description gets overwritten with station name | Fixed — removed from save payload |
+| `===` vs `==` in AppContext | AppContext.tsx:607,614 | Edit/delete parameter fails when IDs are string vs number | Fixed — changed to `===` |

@@ -189,25 +189,33 @@ async def run_averaging_for_all_parameters():
             )
             batch_rows = batch_result.all()
 
+            # ─── Batch fetch raw values for wind direction parameters ───
+            wind_param_ids = [pid for pid, _, _ in batch_rows
+                              if _is_wind_direction(parameters.get(pid))]
+            wind_raw_map = {}  # pid -> [raw_values]
+            if wind_param_ids:
+                wind_result = await db.execute(
+                    select(HistoricalData.parameter_id, HistoricalData.value)
+                    .where(
+                        and_(
+                            HistoricalData.parameter_id.in_(wind_param_ids),
+                            HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range, DataQuality.uncertain)),
+                            HistoricalData.timestamp >= start,
+                            HistoricalData.timestamp < end,
+                        )
+                    )
+                )
+                for wpid, wval in wind_result.all():
+                    if wval is not None:
+                        wind_raw_map.setdefault(wpid, []).append(float(wval))
+
             for pid, avg_val, count in batch_rows:
                 if avg_val is None or count == 0:
                     continue
 
                 param = parameters.get(pid)
                 if param and _is_wind_direction(param):
-                    # Recalculate vector average for wind direction
-                    raw_result = await db.execute(
-                        select(HistoricalData.value)
-                        .where(
-                            and_(
-                                HistoricalData.parameter_id == pid,
-                                HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range, DataQuality.uncertain)),
-                                HistoricalData.timestamp >= start,
-                                HistoricalData.timestamp < end,
-                            )
-                        )
-                    )
-                    raw_vals = [float(r[0]) for r in raw_result.all() if r[0] is not None]
+                    raw_vals = wind_raw_map.get(pid, [])
                     if raw_vals:
                         sin_sum = sum(math.sin(math.radians(v)) for v in raw_vals)
                         cos_sum = sum(math.cos(math.radians(v)) for v in raw_vals)

@@ -57,7 +57,6 @@ const formatError = (detail: unknown, fallback: string): string => {
 };
 
 const SUB_TABS = [
-  { key: 'rajapi', label: 'RajAPI Server', icon: '#2563eb' },
   { key: 'spcb', label: 'SPCB server', icon: '#0f766e' },
   { key: 'cpcb', label: 'CPCB TXT File Generation', icon: '#ca8a04' },
   { key: 'led', label: 'LED Board (LAN)', icon: '#ea580c' },
@@ -65,7 +64,7 @@ const SUB_TABS = [
 
 export const CPCB = () => {
   const { API_BASE, showToast, authFetch, currentUser } = useContext(AppContext);
-  const [subTab, setSubTab] = useState('rajapi');
+  const [subTab, setSubTab] = useState('spcb');
 
   // ─── Push Servers (SPCB / CPCB / Central Sync / LED) ───
   const [servers, setServers] = useState<PushServer[]>([]);
@@ -83,99 +82,7 @@ export const CPCB = () => {
   const [historicalDates, setHistoricalDates] = useState<Record<number, string>>({});
   const [generatingHistorical, setGeneratingHistorical] = useState<Record<number, boolean>>({});
 
-  // ─── RajAPI Sync ───
-  const [rajapiPasscode, setRajapiPasscode] = useState('');
-  const [rajapiUnlocked, setRajapiUnlocked] = useState(false);
-  
-  const [rajapiGlobalStationId, setRajapiGlobalStationId] = useState('');
-  const [rajapiGlobalApiKey, setRajapiGlobalApiKey] = useState('');
-  const [rajapiEnabled, setRajapiEnabled] = useState(false);
-
-  const [rajapiTesting, setRajapiTesting] = useState(false);
-  const [rajapiTestResult, setRajapiTestResult] = useState<{ success: boolean; status_code: number; message: string } | null>(null);
-
-  useEffect(() => { loadPushData(); loadRajapiConfig(); }, []);
-
-  const loadRajapiConfig = async () => {
-    try {
-      const res = await authFetch(`${API_BASE}/settings/rajapi`);
-      if (res.ok) {
-        const data = await res.json();
-        setRajapiGlobalApiKey(data.rajapi_api_key || '');
-        setRajapiGlobalStationId(data.rajapi_station_id || '');
-        setRajapiEnabled(data.rajapi_sync_enabled ?? true);
-      }
-    } catch {}
-  };
-
-  const loadRajapiStations = async () => {
-    try {
-      const res = await authFetch(`${API_BASE}/stations/`);
-      if (!res.ok) return;
-      setRajapiStations(await res.json());
-    } catch {}
-  };
-
-  const handleSaveRajapi = async () => {
-    setSaving(true);
-    try {
-      // 1. Save global settings
-      const res = await authFetch(`${API_BASE}/settings/rajapi`, {
-        method: 'POST',
-        body: JSON.stringify({
-          rajapi_api_key: rajapiGlobalApiKey,
-          rajapi_station_id: rajapiGlobalStationId,
-          rajapi_sync_enabled: rajapiEnabled,
-        }),
-      });
-      if (!res.ok) throw new Error('Failed to save RajAPI settings');
-
-      // 2. Also call the regular server mapping save for the RajAPI server mappings
-      await handleSave('rajapi');
-
-      showToast('RajAPI settings saved successfully.', 'success');
-    } catch (e: unknown) {
-      showToast(`Save failed: ${(e as Error).message}`, 'error');
-    } finally { setSaving(false); }
-  };
-
-  const handleApplyRajapiToAll = () => {
-    const rajapiServer = servers.find(s => s.name === 'RajAPI');
-    if (!rajapiServer) {
-        showToast('RajAPI server not found yet. Please reload.', 'error');
-        return;
-    }
-    const srvKey = rajapiServer.id ?? rajapiServer._tempId;
-    if (!srvKey) return;
-    
-    setEditedMappings((prev) => {
-      const next = { ...prev };
-      mappings.forEach(param => {
-        if (!next[param.parameter_id]) next[param.parameter_id] = {};
-        next[param.parameter_id][srvKey] = {
-          ...(next[param.parameter_id][srvKey] || {} as MappingEdit),
-          is_active: true,
-          api_id: rajapiGlobalStationId,
-          api_name: rajapiGlobalApiKey,
-        };
-      });
-      return next;
-    });
-    showToast('Applied to all parameters. Remember to save!', 'success');
-  };
-
-  const handleTestRajapi = async () => {
-    setRajapiTesting(true);
-    try {
-      const res = await authFetch(`${API_BASE}/rajapi/test`, { method: 'POST' });
-      const data = await res.json();
-      setRajapiTestResult(data);
-    } catch (e: unknown) {
-      setRajapiTestResult({ success: false, status_code: 0, message: (e as Error).message });
-    } finally { setRajapiTesting(false); }
-  };
-
-
+  useEffect(() => { loadPushData(); }, []);
 
   useEffect(() => {
     const id = setInterval(async () => {
@@ -190,21 +97,15 @@ export const CPCB = () => {
   const loadPushData = async () => {
     setPushLoading(true);
     try {
-      const [srvRes, mapRes, netRes] = await Promise.all([
+      const [srvRes, mapRes] = await Promise.all([
         authFetch(`${API_BASE}/server-config/`),
         authFetch(`${API_BASE}/server-config/mappings`),
-        authFetch(`${API_BASE}/settings/network-info`),
       ]);
       if (!srvRes.ok || !mapRes.ok) throw new Error('Failed to load');
       const serversData = await srvRes.json();
       const mappingsData = await mapRes.json();
       setServers(serversData);
       setMappings(mappingsData);
-
-      if (netRes.ok) {
-        const netData = await netRes.json();
-        setLanIp(netData.lan_ip || '127.0.0.1');
-      }
 
       const initialEdits: Record<number, Record<string, MappingEdit>> = {};
       mappingsData.forEach((param) => {
@@ -402,7 +303,7 @@ export const CPCB = () => {
     );
   };
 
-  const renderMappingTable = (serverFilter: (s: PushServer) => boolean) => {
+  const renderMappingTable = (serverFilter: (s: PushServer) => boolean, forceStationName?: string) => {
     const filteredServers = servers.filter((s) => (s.id || s._tempId) && s.is_active && serverFilter(s));
     if (filteredServers.length === 0) return null;
 
@@ -459,7 +360,7 @@ export const CPCB = () => {
                         return (
                           <tr key={param.parameter_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                             <td style={{ padding: '6px 10px', fontWeight: '700', color: '#0f172a', fontSize: '12px' }}>{param.channel_no}</td>
-                            <td style={{ padding: '6px 10px', color: '#475569', fontSize: '12px' }}>{param.station_name}</td>
+                            <td style={{ padding: '6px 10px', color: '#475569', fontSize: '12px' }}>{forceStationName || param.station_name}</td>
                             <td style={{ padding: '6px 10px', fontWeight: '700', color: '#0f766e', fontSize: '12px' }}>{param.parameter_name}</td>
                             <td style={{ padding: '6px 10px' }}><Toggle checked={!!state.is_active} onChange={() => cellChg('is_active', !state.is_active)} /></td>
                             {isLed ? (
@@ -515,7 +416,7 @@ export const CPCB = () => {
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
           <button onClick={() => addServer('tspcb')} style={{ background: 'transparent', border: '1.5px solid #0f766e', borderRadius: '8px', color: '#0f766e', padding: '6px 14px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Plus /> Add SPCB Server</button>
         </div>
-        {renderMappingTable((s) => s.protocol === 'tspcb' || s.protocol === 'both')}
+        {renderMappingTable((s) => s.protocol === 'tspcb' || s.protocol === 'both', 'Sunshine')}
       </div>
     );
   };
@@ -607,128 +508,6 @@ export const CPCB = () => {
     );
   };
 
-  // ─── RajAPI Sync Section ───
-  const renderRajapiSection = () => {
-    return (
-      <div className="card" style={{ padding: '20px' }}>
-        {sectionHeader(3, 'RajAPI Server', 'Authenticate and push data to RajAPI central server', '#2563eb', handleSaveRajapi)}
-
-        <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', background: '#fff', marginBottom: '14px' }}>
-          
-          {/* Unlock Passcode Box */}
-          {!rajapiUnlocked ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
-              <label style={s()}>Unlock RajAPI Settings</label>
-              <div style={{ display: 'flex', gap: '8px', width: '100%', maxWidth: '300px' }}>
-                <input
-                  type="password"
-                  value={rajapiPasscode}
-                  onChange={e => setRajapiPasscode(e.target.value)}
-                  placeholder="Enter passcode"
-                  style={{ ...ipt, flex: 1 }}
-                />
-                <button
-                  onClick={() => {
-                    if (rajapiPasscode === 'N@9493poiu') {
-                      setRajapiUnlocked(true);
-                      showToast('Unlocked RajAPI Settings', 'success');
-                    } else {
-                      showToast('Invalid passcode', 'error');
-                    }
-                  }}
-                  style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', padding: '0 16px', fontWeight: '700', cursor: 'pointer' }}
-                >Unlock</button>
-              </div>
-              <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#dc2626', fontWeight: '600' }}>
-                RajAPI Server settings are locked. Enter passcode to edit.
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '13px', fontWeight: '700', color: '#334155' }}>Enable RajAPI Sync</span>
-                <Toggle checked={rajapiEnabled} onChange={() => setRajapiEnabled(!rajapiEnabled)} />
-              </div>
-
-              <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                <div style={{ flex: '1 1 200px' }}>
-                  <label style={s()}>Custom Station ID (Device ID)</label>
-                  <input
-                    type="text"
-                    value={rajapiGlobalStationId}
-                    onChange={e => setRajapiGlobalStationId(e.target.value)}
-                    placeholder="e.g. STN-01"
-                    style={ipt}
-                  />
-                </div>
-                <div style={{ flex: '1 1 200px' }}>
-                  <label style={s()}>API Key (Username)</label>
-                  <input
-                    type="password"
-                    value={rajapiGlobalApiKey}
-                    onChange={e => setRajapiGlobalApiKey(e.target.value)}
-                    placeholder="Paste API Key here"
-                    style={ipt}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
-                <button
-                  onClick={handleApplyRajapiToAll}
-                  style={{
-                    background: '#f8fafc', color: '#2563eb', border: '1px solid #2563eb',
-                    borderRadius: '8px', padding: '8px 16px', fontSize: '12px',
-                    fontWeight: '700', cursor: 'pointer',
-                  }}
-                >
-                  Apply to Mapped Parameters
-                </button>
-                <button
-                  onClick={handleTestRajapi}
-                  disabled={rajapiTesting || !rajapiGlobalApiKey}
-                  style={{
-                    background: '#2563eb', color: '#fff', border: 'none',
-                    borderRadius: '8px', padding: '8px 16px', fontSize: '12px',
-                    fontWeight: '700', cursor: rajapiTesting ? 'not-allowed' : 'pointer',
-                    opacity: rajapiTesting || !rajapiGlobalApiKey ? 0.6 : 1,
-                  }}
-                >
-                  {rajapiTesting ? 'Testing...' : 'Test Connection'}
-                </button>
-              </div>
-
-              {rajapiTestResult && (
-                <div style={{
-                  padding: '10px 12px', borderRadius: '8px',
-                  background: rajapiTestResult.success ? '#f0fdf4' : '#fef2f2',
-                  border: `1px solid ${rajapiTestResult.success ? '#86efac' : '#fecaca'}`,
-                  fontSize: '12px', color: rajapiTestResult.success ? '#15803d' : '#b91c1c',
-                }}>
-                  <strong>{rajapiTestResult.success ? 'OK' : 'Failed'}</strong> (HTTP {rajapiTestResult.status_code}): {rajapiTestResult.message}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Display Mapping Table for RajAPI */}
-        <h4 style={{ margin: '10px 0', fontSize: '14px', fontWeight: '800', color: '#0f172a' }}>RajAPI Parameter Mappings</h4>
-        <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#64748b' }}>
-          Select which parameters to sync to RajAPI. Click "Apply to Mapped Parameters" above to auto-fill the custom Station ID and API Key.
-        </p>
-        
-        {servers.filter(s => s.name === 'RajAPI').length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px', border: '1.5px dashed #e2e8f0', borderRadius: '10px' }}>
-            RajAPI server profile is initializing. Please save or reload page.
-          </div>
-        ) : (
-          renderMappingTable((s) => s.name === 'RajAPI')
-        )}
-      </div>
-    );
-  };
-
   // ─── Test Response Modal ───
 
   return (
@@ -752,7 +531,6 @@ export const CPCB = () => {
         {subTab === 'spcb' && renderSpcbSection()}
         {subTab === 'cpcb' && renderCpcbSection()}
         {subTab === 'led' && renderLedSection()}
-        {subTab === 'rajapi' && renderRajapiSection()}
       </div>
 
       <Modal isOpen={testResultModal !== null} title={testResultModal?.success ? 'Success' : 'Failed'} onClose={() => setTestResultModal(null)}>

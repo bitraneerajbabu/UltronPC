@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 from app.db.database import get_db
 from app.models.core import IndustrySite, PendingCommand
-from app.api.deps import AuthContext, get_auth_context
+from app.api.deps import AuthContext, get_auth_context, find_site_by_key
 from app.core.config import settings
 
 router = APIRouter()
@@ -14,13 +14,6 @@ SUPPORTED_COMMANDS = {"restart_polling", "reboot_system", "factory_reset"}
 
 class CommandRequest(BaseModel):
     action: str
-
-
-def _find_site(db: Session, station_id: Optional[str]):
-    if not station_id:
-        return None
-    from app.api.deps import find_site_by_key
-    return find_site_by_key(db, station_id)
 
 
 @router.get("/supported")
@@ -57,7 +50,7 @@ def get_pending_commands(
     db: Session = Depends(get_db),
 ):
     effective_station_id = x_station_id
-    site = _find_site(db, effective_station_id)
+    site = find_site_by_key(db, effective_station_id)
     if not site and x_admin_key != settings.ADMIN_KEY:
         raise HTTPException(status_code=403, detail="Invalid station or admin key")
 
@@ -93,7 +86,7 @@ def ack_command(
         eff_sid = cmd.station_id
     else:
         eff_sid = x_station_id
-    site = _find_site(db, eff_sid) if eff_sid else None
+    site = find_site_by_key(db, eff_sid) if eff_sid else None
     resolved_key = site.api_key if site else eff_sid
     if not resolved_key or cmd.station_id != resolved_key:
             raise HTTPException(status_code=403, detail="Invalid admin key or station_id")

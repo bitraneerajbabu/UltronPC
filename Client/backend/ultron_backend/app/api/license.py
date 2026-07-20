@@ -58,12 +58,15 @@ class LicenseVerifyRequest(BaseModel):
 async def get_license_status():
     from app.services.lock_store import get_lock_status
     lock_data = await get_lock_status()
+    raw = settings.CENTRAL_API_KEY or ""
+    masked = raw[:4] + "*" * (len(raw) - 4) if len(raw) > 4 else raw
     return {
         "licensed": True,
         "server_url": settings.CENTRAL_API_URL,
         "lock_status": lock_data.get("lock_status", "unlocked"),
         "lock_reason": lock_data.get("lock_reason"),
         "amc_expiry": lock_data.get("amc_expiry"),
+        "key": masked or None,
     }
 
 @router.post("/verify")

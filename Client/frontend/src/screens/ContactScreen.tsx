@@ -87,7 +87,7 @@ const MapPinIcon = () => (
 export const ContactScreen = () => {
   const { currentUser } = useContext(AppContext);
   const [localVersion, setLocalVersion] = useState('');
-  useEffect(() => { fetch('/version').then(r => r.ok ? r.text() : '').then(setLocalVersion).catch(() => {}); }, []);
+  useEffect(() => { fetch('/api/v1/version').then(r => r.ok ? r.json() : {version:''}).then(d => setLocalVersion(d.version || '')).catch(() => {}); }, []);
 
   return (
     <div className="screen active" id="contactScreen">

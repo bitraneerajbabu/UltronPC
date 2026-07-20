@@ -5,8 +5,8 @@ from pydantic import BaseModel
 from typing import Optional, List
 from app.db.database import get_db
 from app.schemas.api_models import ClientSyncPayload
-from app.api.deps import get_current_site
-from app.models.core import IndustrySite, TelemetryData, Parameter, Device, Broadcast, PendingCommand
+from app.api.deps import get_current_site, _get_or_create_param
+from app.models.core import IndustrySite, TelemetryData, Broadcast, PendingCommand
 
 router = APIRouter()
 
@@ -21,33 +21,7 @@ def sync_telemetry(
 
     # Process the incoming points
     for point in payload.points:
-        # Check if parameter exists, create if not
-        param = db.query(Parameter).filter(
-            Parameter.tag_name == point.tag_name,
-            Parameter.device.has(site_id=site.id)
-        ).first()
-
-        if not param:
-            # Find or create a generic device for this site
-            generic_device = db.query(Device).filter(
-                Device.site_id == site.id,
-                Device.name == "Default Sync Device"
-            ).first()
-            if not generic_device:
-                generic_device = Device(site_id=site.id, name="Default Sync Device", status="online")
-                db.add(generic_device)
-                db.flush()
-
-            param = Parameter(
-                tag_name=point.tag_name,
-                name=point.tag_name,
-                unit=point.unit or "",
-                device_id=generic_device.id
-            )
-            db.add(param)
-            db.flush()
-        elif not param.unit and point.unit:
-            param.unit = point.unit
+        param = _get_or_create_param(db, site, point.tag_name, point.unit or "")
 
         telemetry = TelemetryData(
             site_id=site.id,

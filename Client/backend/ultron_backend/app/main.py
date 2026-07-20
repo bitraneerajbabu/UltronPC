@@ -226,7 +226,7 @@ async def lifespan(app: FastAPI):
         run_server_push,
         args=["delay"],
         trigger="interval",
-        seconds=60,
+        seconds=900,
         id="server_push_delay",
         replace_existing=True,
     )

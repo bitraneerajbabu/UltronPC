@@ -377,17 +377,84 @@ JWT_BLACKLIST_ENABLED=True
 
 ---
 
-## Upgrade Notes (v1.0.70 → v1.0.71)
+---
 
-### Backward Compatibility
+## RajAPI Server Security (Central Server)
 
+### Authentication Model
+
+The RajAPI server supports dual auth:
+
+| Auth Method | Mechanism | Use Case |
+|-------------|-----------|----------|
+| **Admin username/password** | bcrypt `checkpw` against hash computed at config load | Admin dashboard login |
+| **Static API key (legacy)** | `X-API-Key` header, DB lookup | Site/device sync, backward compatibility |
+
+### Rate Limiting (Server-side)
+
+| Limit | Scope | Window | Action |
+|-------|-------|--------|--------|
+| Login attempts | Per-IP | 5 req / 60s | HTTP 429 + clear old entries |
+| Key lockout | Per-key | 10 failures → 15min lock | In-memory lockout, auto-clear |
+| API rate limit | Per-IP | 200 req / 60s | HTTP 429 exempts sync/heartbeat/spcb |
+
+Implemented via in-memory sliding-window counters in `main.py`.
+
+### User Enumeration Protection
+
+All failed auth paths return identical generic error:
+
+| Key Type | Failure Response |
+|----------|-----------------|
+| Invalid key | `401 {"detail": "Invalid credentials"}` |
+| Inactive site key | `401 {"detail": "Invalid credentials"}` (not 403) |
+| Expired AMC | `403 {"detail": "Could not validate API Key"}` (generic) |
+
+### Password Security
+
+- Admin password hashed at config load via `bcrypt.hashpw(settings.ADMIN_PASSWORD, bcrypt.gensalt())`
+- Login uses constant-time `bcrypt.checkpw` against the in-memory hash
+- On first successful login, the hash is persisted to DB for restart survival
+- Old `ADMIN_KEY` env var retained for backward compatibility
+- Default credentials: `admin` / `Ultron@2026` (change immediately)
+
+### Remaining Gaps
+
+See TRD.md §4.3 for full list. Key open items:
+- No HTTPS between cloudflared → uvicorn (HTTP origin)
+- Static API keys stored plaintext in PostgreSQL
+- CPCB export path traversal (input validation exists, blocking char set needs audit)
+- `.env` on Pi world-readable (should be chmod 600)
+
+---
+
+## Upgrade Notes
+
+### v1.0.71 → v1.0.72 (RajAPI Security Hardening)
+
+**Changes:**
+- RajAPI server: bcrypt admin username/password login added
+- RajAPI server: per-IP login rate limit (5 req/60s) + per-key lockout (10 failures → 15min)
+- RajAPI server: API rate limiter middleware (200 req/min)
+- RajAPI server: user enumeration fixed — uniform 401/403 responses
+- Client: default admin password changed to `Ultron123.0`
+- Client backend: user enumeration fixed (`auth.py` 423 vs 403 consolidation)
+- `spcb_sync.py`: consistent 403 responses for all auth failures
+
+**Backward Compatibility:**
+- Old `ADMIN_KEY` env var still works on server for existing scripts
+- Client `.env` file fully compatible with new defaults
+- No DB migration required for server changes
+
+### v1.0.70 → v1.0.71 (Refresh Token System)
+
+**Backward Compatibility:**
 - All existing JWT tokens remain valid until their natural expiry
 - The `/login` endpoint now returns an additional `refresh_token` field
 - Existing frontends that ignore unknown fields continue to work
 - Old `.env` files are fully compatible (new settings use safe defaults)
 
-### Database Migration
-
+**Database Migration:**
 New tables are created automatically on startup:
 - `refresh_tokens`
 - `revoked_tokens`
@@ -401,8 +468,7 @@ New columns added to `users` table:
 - `password_changed_at` (DATETIME, nullable)
 - `require_password_change` (BOOLEAN, default FALSE)
 
-### Frontend Migration
-
+**Frontend Migration:**
 The frontend should be updated to:
 1. Store `refresh_token` from login response
 2. Call `POST /api/v1/auth/refresh` when access token expires

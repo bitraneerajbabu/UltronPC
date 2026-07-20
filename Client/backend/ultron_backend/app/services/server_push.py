@@ -3,11 +3,11 @@ UltrON — Server Push Engine
 
 Supports two push protocols:
   • SPCB  — HTTP POST JSON (like SPCB / CPCB online portals that accept JSON)
-             Live push  : every 1 minute  → live_url
-             Delay push : every 15 minutes → delay_url
+              Live push  : every 1 minute  → live_url
+              Delay push : every 15 minutes → delay_url (scheduler 900s)
 
-  • CPCB   — CSV flat-file (CPCB IT Division Annexure-I format)
-             Written every 15 minutes to cpcb_file_path
+   • CPCB   — CSV flat-file (CPCB IT Division Annexure-I format)
+              Written every 1 minute to cpcb_file_path (dedup prevents duplicates)
              Format: StationName,Parameter,DateFrom,DateTo,Value,CalibFlag,MaintFlag,Remark
 """
 
@@ -27,6 +27,7 @@ from app.models.device import Device
 from app.models.station import Station
 from app.core.logger import get_logger
 from app.services.lock_store import is_push_allowed, get_lock_status
+from app.services.rajapi_sync import _load_rajapi_config
 
 log = get_logger("ultron.server_push")
 
@@ -72,10 +73,10 @@ async def _build_spcb_payloads(db, server_id: int, mode: str = "live") -> list:
     if not mappings:
         return []
 
-        grouped = defaultdict(list)
-        for m in mappings:
-            key = (m.api_id, m.api_name, m.api_password)
-            grouped[key].append(m)
+    grouped = defaultdict(list)
+    for m in mappings:
+        key = (m.api_id, m.api_name, m.api_password)
+        grouped[key].append(m)
 
     payloads = []
     for (api_id, api_name, api_password), maps in grouped.items():
@@ -158,6 +159,16 @@ async def _build_spcb_payloads(db, server_id: int, mode: str = "live") -> list:
     return payloads
 
 
+async def _check_server_reachable(url: str, timeout: float = 5.0) -> bool:
+    """Quick HEAD check if server is reachable before pushing."""
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            await client.head(url, follow_redirects=True)
+        return True
+    except Exception:
+        return False
+
+
 async def _push_spcb(config: ServerConfig, db, mode: str):
     """HTTP POST each payload to the configured SPCB URL."""
     target_url = config.live_url if mode == "live" else config.delay_url
@@ -167,6 +178,11 @@ async def _push_spcb(config: ServerConfig, db, mode: str):
                 f"[SPCB/DELAY] ⚠ Server '{config.name}' has no Delay URL configured — "
                 f"delay push skipped. Set a Delay URL in Server Push Mappings to fix this."
             )
+        return
+
+    # Quick per-server connectivity check
+    if not await _check_server_reachable(target_url):
+        log.warning(f"[SPCB/{mode.upper()}] Server '{config.name}' unreachable at {target_url} — skipping push.")
         return
 
     try:
@@ -576,7 +592,7 @@ async def retry_pending_uploads(db):
 
             headers = {}
             if target_url == settings.CENTRAL_API_URL or "api/v1/sync" in target_url:
-                api_key, _ = await _load_rajapi_auth()
+                api_key, _ = await _load_rajapi_config(db)
                 if api_key:
                     headers["X-API-Key"] = api_key
 
@@ -595,86 +611,6 @@ async def retry_pending_uploads(db):
                 log.warning(f"[RETRY] [FAIL] Pending #{p.id} failed: {e}")
 
     await db.commit()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Remote Command Polling (replaces MQTT)
-# ─────────────────────────────────────────────────────────────────────────────
-
-async def _load_rajapi_auth() -> tuple[str | None, str | None]:
-    """Load RajAPI auth from DB config (fallback to env settings)."""
-    from app.database import AsyncSessionLocal
-    from app.models.rajapi import RajAPIConfig
-    try:
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(select(RajAPIConfig).where(RajAPIConfig.is_enabled == True))
-            config = result.scalars().first()
-            if config and config.auth_token:
-                return config.auth_token, None  # token-based auth, station from settings
-    except Exception:
-        pass
-    from app.config import settings
-    return settings.RAJAPI_API_KEY or None, settings.RAJAPI_STATION_ID or None
-
-
-async def _poll_remote_commands():
-    """
-    Poll rajapi.com for pending commands for this station.
-    Executes any received commands and acknowledges them.
-
-    Replaces the old MQTT-based remote_control.py.
-    Called every 1 minute from run_server_push("live").
-    """
-    from app.config import settings
-    api_key, station_id = await _load_rajapi_auth()
-    if not station_id:
-        station_id = settings.RAJAPI_STATION_ID
-    if not api_key or not station_id:
-        return
-
-    url = settings.RAJAPI_COMMANDS_URL
-    try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-            resp = await client.get(
-                url,
-                headers={"X-Admin-Key": api_key, "X-Station-Id": station_id},
-            )
-            if resp.status_code != 200:
-                return
-            commands = resp.json().get("commands", [])
-
-        for cmd in commands:
-            cmd_id = cmd.get("id")
-            action = cmd.get("action", "")
-            log.info(f"[CMD] Executing remote command: {action} (id={cmd_id})")
-
-            if action == "restart_polling":
-                from app.services.polling_engine import stop_polling, start_polling
-                await stop_polling()
-                await start_polling()
-
-            elif action == "reboot_system":
-                log.warning("[CMD] reboot_system command received but is DISABLED (removed for safety)")
-
-            elif action == "factory_reset":
-                log.warning("[CMD] Executing factory_reset via remote command")
-                try:
-                    from app.api.settings import factory_reset_core
-                    await factory_reset_core(restart=True)
-                    log.warning("[CMD] factory_reset executed successfully — process restarting")
-                except Exception as e:
-                    log.error(f"[CMD] factory_reset failed: {e}")
-
-            # Acknowledge command as executed
-            ack_url = f"{settings.RAJAPI_COMMANDS_URL.replace('/pending', '')}/{cmd_id}/ack"
-            async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
-                await client.post(
-                    ack_url,
-                    headers={"X-Admin-Key": api_key, "X-Station-Id": station_id},
-                )
-
-    except Exception as e:
-        log.debug(f"[CMD] Poll failed: {e}")
 
 
 async def _push_telemetry_to_rajapi(db, mode: str):
@@ -750,27 +686,8 @@ async def _push_telemetry_to_rajapi(db, mode: str):
                 log.info(f"[RajAPI/{mode.upper()}] [OK] Pushed {len(points)} telemetry points to RajAPI.")
             else:
                 log.warning(f"[RajAPI/{mode.upper()}] [FAIL] RajAPI HTTP {res.status_code}: {res.text[:200]}")
-                db.add(PendingUpload(
-                    server_config_id=None,
-                    url=target_url,
-                    payload=payload,
-                    mode=mode,
-                    last_error=f"HTTP {res.status_code}"
-                ))
-                await db.commit()
     except Exception as e:
         log.error(f"[RajAPI/{mode.upper()}] Sync error: {e}")
-        try:
-            db.add(PendingUpload(
-                server_config_id=None,
-                url=target_url,
-                payload=payload,
-                mode=mode,
-                last_error=str(e)[:500]
-            ))
-            await db.commit()
-        except Exception:
-            pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -847,10 +764,7 @@ async def run_server_push(mode: str = "live"):
         # Sync telemetry to RajAPI
         await _push_telemetry_to_rajapi(db, mode)
 
-        # Poll for pending remote commands from rajapi.com
         if mode == "live":
-            await _poll_remote_commands()
-
             ld_stmt = select(LiveData).options(selectinload(LiveData.parameter))
             ld_res = await db.execute(ld_stmt)
             live_data_list = ld_res.scalars().all()

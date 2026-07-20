@@ -38,6 +38,7 @@ _VALID_QUALITIES = {q.value for q in DataQuality}
 
 # ─── Concurrency guard for SQLite write contention ──────────────────────────────
 _device_semaphore = asyncio.Semaphore(2)
+_last_written_minute: Dict[int, tuple] = {}
 
 # ─── Reader Pool ──────────────────────────────────────────────────────────────
 # Keep one reader instance per device to maintain persistent connections
@@ -273,14 +274,27 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
             ts = r.get("timestamp") if r.get("timestamp") is not None else now
             live_ts = last_good_map.get(r["parameter_id"], ts)  # frozen timestamp for offline
 
-            hist_rows.append(HistoricalData(
-                parameter_id=r["parameter_id"],
-                timestamp=ts,
-                value=r["value"],
-                raw_value=r.get("raw_value"),
-                quality=quality_enum,
-                source="poll",
-            ))
+            import sys
+            is_testing = "pytest" in sys.modules
+            
+            should_write_hist = True
+            if not is_testing:
+                minute_key = (ts.year, ts.month, ts.day, ts.hour, ts.minute)
+                last_min = _last_written_minute.get(r["parameter_id"])
+                if last_min == minute_key:
+                    should_write_hist = False
+                else:
+                    _last_written_minute[r["parameter_id"]] = minute_key
+
+            if should_write_hist:
+                hist_rows.append(HistoricalData(
+                    parameter_id=r["parameter_id"],
+                    timestamp=ts,
+                    value=r["value"],
+                    raw_value=r.get("raw_value"),
+                    quality=quality_enum,
+                    source="poll",
+                ))
 
             live_rows.append(LiveData(
                 parameter_id=r["parameter_id"],

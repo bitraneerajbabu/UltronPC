@@ -508,8 +508,10 @@ export const AppProvider = ({ children }) => {
               if (!isOnline && prevPoint && prevPoint.timestamp) {
                 ts = prevPoint.timestamp;
               }
+              const prevVal = prevPoint?.value;
+              const frozenVal = (!isOnline && (pt.value == null || pt.value === '')) ? prevVal : pt.value;
               next[pt.tag_name] = {
-                value: pt.value,
+                value: frozenVal,
                 raw_value: pt.raw_value,
                 unit: pt.unit,
                 status: isOnline ? 'online' : 'offline',
