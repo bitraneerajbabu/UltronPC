@@ -28,11 +28,24 @@ def _update_env_enc(updates: dict) -> None:
     """
     Merge `updates` into the existing .env.enc without losing other keys.
     This prevents overwriting ADMIN_PASSWORD, SECRET_KEY, etc.
+    Writes to a temp file first then os.replace() to avoid OneDrive reparse-point locks.
     """
+    import tempfile
     enc_file = str(APP_DIR / ".env.enc")
     existing = _read_existing_env_enc()
     existing.update(updates)
-    write_env_enc_from_dict(existing, enc_file)
+    # Write to sibling temp file then atomic replace
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=str(APP_DIR), suffix=".enc.tmp")
+    try:
+        os.close(tmp_fd)
+        write_env_enc_from_dict(existing, tmp_path)
+        os.replace(tmp_path, enc_file)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 from app.config import settings
@@ -43,9 +56,6 @@ class LicenseVerifyRequest(BaseModel):
 
 @router.get("/status")
 async def get_license_status():
-    if not settings.CENTRAL_API_KEY:
-        return {"licensed": False, "server_url": settings.CENTRAL_API_URL}
-
     from app.services.lock_store import get_lock_status
     lock_data = await get_lock_status()
     return {
@@ -73,7 +83,7 @@ async def verify_and_save_license(req: LicenseVerifyRequest):
     }
     
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
             resp = await client.post(url, json=payload, timeout=15.0)
             
             if resp.status_code != 200:
