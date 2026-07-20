@@ -807,7 +807,7 @@ async def run_server_push(mode: str = "live"):
             )
             servers = conf_result.scalars().all()
             for config in servers:
-                payloads = await _build_tgpcb_payloads(db, config.id, "live")
+                payloads = await _build_spcb_payloads(db, config.id, "live")
                 for payload in payloads:
                     db.add(PendingUpload(
                         server_config_id=config.id,

@@ -194,10 +194,10 @@ async def test_server_push(server_id: int, db: AsyncSession = Depends(get_db)):
     if (server.protocol or "tspcb").lower() == "cpcb":
         raise HTTPException(status_code=400, detail="Test push only supported for HTTP/JSON protocols")
         
-    from app.services.server_push import _build_tgpcb_payloads
+    from app.services.server_push import _build_spcb_payloads
     import httpx
     
-    payloads = await _build_tgpcb_payloads(db, server_id)
+    payloads = await _build_spcb_payloads(db, server_id)
     if not payloads:
         raise HTTPException(status_code=400, detail="No active mappings found to push")
         
@@ -247,10 +247,10 @@ async def test_server_delay_push(server_id: int, db: AsyncSession = Depends(get_
                    "Set a Delay URL in the Server Push Mappings page."
         )
 
-    from app.services.server_push import _build_tgpcb_payloads
+    from app.services.server_push import _build_spcb_payloads
     import httpx
 
-    payloads = await _build_tgpcb_payloads(db, server_id)
+    payloads = await _build_spcb_payloads(db, server_id)
     if not payloads:
         raise HTTPException(status_code=400, detail="No active mappings found to push")
 
