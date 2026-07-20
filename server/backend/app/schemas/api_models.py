@@ -9,6 +9,7 @@ class TelemetryPoint(BaseModel):
     value: Optional[float] = None
     quality: str
     timestamp: datetime
+    unit: Optional[str] = ""
 
 class ClientSyncPayload(BaseModel):
     client_id: str

@@ -41,10 +41,13 @@ def sync_telemetry(
             param = Parameter(
                 tag_name=point.tag_name,
                 name=point.tag_name,
+                unit=point.unit or "",
                 device_id=generic_device.id
             )
             db.add(param)
             db.flush()
+        elif not param.unit and point.unit:
+            param.unit = point.unit
 
         telemetry = TelemetryData(
             site_id=site.id,

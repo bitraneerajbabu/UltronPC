@@ -709,7 +709,8 @@ async def _push_telemetry_to_rajapi(db, mode: str):
                         "tag_name": ld.parameter.tag_name,
                         "value": v,
                         "quality": q,
-                        "timestamp": ld.timestamp.isoformat() if hasattr(ld.timestamp, "isoformat") else str(ld.timestamp)
+                        "timestamp": ld.timestamp.isoformat() if hasattr(ld.timestamp, "isoformat") else str(ld.timestamp),
+                        "unit": ld.parameter.unit or ""
                     })
         elif mode == "delay":
             cutoff = datetime.utcnow() - timedelta(minutes=30)
@@ -730,7 +731,8 @@ async def _push_telemetry_to_rajapi(db, mode: str):
                         "tag_name": avg.parameter.tag_name,
                         "value": v,
                         "quality": q,
-                        "timestamp": avg.timestamp.isoformat() if hasattr(avg.timestamp, "isoformat") else str(avg.timestamp)
+                        "timestamp": avg.timestamp.isoformat() if hasattr(avg.timestamp, "isoformat") else str(avg.timestamp),
+                        "unit": avg.parameter.unit or ""
                     })
 
         if not points:
