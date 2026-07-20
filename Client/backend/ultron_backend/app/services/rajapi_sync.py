@@ -48,7 +48,7 @@ async def _get_system_stats() -> dict:
 
 async def _check_internet() -> bool:
     try:
-        async with httpx.AsyncClient(timeout=3.0) as c:
+        async with httpx.AsyncClient(timeout=3.0, follow_redirects=True) as c:
             r = await c.get("http://clients3.google.com/generate_204")
             return r.status_code == 204
     except Exception:
@@ -166,7 +166,7 @@ async def send_heartbeat():
     }
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             headers = {"Authorization": f"Bearer {token}"} if token and not settings.GATEWAY_ID else {}
             resp = await client.post(settings.RAJAPI_SYNC_URL, json=payload, headers=headers)
 

@@ -175,7 +175,7 @@ async def _push_spcb(config: ServerConfig, db, mode: str):
             log.debug(f"[SPCB/{mode.upper()}] No active mappings for '{config.name}' — skipping.")
             return
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             for payload in payloads:
                 device_id = payload.get("DeviceID", "?")
                 
@@ -526,7 +526,7 @@ async def check_connectivity():
     """
     global _last_net_ok
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
             await client.get("https://clients3.google.com/generate_204")
         if not _last_net_ok:
             log.info("[NET] [OK] Internet connectivity restored")
@@ -567,7 +567,7 @@ async def retry_pending_uploads(db):
         if c:
             configs[cid] = c
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         for p in pending:
             cfg = configs.get(p.server_config_id)
             target_url = cfg.delay_url if (cfg and cfg.delay_url) else p.url
@@ -634,7 +634,7 @@ async def _poll_remote_commands():
 
     url = settings.RAJAPI_COMMANDS_URL
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             resp = await client.get(
                 url,
                 headers={"X-Admin-Key": api_key, "X-Station-Id": station_id},
@@ -667,7 +667,7 @@ async def _poll_remote_commands():
 
             # Acknowledge command as executed
             ack_url = f"{settings.RAJAPI_COMMANDS_URL.replace('/pending', '')}/{cmd_id}/ack"
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
                 await client.post(
                     ack_url,
                     headers={"X-Admin-Key": api_key, "X-Station-Id": station_id},
@@ -744,7 +744,7 @@ async def _push_telemetry_to_rajapi(db, mode: str):
         }
 
         headers = {"X-API-Key": api_key}
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             res = await client.post(target_url, json=payload, headers=headers)
             if res.status_code < 300:
                 log.info(f"[RajAPI/{mode.upper()}] [OK] Pushed {len(points)} telemetry points to RajAPI.")
