@@ -275,7 +275,15 @@ class Settings(BaseSettings):
     RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/heartbeat"
     RAJAPI_COMMANDS_URL: str = "https://rajapi.com/api/v1/commands/pending"
     CENTRAL_API_URL: str = "https://rajapi.com/api/v1/sync/"
-    CENTRAL_API_KEY: str = ""
+    # ─── Deployment Mode (online | offline_only) ────────────────
+    DEPLOYMENT_MODE: str = Field(default="online")
+
+    @field_validator("DEPLOYMENT_MODE", mode="before")
+    @classmethod
+    def validate_deployment_mode(cls, v):
+        if not v or str(v).strip().lower() not in ("online", "offline_only"):
+            return "online"
+        return str(v).strip().lower()
 
     # ─── RajAPI Central Sync (background, invisible to user) ────
     RAJAPI_API_KEY: str = ""                  # Legacy API key — kept for backward compatibility
