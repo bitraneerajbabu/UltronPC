@@ -1,4 +1,4 @@
-# 🔐 UltrON License Protection & CPCB/SPCB Control System — Final Hardened Plan (`LICENSE_LOCK_PLAN.md`)
+# 🔐 UltrON License Protection & CPCB/SPCB Control System — Master Hardened Plan (`LICENSE_LOCK_PLAN.md`)
 
 ## 1. Executive Summary & Core Rules
 
@@ -14,22 +14,20 @@ UltrON supports two deployment modes, decided once at installation and stored lo
 
 ---
 
-## 2. System Clock Anti-Tampering Defense (Addressing Gap #1)
+## 2. System Clock Anti-Tampering Defense & Recovery (Addressing Fix #1)
 
 To prevent users in `offline_only` mode from setting the PC system clock backward to bypass license expiration:
 
-### 🛡️ Clock Rollback Detection Algorithm:
+### 🛡️ Clock Rollback Detection & Recovery Logic:
 1. **High-Water Mark (`last_seen_timestamp`):** The local SQLite `system_state` table records the latest valid timestamp every minute during polling.
-2. **Rollback Check:** On every validation run, if $\text{current\_system\_time} < \text{last\_seen\_timestamp} - 5\text{ minutes}$, UltrON flags `CLOCK_TAMPERED`.
-3. **Enforcement:** If `CLOCK_TAMPERED` is triggered:
-   - License state transitions immediately to `LOCKED`.
-   - CPCB/SPCB outbound push is frozen.
-   - Desktop dashboard displays: ⚠️ *"System Clock Tampering Detected. Re-align system time or contact Sunshine Technologies."*
-4. **Recovery:** Re-aligning the system clock to a timestamp $\ge \text{last\_seen\_timestamp}$ (or applying a new signed `.lic` file) restores normal validation.
+2. **Rollback Trigger:** If $\text{current\_system\_time} < \text{last\_seen\_timestamp} - 5\text{ minutes}$, UltrON flags `CLOCK_TAMPERED` and freezes CPCB push.
+3. **Dual Recovery Paths:**
+   - **Path A (Automatic Recovery):** Once the system clock is re-aligned (via Windows NTP sync or manual clock adjustment) such that $\text{current\_system\_time} \ge \text{last\_seen\_timestamp}$, `CLOCK_TAMPERED` is automatically cleared and CPCB push resumes.
+   - **Path B (Manual Admin Override):** If a bad CMOS battery causes a large clock jump, an admin entering the `Master` password can execute **"Reset Time Benchmark"**. This updates `last_seen_timestamp` to the current system time and records a compliance audit log (`CLOCK_RESET_OVERRIDE`, actor, reason, old_ts, new_ts).
 
 ---
 
-## 3. Deployment Mode & Reconfiguration Path (Addressing Gap #5)
+## 3. Deployment Mode & Backlog Isolation (Addressing Fix #3)
 
 Stored in local client configuration (`config.py` / database settings):
 ```json
@@ -42,22 +40,22 @@ Stored in local client configuration (`config.py` / database settings):
 ### 🔄 Mode Transition Policy (`online` $\longleftrightarrow$ `offline_only`):
 - **Admin Reconfiguration Only:** Switching modes requires entering the local `Master` / Admin password in Settings.
 - **`offline_only` $\longrightarrow$ `online`:** Enables `rajapi_sync.py` loop, prompts for RajAPI Site Key, validates remotely.
-- **`online` $\longrightarrow$ `offline_only`:** Disables `rajapi_sync.py` loop, prompts for valid `.lic` file, clears remote heartbeat schedules.
+- **Backlog Isolation Rule:** Switching modes alone does **NOT** trigger a backlog flush. Flush job is triggered **ONLY by an explicit Unlock / Renewal Event** when license state is `ACTIVE`.
 
 | Mode | RajAPI Sync | License Validation | CPCB / SPCB Push | Alerts Destination |
 |---|---|---|---|---|
 | **`online`** | Active every 60s | Remote + 30-day grace fallback | Active when licensed | RajAPI Dashboard + Local UI |
-| **`offline_only`** | Disabled entirely | Local `.lic` file (RSA-2048) | Never configured ("Not Set Up") | **Local Desktop UI Only** (Addressing Gap #4) |
+| **`offline_only`** | Disabled entirely | Local `.lic` file (RSA-2048) | Never configured ("Not Set Up") | **Local Desktop UI Only** |
 
 ---
 
-## 4. Hardware ID (HWID) Specifications (Addressing Gap #2)
+## 4. Hardware ID (HWID) Specifications
 
 $$\text{HWID} = \text{SHA256}(\text{Motherboard UUID} + \text{CPU Serial} + \text{BIOS Serial})$$
 
 - **Excluded:** MAC address is explicitly excluded (NIC swaps/VPNs cause instability).
 - **Stable Fallback:** Uses **BIOS Serial Number** (`wmic bios get serialnumber`) if Motherboard UUID is missing.
-- **Hardware Swap Policy:** Documented policy states that motherboard/BIOS replacement requires a free license re-issue from Sunshine Technologies.
+- **Hardware Swap Policy:** Motherboard/BIOS replacement requires a free license re-issue from Sunshine Technologies.
 - **UI Display:** Displayed with a 1-click **Copy HWID** button on the lock banner and Settings screen.
 
 ---
@@ -82,7 +80,7 @@ $$\text{HWID} = \text{SHA256}(\text{Motherboard UUID} + \text{CPU Serial} + \tex
 
 ---
 
-## 6. License Manager Engine & State Guard (Addressing Gap #7)
+## 6. License Manager Engine & State Guard
 
 ### State Machine:
 - **`ACTIVE`** $\mid$ **`GRACE_PERIOD`** $\mid$ **`LOCKED`** $\mid$ **`EXPIRED`** $\mid$ **`CLOCK_TAMPERED`**
@@ -97,44 +95,46 @@ def is_cpcb_upload_allowed() -> bool:
     return False  # LOCKED, EXPIRED, CLOCK_TAMPERED freeze push
 ```
 
-### Expiry Warning Progression (Both Modes):
-- **30 days before expiry:** Dismissible notification banner.
-- **14 days before expiry:** Non-dismissible, non-blocking header banner.
-- **0 days / Locked:** Full red lock banner on EXE dashboard.
-
 ---
 
-## 7. Bounded Backlog Queue & Overflow Policy (Addressing Gap #3)
+## 7. Bounded Backlog Queue & FIFO Audit Trail (Addressing Fix #2)
 
 - **Storage Table:** `PendingUpload` queue table.
 - **Retention Cap:** 12 months of push entries (underlying `historical_data` table remains permanent).
-- **FIFO Overflow Policy:** When capacity is reached, the **oldest pending push record is dropped** (FIFO), preserving recent compliance data.
-- **Alerting:** Emits `BACKLOG_OVERFLOW_WARNING` badge on UI when capacity reaches 90%.
+- **FIFO Overflow Policy:** When capacity is reached, the **oldest pending push record is dropped** (FIFO).
+- **Compliance Audit Log:** Every dropped record writes an immutable audit record:
+  ```json
+  {
+    "event_type": "PUSH_BACKLOG_DROPPED_FIFO",
+    "tag_name": "PM2_5",
+    "record_timestamp": "2025-07-22T01:00:00Z",
+    "dropped_at": "2026-07-22T02:25:00Z",
+    "reason": "12-month backlog FIFO queue capacity reached"
+  }
+  ```
 
 ---
 
 ## 8. Controlled Delayed Flush & HTTP Retry Backoff
 
 - **Rate-Limited Flush:** Flushes at 5–10 records/sec upon unlock.
-- **HTTP Error Backoff:** If CPCB server responds with HTTP 429/5xx, flush pauses and retries with exponential backoff (5s, 10s, 20s, 60s, max 300s).
-- **Resumable:** Tracks `last_flushed_record_id` in SQLite so interrupted flushes resume cleanly.
+- **HTTP Error Backoff:** Exponential backoff (5s, 10s, 20s, 60s, max 300s) if CPCB responds with HTTP 429/5xx errors.
+- **Resumable:** Tracks `last_flushed_record_id` in SQLite.
 - **UI Progress:** Displays *"Flushing backlog: 1,240 / 3,800 records"*.
 
 ---
 
-## 9. Local & Remote Audit Logging (Addressing Gap #6)
+## 9. Local & Remote Audit Logging
 
-Every license event (`lock`, `unlock`, `renew`, `clock_tamper`, `mode_switch`) is recorded:
+Every license event (`lock`, `unlock`, `renew`, `clock_tamper`, `clock_override`, `mode_switch`, `fifo_drop`) is recorded:
 - **`online` Mode:** Logged to local `audit_logs` SQLite table AND pushed immediately to RajAPI.
-- **`offline_only` Mode:** Logged to local `audit_logs` SQLite table (append-only, cryptographically hashed). If the plant later transitions to `online`, historical audit logs are automatically synced to RajAPI.
+- **`offline_only` Mode:** Logged to local `audit_logs` SQLite table (append-only, cryptographically hashed). Synced to RajAPI if plant ever connects online.
 
 ---
 
 ## 10. Verification & Test Checklist
 
-- [ ] **Clock Rollback Test:** Manually set PC clock back 1 hour in `offline_only` mode $\rightarrow$ Confirm system transitions to `CLOCK_TAMPERED` and locks push.
-- [ ] **HWID Stability Test:** Verify BIOS serial fallback works cleanly without MAC address dependencies.
-- [ ] **Mode Transition Test:** Switch `offline_only` $\rightarrow$ `online` in Admin Settings $\rightarrow$ Confirm RajAPI sync loop activates cleanly.
-- [ ] **Grace Period Logic:** Disconnect internet in `online` mode $\rightarrow$ Confirm `is_cpcb_upload_allowed()` returns `True` during 30-day grace period.
-- [ ] **FIFO Backlog Test:** Fill backlog to cap $\rightarrow$ Confirm oldest entries drop first and alert badge renders.
-- [ ] **Local Audit Logging:** Perform license actions in `offline_only` mode $\rightarrow$ Confirm immutable records written to local `audit_logs` table.
+- [ ] **Clock Tamper Auto Recovery:** Set clock back 1 hour $\rightarrow$ verify `CLOCK_TAMPERED` state $\rightarrow$ advance clock forward $\rightarrow$ verify automatic recovery to `ACTIVE`.
+- [ ] **Clock Tamper Admin Override:** Execute Admin Reset Time Benchmark $\rightarrow$ verify `CLOCK_RESET_OVERRIDE` audit record created.
+- [ ] **FIFO Audit Log Test:** Overflow backlog queue $\rightarrow$ verify `PUSH_BACKLOG_DROPPED_FIFO` audit record generated per dropped point.
+- [ ] **Mode Switch Backlog Test:** Switch `offline_only` $\rightarrow$ `online` with pending backlog $\rightarrow$ verify flush does NOT start until valid license unlock event occurs.
