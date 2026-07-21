@@ -25,7 +25,7 @@
 - **RajAPI Server Audit (pi@raj.local):** 11 CRITICAL/HIGH findings. No HTTPS, secrets in world-readable .env, PostgreSQL exposed to LAN, API keys in URL query params, weak guessable passwords, dual codebase confusion, uvicorn bound to 0.0.0.0
 
 ## RajAPI Server (pi@raj.local) — Key Details
-- **IP/Host:** raj.local (Raspberry Pi 5, Debian 13, aarch64)
+- **IP/Host:** raj.local (Raspberry Pi 3 B/B+, Raspberry Pi OS Lite 64-bit, 64GB SD Card, aarch64)
 - **Services:** nginx (port 80) → uvicorn (port 8080), PostgreSQL in Docker (port 5432), cloudflared tunnel to rajapi.com
 - **WARNING:** No HTTPS — all traffic plain HTTP. Cloudflare edge has HTTPS, but origin connection is HTTP
 - **Secrets file:** `/home/pi/rajapi_server/backend/.env` (world-readable — FIX: restrict to 600)
