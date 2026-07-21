@@ -83,3 +83,12 @@ To replace manual API key typing during plant setup:
 - **Silent Update Protocol:** Client downloads the release into `/updates/`, verifies SHA-256 integrity hash, swaps the binary cleanly, restarts `UltrON.exe`, and reports the new version string on its next heartbeat.
 - **Backward Compatibility:** RajAPI server endpoints maintain backward compatibility across version generations.
 
+---
+
+## 9. Broadcasts, AMC Alerts & CPCB/SPCB Remote Toggles
+- **Target Selection:** Every broadcast and command can target **All Plants Globally** (`target_all=True`) or a **Specific Plant Site** (`target_site_id`).
+- **AMC Expiry Alerts:** When AMC expiration approaches (e.g. 15 days left), RajAPI automatically issues an AMC warning toast to that plant site's client screen.
+- **Remote CPCB & SPCB Push Control:** Admin toggle switch on `rajapi.com` sends `enable_cpcb` or `disable_cpcb` commands to pause or resume CPCB/SPCB data transmission for all or specific plants.
+- **Custom System Announcements:** Supports `info`, `warning`, `error`, and `urgent` severity floating toasts for maintenance notices.
+
+
