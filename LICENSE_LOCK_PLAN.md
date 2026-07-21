@@ -7,7 +7,7 @@ This plan implements software protection for UltrON to ensure no unauthorized pl
 1. **Modbus Polling & Storage NEVER STOPS:** Once configured, background sensor polling and local SQLite data recording continue uninterrupted so local history is never lost.
 2. **When Unlicensed or Locked:**
    - **CPCB / SPCB Outbound Push is FROZEN:** Telemetry uploads to State & Central CPCB portals are immediately stopped.
-   - **Client Dashboard UI is BLOCKED:** Local web screen (`localhost:8000`) displays a locked activation screen with Machine Hardware ID.
+   - **UltrON Desktop EXE Dashboard Displays Lock Banner:** The UltrON EXE desktop dashboard displays a prominent red Activation Lock Banner with the machine's unique **Hardware ID (HWID)** and notice: *"License Locked — Contact Sunshine Technologies"*.
 3. **Upon Activation / Unlock:** CPCB/SPCB push resumes immediately, flushing all buffered historical data to CPCB/SPCB.
 
 ---
@@ -32,7 +32,7 @@ This plan implements software protection for UltrON to ensure no unauthorized pl
                        ▼                                               ▼
             [VALID LICENSE / ACTIVE]                               [LOCKED / UNLICENSED]
   ┌─────────────────────────────────────────┐     ┌─────────────────────────────────────────┐
-  │ 🟢 Client UI Dashboard: FULL ACCESS     │     │ 🔴 Client UI Dashboard: BLOCKED (Lock)  │
+  │ 🟢 UltrON EXE Dashboard: NORMAL         │     │ 🔴 UltrON EXE Dashboard: LOCK BANNER    │
   │ 🟢 CPCB / SPCB Upload: ACTIVE           │     │ 🔴 CPCB / SPCB Upload: FROZEN           │
   │ 🟢 RajAPI Fleet Sync: ACTIVE            │     │ 🟡 Local Telemetry: BUFFERED IN DB      │
   └─────────────────────────────────────────┘     └─────────────────────────────────────────┘
@@ -76,13 +76,12 @@ if not license_manager.is_cpcb_upload_allowed():
     return  # Telemetry remains safely buffered in SQLite
 ```
 
-### Component 3: Frontend Lock Overlay (`client/frontend/src/App.tsx`)
+### Component 3: UltrON Desktop EXE Dashboard Lock Banner (`client/frontend/src/App.tsx`)
 When `license.status === "LOCKED"` or `"EXPIRED"`:
-- Renders full-screen non-dismissible dialog:
-  - **Header:** 🔒 License Activation Required — Sunshine Technologies
-  - **Machine HWID:** `SUN-8F92-A410-BC77` (with Copy button)
-  - **Message:** *"Software license is locked or expired. Please contact Neeraj / Support at info@sunshinetech.in to obtain an activation key."*
-  - **Activation Input Box:** Allows entering activation key to instantly unlock without restarting.
+- Renders top sticky banner across UltrON EXE Dashboard:
+  - **Banner Alert:** 🔒 **LICENSE LOCKED / ACTIVATION REQUIRED — CPCB & SPCB Push Paused**
+  - **Machine HWID:** `SUN-8F92-A410-BC77` (with Copy HWID button)
+  - **Activation Box:** Allows entering license key to activate on the spot.
 
 ### Component 4: RajAPI Remote Unlock / Lock Gateway (`rajapi.com`)
 - Admin panel button: **🔒 Lock Site** / **🔓 Unlock Site**.
@@ -95,9 +94,9 @@ When `license.status === "LOCKED"` or `"EXPIRED"`:
 ### Automated & Unit Verification
 - Test signature validation algorithm with valid/invalid HWIDs.
 - Verify CPCB push loop returns immediately when license state is `LOCKED`.
-- Verify Modbus polling engine continues inserting rows into `LiveData` table while UI is locked.
+- Verify Modbus polling engine continues inserting rows into `LiveData` table while banner is displayed.
 
 ### Manual Verification
-1. Launch UltrON without `ultron.lic` $\rightarrow$ Confirm UI shows Lock Screen and CPCB push is paused.
+1. Launch UltrON EXE without `ultron.lic` $\rightarrow$ Confirm EXE Dashboard displays Lock Banner and CPCB push is paused.
 2. Verify Modbus sensors continue updating SQLite `live_data` table.
-3. Enter valid license key on UI $\rightarrow$ Confirm UI unlocks instantly and CPCB push flushes buffered points.
+3. Enter valid license key on UI $\rightarrow$ Confirm Lock Banner disappears and CPCB push flushes buffered points.
