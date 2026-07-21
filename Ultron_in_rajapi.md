@@ -74,3 +74,12 @@ To replace manual API key typing during plant setup:
 - **Remote Kill-Switch:** 1-Click **🔒 Lock Site** / **🔒 Lock Station** from `rajapi.com` freezes client Modbus polling & telemetry instantly.
 - **AMC Expiry Lock:** Automatic locking upon AMC contract expiration.
 - **Firewall Passage:** Outbound HTTPS (Port 443) only. Zero inbound open ports required at client plants.
+
+---
+
+## 8. Version Management & Remote OTA Engine (`v1.0.71` ➔ `v1.0.72`)
+- **Fleet Version Tracking:** Every client heartbeat reports `"version": settings.APP_VERSION` to `rajapi.com`. The Fleet Dashboard displays real-time version badges (`v1.0.69`, `v1.0.71`, `v1.0.72`) per plant site.
+- **Remote OTA Push:** New releases (`UltrON_v1.0.72.exe`) are uploaded to `rajapi.com`. Admin clicks **"Push OTA Update"** to send silent background update commands to target plant PCs.
+- **Silent Update Protocol:** Client downloads the release into `/updates/`, verifies SHA-256 integrity hash, swaps the binary cleanly, restarts `UltrON.exe`, and reports the new version string on its next heartbeat.
+- **Backward Compatibility:** RajAPI server endpoints maintain backward compatibility across version generations.
+
