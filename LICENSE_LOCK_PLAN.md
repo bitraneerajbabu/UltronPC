@@ -1,4 +1,4 @@
-# 🔐 UltrON License Protection & CPCB/SPCB Control System — Final Implementation Plan (`LICENSE_LOCK_PLAN.md`)
+# 🔐 UltrON License Protection & CPCB/SPCB Control System — Final Hardened Plan (`LICENSE_LOCK_PLAN.md`)
 
 ## 1. Executive Summary & Core Rules
 
@@ -14,7 +14,22 @@ UltrON supports two deployment modes, decided once at installation and stored lo
 
 ---
 
-## 2. Deployment Mode Configuration
+## 2. System Clock Anti-Tampering Defense (Addressing Gap #1)
+
+To prevent users in `offline_only` mode from setting the PC system clock backward to bypass license expiration:
+
+### 🛡️ Clock Rollback Detection Algorithm:
+1. **High-Water Mark (`last_seen_timestamp`):** The local SQLite `system_state` table records the latest valid timestamp every minute during polling.
+2. **Rollback Check:** On every validation run, if $\text{current\_system\_time} < \text{last\_seen\_timestamp} - 5\text{ minutes}$, UltrON flags `CLOCK_TAMPERED`.
+3. **Enforcement:** If `CLOCK_TAMPERED` is triggered:
+   - License state transitions immediately to `LOCKED`.
+   - CPCB/SPCB outbound push is frozen.
+   - Desktop dashboard displays: ⚠️ *"System Clock Tampering Detected. Re-align system time or contact Sunshine Technologies."*
+4. **Recovery:** Re-aligning the system clock to a timestamp $\ge \text{last\_seen\_timestamp}$ (or applying a new signed `.lic` file) restores normal validation.
+
+---
+
+## 3. Deployment Mode & Reconfiguration Path (Addressing Gap #5)
 
 Stored in local client configuration (`config.py` / database settings):
 ```json
@@ -24,27 +39,34 @@ Stored in local client configuration (`config.py` / database settings):
 }
 ```
 
-| Mode | RajAPI Sync | License Validation | CPCB / SPCB Push |
-|---|---|---|---|
-| **`online`** | Active every 60s | Remote + local 30-day grace fallback | Active when licensed |
-| **`offline_only`** | Disabled entirely (never scheduled) | Local `.lic` file only (RSA-2048) | Never configured — shown as "not set up" |
+### 🔄 Mode Transition Policy (`online` $\longleftrightarrow$ `offline_only`):
+- **Admin Reconfiguration Only:** Switching modes requires entering the local `Master` / Admin password in Settings.
+- **`offline_only` $\longrightarrow$ `online`:** Enables `rajapi_sync.py` loop, prompts for RajAPI Site Key, validates remotely.
+- **`online` $\longrightarrow$ `offline_only`:** Disables `rajapi_sync.py` loop, prompts for valid `.lic` file, clears remote heartbeat schedules.
+
+| Mode | RajAPI Sync | License Validation | CPCB / SPCB Push | Alerts Destination |
+|---|---|---|---|---|
+| **`online`** | Active every 60s | Remote + 30-day grace fallback | Active when licensed | RajAPI Dashboard + Local UI |
+| **`offline_only`** | Disabled entirely | Local `.lic` file (RSA-2048) | Never configured ("Not Set Up") | **Local Desktop UI Only** (Addressing Gap #4) |
 
 ---
 
-## 3. Hardware ID (HWID) Specifications
+## 4. Hardware ID (HWID) Specifications (Addressing Gap #2)
 
-$$\text{HWID} = \text{SHA256}(\text{Motherboard UUID} + \text{CPU Serial})$$
+$$\text{HWID} = \text{SHA256}(\text{Motherboard UUID} + \text{CPU Serial} + \text{BIOS Serial})$$
 
-- **MAC Address Excluded:** MAC address is explicitly excluded because NIC swaps, USB adapters, and VPN virtual adapters cause instability.
-- **Hardware Fallback:** Disk drive volume serial if UUID/CPU serial is unavailable.
+- **Excluded:** MAC address is explicitly excluded (NIC swaps/VPNs cause instability).
+- **Stable Fallback:** Uses **BIOS Serial Number** (`wmic bios get serialnumber`) if Motherboard UUID is missing.
+- **Hardware Swap Policy:** Documented policy states that motherboard/BIOS replacement requires a free license re-issue from Sunshine Technologies.
 - **UI Display:** Displayed with a 1-click **Copy HWID** button on the lock banner and Settings screen.
 
 ---
 
-## 4. License Key Payload Structure
+## 5. License Key Payload & Replay Protection
 
 ```json
 {
+  "license_id": "LIC-9F82-441A-BC01",
   "client_name": "Beger Paints Ltd",
   "hwid": "SUN-8F92-A410-BC77",
   "allowed_stations": 2,
@@ -55,89 +77,64 @@ $$\text{HWID} = \text{SHA256}(\text{Motherboard UUID} + \text{CPU Serial})$$
 }
 ```
 
-- **Cryptographic Signature:** Signed with Sunshine's private key, verified in-app using embedded public key (RSA-2048).
-- **`offline_only` Activation:** HWID generated locally $\rightarrow$ sent to Sunshine via phone/email/USB $\rightarrow$ signed `.lic` returned $\rightarrow$ loaded via file picker/folder. Zero app-initiated network calls.
+- **Replay Protection:** `license_id` is registered in local `applied_licenses` table to prevent re-using old/renamed `.lic` files.
+- **RSA-2048 Validation:** Signed with Sunshine's private key, verified in-app using embedded public key.
 
 ---
 
-## 5. License Manager Engine (`app/services/license_manager.py`)
+## 6. License Manager Engine & State Guard (Addressing Gap #7)
 
 ### State Machine:
-- **`ACTIVE`** $\mid$ **`GRACE_PERIOD`** $\mid$ **`LOCKED`** $\mid$ **`EXPIRED`**
+- **`ACTIVE`** $\mid$ **`GRACE_PERIOD`** $\mid$ **`LOCKED`** $\mid$ **`EXPIRED`** $\mid$ **`CLOCK_TAMPERED`**
 
-### Validation Logic:
-1. **`offline_only`**: Checks local `.lic` RSA signature + expiry only. Zero network calls.
-2. **`online`**: Validates via RajAPI heartbeat response. If unreachable:
-   - If $\text{now} - \text{last\_successful\_validation} < \text{grace\_period\_days (30 days)}$, treat as `GRACE_PERIOD` (ACTIVE with warning log).
-   - Otherwise $\rightarrow$ `LOCKED`.
-3. **Heartbeat Re-Validation:** Piggybacks on 60s heartbeat loop (`rajapi_sync.py`) — remote lock/unlock takes effect within ~60s.
-4. **Expiry Warnings (Both Modes):**
-   - **30 days before expiry:** Dismissible warning banner.
-   - **14 days before expiry:** Non-dismissible, non-blocking banner.
-   - **0 days / Locked:** Full lock banner.
-
----
-
-## 6. CPCB/SPCB Push Guard & Bounded Backlog (`app/services/cpcb/cpcb_push.py`)
-
+### Guard Logic Matrix:
 ```python
-if not license_manager.is_cpcb_upload_allowed():
-    log.warning(f"CPCB/SPCB push frozen: state={license_manager.get_license_state()}")
-    queue_for_delayed_push(payload)
-    return
+def is_cpcb_upload_allowed() -> bool:
+    state = get_license_state()
+    # GRACE_PERIOD explicitly allows CPCB push while logging a 30-day countdown warning
+    if state in ("ACTIVE", "GRACE_PERIOD"):
+        return True
+    return False  # LOCKED, EXPIRED, CLOCK_TAMPERED freeze push
 ```
 
-- **Explicit Queuing:** Enqueues points into `PendingUpload` backlog table.
-- **Bounded Backlog Queue:** 12-month retention cap for push entries (underlying `historical_data` table remains permanent). Emits alerts before reaching capacity.
-- **`offline_only` Mode:** CPCB/SPCB servers shown as "Not Configured".
+### Expiry Warning Progression (Both Modes):
+- **30 days before expiry:** Dismissible notification banner.
+- **14 days before expiry:** Non-dismissible, non-blocking header banner.
+- **0 days / Locked:** Full red lock banner on EXE dashboard.
 
 ---
 
-## 7. Controlled Delayed Flush Job (On Unlock)
+## 7. Bounded Backlog Queue & Overflow Policy (Addressing Gap #3)
 
-When unlocked/renewed, a dedicated flush job runs:
-- **Triggered by Unlock Event:** Not a fixed timer.
-- **Chronological Flush:** Reads backlog from oldest to newest.
-- **Controlled Rate:** Pushes at a configurable rate (5–10 records/sec) to avoid overloading CPCB/SPCB servers.
-- **Resumable:** Tracks `last_flushed_record_id` so flush resumes cleanly if interrupted by app restart or network drop.
-- **UI Progress Indicator:** Displays progress: *"Flushing backlog: 1,240 / 3,800 records"*.
+- **Storage Table:** `PendingUpload` queue table.
+- **Retention Cap:** 12 months of push entries (underlying `historical_data` table remains permanent).
+- **FIFO Overflow Policy:** When capacity is reached, the **oldest pending push record is dropped** (FIFO), preserving recent compliance data.
+- **Alerting:** Emits `BACKLOG_OVERFLOW_WARNING` badge on UI when capacity reaches 90%.
 
 ---
 
-## 8. Governance & Enforcement
+## 8. Controlled Delayed Flush & HTTP Retry Backoff
 
-1. **`allowed_stations` Enforcement:** Blocks station creation beyond the licensed count with a clear error message in both modes.
-2. **Audit Logging:** Every lock/unlock/renew event is recorded with `event_type`, `actor`, `timestamp`, `reason`, and `site_id`.
-3. **Version Protection:** No version files touched without explicit user approval.
-
----
-
-## 9. Implementation Roadmap & Task Dependencies
-
-| # | Component | Depends On |
-|---|---|---|
-| **1** | Deployment mode flag (`online` vs `offline_only`) | — |
-| **2** | Hardware ID generator fix (Motherboard UUID + CPU Serial, drop MAC) | — |
-| **3** | Offline grace period logic (30-day window) | Task 2 |
-| **4** | Heartbeat-tied re-validation in `rajapi_sync.py` | Existing heartbeat |
-| **5** | `offline_only` local RSA-2048 validation path | Tasks 1, 2 |
-| **6** | License Manager Engine + CPCB Push Guard | Tasks 3, 4, 5 |
-| **7** | Bounded backlog queue (`PendingUpload`) | Task 6 |
-| **8** | Controlled delayed flush job | Task 7 |
-| **9** | UI Lock Banner + Expiry Warnings + Mode-Aware Messaging | Task 6 |
-| **10** | `allowed_stations` enforcement in Station CRUD | Existing station endpoints |
-| **11** | Audit logging for license events | RajAPI audit log system |
+- **Rate-Limited Flush:** Flushes at 5–10 records/sec upon unlock.
+- **HTTP Error Backoff:** If CPCB server responds with HTTP 429/5xx, flush pauses and retries with exponential backoff (5s, 10s, 20s, 60s, max 300s).
+- **Resumable:** Tracks `last_flushed_record_id` in SQLite so interrupted flushes resume cleanly.
+- **UI Progress:** Displays *"Flushing backlog: 1,240 / 3,800 records"*.
 
 ---
 
-## 10. Verification Plan
+## 9. Local & Remote Audit Logging (Addressing Gap #6)
 
-### Verification Checklist:
-- [ ] **`online` mode, no license:** Lock banner shown, CPCB push frozen, Modbus polling & SQLite recording continue uninterrupted.
-- [ ] **`online` mode, internet drops:** 30-day grace period holds active state, then transitions to locked.
-- [ ] **`offline_only` mode, valid `.lic`:** Fully functional, zero network calls attempted.
-- [ ] **`offline_only` mode, expired `.lic`:** Lock banner shown, CPCB push frozen.
-- [ ] **Unlock Event:** Delayed flush job starts automatically, pushes chronologically at 5-10 rec/sec, and resumes cleanly after interruption.
-- [ ] **Station Cap:** Station creation beyond `allowed_stations` is blocked with clear error message.
-- [ ] **Remote Lock:** Remote lock command from `rajapi.com` takes effect within ~60s.
-- [ ] **Audit Log:** Every lock/unlock event generates an immutable audit record.
+Every license event (`lock`, `unlock`, `renew`, `clock_tamper`, `mode_switch`) is recorded:
+- **`online` Mode:** Logged to local `audit_logs` SQLite table AND pushed immediately to RajAPI.
+- **`offline_only` Mode:** Logged to local `audit_logs` SQLite table (append-only, cryptographically hashed). If the plant later transitions to `online`, historical audit logs are automatically synced to RajAPI.
+
+---
+
+## 10. Verification & Test Checklist
+
+- [ ] **Clock Rollback Test:** Manually set PC clock back 1 hour in `offline_only` mode $\rightarrow$ Confirm system transitions to `CLOCK_TAMPERED` and locks push.
+- [ ] **HWID Stability Test:** Verify BIOS serial fallback works cleanly without MAC address dependencies.
+- [ ] **Mode Transition Test:** Switch `offline_only` $\rightarrow$ `online` in Admin Settings $\rightarrow$ Confirm RajAPI sync loop activates cleanly.
+- [ ] **Grace Period Logic:** Disconnect internet in `online` mode $\rightarrow$ Confirm `is_cpcb_upload_allowed()` returns `True` during 30-day grace period.
+- [ ] **FIFO Backlog Test:** Fill backlog to cap $\rightarrow$ Confirm oldest entries drop first and alert badge renders.
+- [ ] **Local Audit Logging:** Perform license actions in `offline_only` mode $\rightarrow$ Confirm immutable records written to local `audit_logs` table.
