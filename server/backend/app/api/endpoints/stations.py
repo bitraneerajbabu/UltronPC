@@ -19,7 +19,15 @@ def list_stations(site_id: int, db: Session = Depends(get_db), auth: AuthContext
 def create_station(payload: StationCreate, site_id: int, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
     if not auth.is_admin:
         raise HTTPException(403, detail="Admin access required")
-    station = Station(site_id=site_id, **payload.model_dump())
+    from app.api.endpoints.sites import generate_token
+    from app.models.core import IndustrySite
+    site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
+    
+    # StationCreate doesn't have api_key, so we just generate one
+    token = getattr(payload, 'api_key', None) or generate_token(site.name if site else "station")
+    
+    station = Station(site_id=site_id, station_id=payload.station_id, username=payload.username,
+                      category=payload.category, station_name=payload.station_name, api_key=token)
     db.add(station)
     db.commit()
     db.refresh(station)

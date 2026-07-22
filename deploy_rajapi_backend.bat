@@ -17,6 +17,8 @@ scp "%~dp0server\backend\app\api\endpoints\spcb_sync.py" pi@%PI_IP%:/home/pi/raj
 scp "%~dp0server\backend\app\api\endpoints\sync.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/api/endpoints/sync.py
 scp "%~dp0server\backend\app\api\endpoints\broadcasts.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/api/endpoints/broadcasts.py
 scp "%~dp0server\backend\app\models\core.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/models/core.py
+scp "%~dp0server\backend\app\api\deps.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/api/deps.py
+scp "%~dp0server\backend\app\api\endpoints\stations.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/app/api/endpoints/stations.py
 scp "%~dp0server\backend\migrate_add_last_sync.py" pi@%PI_IP%:/home/pi/rajapi_server/backend/migrate_add_last_sync.py
 
 echo.
