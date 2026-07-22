@@ -533,14 +533,22 @@ export const CPCB = () => {
         {subTab === 'led' && renderLedSection()}
       </div>
 
-      <Modal isOpen={testResultModal !== null} title={testResultModal?.success ? 'Success' : 'Failed'} onClose={() => setTestResultModal(null)}>
+      <Modal isOpen={testResultModal !== null} title={testResultModal?.success ? 'Success' : 'Connection Failed'} onClose={() => setTestResultModal(null)}>
         {testResultModal && (
           <div>
             <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               {testResultModal.title && <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>{testResultModal.title}</span>}
-              <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: testResultModal.success ? '#dcfce7' : '#fee2e2', color: testResultModal.success ? '#15803d' : '#b91c1c' }}>HTTP {testResultModal.status}</span>
+              <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: testResultModal.success ? '#dcfce7' : '#fee2e2', color: testResultModal.success ? '#15803d' : '#b91c1c' }}>
+                {testResultModal.status === 0 ? 'HTTP 0 (No Response)' : `HTTP ${testResultModal.status}`}
+              </span>
             </div>
-            <pre style={{ margin: 0, padding: '14px', background: '#0d4f49', color: '#ccfbf1', borderRadius: '8px', fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'Consolas, monospace' }}>{testResultModal.response || '<Empty>'}</pre>
+            <pre style={{ margin: 0, padding: '14px', background: '#0d4f49', color: '#ccfbf1', borderRadius: '8px', fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'Consolas, monospace' }}>
+              {testResultModal.response && testResultModal.response.trim() !== ''
+                ? testResultModal.response
+                : (testResultModal.status === 0
+                    ? "Connection Failed (HTTP 0): Unable to connect to the target SPCB server.\n\nPlease check:\n1. Target Server IP and Port URL configuration\n2. SPCB server host is running and online\n3. Local network / firewall connectivity"
+                    : '<No Response Body>')}
+            </pre>
           </div>
         )}
       </Modal>

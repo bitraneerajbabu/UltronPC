@@ -207,10 +207,18 @@ async def test_server_push(server_id: int, db: AsyncSession = Depends(get_db)):
                     "success": response.status_code < 300
                 })
             except Exception as e:
+                err_detail = str(e).strip() or repr(e) or type(e).__name__
                 results.append({
                     "device_id": device_id,
                     "status_code": 0,
-                    "response": str(e),
+                    "response": (
+                        f"Connection Failed (HTTP 0): Could not reach target server at '{target_url}'.\n"
+                        f"Reason: {err_detail}\n\n"
+                        f"Troubleshooting Hints:\n"
+                        f"1. Check if the target server URL ('{target_url}') is correct.\n"
+                        f"2. Ensure the SPCB receiving server is running and online on your network.\n"
+                        f"3. Verify firewall settings permit outbound HTTP traffic on this port."
+                    ),
                     "success": False
                 })
                 
@@ -256,10 +264,18 @@ async def test_server_delay_push(server_id: int, db: AsyncSession = Depends(get_
                     "success": response.status_code < 300
                 })
             except Exception as e:
+                err_detail = str(e).strip() or repr(e) or type(e).__name__
                 results.append({
                     "device_id": device_id,
                     "status_code": 0,
-                    "response": str(e),
+                    "response": (
+                        f"Connection Failed (HTTP 0): Could not reach delay server at '{server.delay_url}'.\n"
+                        f"Reason: {err_detail}\n\n"
+                        f"Troubleshooting Hints:\n"
+                        f"1. Check if the Delay URL ('{server.delay_url}') is correct.\n"
+                        f"2. Ensure the SPCB receiving server is running and online on your network.\n"
+                        f"3. Verify firewall settings permit outbound HTTP traffic on this port."
+                    ),
                     "success": False
                 })
 

@@ -82,6 +82,7 @@
   "tests/test_hwid_generator.py::TestHWIDGenerator::test_generate_hwid_missing_motherboard_uuid_fallback",
   "tests/test_hwid_generator.py::TestHWIDGenerator::test_get_hardware_components_powershell_success",
   "tests/test_hwid_generator.py::TestHWIDGenerator::test_get_hardware_components_wmic_fallback",
+  "tests/test_led_board.py::test_build_led_response_empty_db",
   "tests/test_license_manager.py::TestCPCBGuard::test_active_allows_upload",
   "tests/test_license_manager.py::TestCPCBGuard::test_clock_tampered_blocks_upload",
   "tests/test_license_manager.py::TestCPCBGuard::test_expired_blocks_upload",

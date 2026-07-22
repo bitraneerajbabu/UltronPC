@@ -175,15 +175,6 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          {p.alarm_high !== null && !isOffline && !isNaN(valFloat) && valFloat >= p.alarm_high && (
-            <span style={{
-              fontSize: '10px', fontWeight: '800', color: '#dc2626',
-              background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)',
-              padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.04em'
-            }}>
-              LOCKED @ HIGH
-            </span>
-          )}
           <span style={{ width: '8px', height: '8px', backgroundColor: state.dot, borderRadius: '50%', boxShadow: `0 0 8px ${state.dot}` }}></span>
           <span style={{ fontSize: '10px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{state.cls === 'alarm' ? 'ALARM' : (isOffline ? 'OFFLINE' : 'NOMINAL')}</span>
         </div>
