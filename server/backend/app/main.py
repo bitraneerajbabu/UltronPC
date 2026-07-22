@@ -197,6 +197,20 @@ def _run_auto_migrations():
         except Exception as e:
             logger.warning(f"Auto-migration for stations table skipped: {e}")
 
+        # Add std_limit and station_name to parameters table if missing
+        try:
+            param_cols = {c["name"] for c in inspector.get_columns("parameters")}
+            for col_name, col_def in [
+                ("std_limit", "FLOAT"),
+                ("station_name", "VARCHAR(200)"),
+            ]:
+                if col_name not in param_cols:
+                    conn.execute(text(f"ALTER TABLE parameters ADD COLUMN {col_name} {col_def}"))
+                    conn.commit()
+                    logger.info(f"Auto-migration: added '{col_name}' to parameters")
+        except Exception as e:
+            logger.warning(f"Auto-migration for parameters columns skipped: {e}")
+
 _run_auto_migrations()
 
 # ─── Rate Limiting & Account Lockout ──────────────────────────────────────────
@@ -366,12 +380,12 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
         payload.password.encode("utf-8"), ADMIN_PASSWORD_HASH.encode("utf-8")
     ):
         _clear_key_lockout(key)
-        return {"success": True}
+        return {"success": True, "admin_key": settings.ADMIN_KEY}
 
     # Check admin key (backward compat for X-Admin-Key header users)
     if key == settings.ADMIN_KEY:
         _clear_key_lockout(key)
-        return {"success": True}
+        return {"success": True, "admin_key": settings.ADMIN_KEY}
 
     # Check site-level key
     site = find_site_by_key(db, key)
@@ -381,7 +395,7 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
             _record_failed_login(ip, key)
             return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
         _clear_key_lockout(key)
-        return {"success": True}
+        return {"success": True, "admin_key": site.api_key}
 
     # Check device-level key (validate parent site is active)
     device = find_device_by_key(db, key)
@@ -391,7 +405,7 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
             _record_failed_login(ip, key)
             return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
         _clear_key_lockout(key)
-        return {"success": True}
+        return {"success": True, "admin_key": device.api_key}
 
     logger.warning("Failed login attempt from %s", ip)
     _record_failed_login(ip, key)

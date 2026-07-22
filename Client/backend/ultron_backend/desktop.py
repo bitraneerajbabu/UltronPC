@@ -89,6 +89,18 @@ def _apply_pending_update():
     current_exe = sys.executable
     old_exe = os.path.join(install_dir, "UltrON_old.exe")
 
+    def _retry_rename(src: str, dst: str, max_attempts: int = 5, delay: float = 0.3) -> None:
+        """Rename src → dst with retry on sharing violation (WinError 32)."""
+        for attempt in range(max_attempts):
+            try:
+                os.rename(src, dst)
+                return
+            except OSError as e:
+                if e.winerror == 32 and attempt < max_attempts - 1:  # ERROR_SHARING_VIOLATION
+                    time.sleep(delay * (attempt + 1))
+                    continue
+                raise
+
     # Clean up previous old exe if exists
     if os.path.exists(old_exe):
         try:
@@ -99,8 +111,8 @@ def _apply_pending_update():
     if os.path.exists(flag_path) and os.path.exists(new_exe):
         try:
             import subprocess
-            # Rename current exe to old_exe (Windows allows renaming running exes)
-            os.rename(current_exe, old_exe)
+            # Rename current exe to old_exe — retry if AV briefly locks it
+            _retry_rename(current_exe, old_exe)
             # Rename downloaded exe to current exe name
             os.rename(new_exe, current_exe)
             # Remove flag

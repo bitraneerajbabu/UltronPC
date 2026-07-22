@@ -74,9 +74,12 @@ class Parameter(Base):
     name = Column(String)
     tag_name = Column(String)
     unit = Column(String)
+    std_limit = Column(Float, nullable=True)  # CPCB standard limit (from client alarm_high)
+    station_name = Column(String, nullable=True)  # client station name for grouping
     
     device = relationship("Device", back_populates="parameters")
     telemetry = relationship("TelemetryData", back_populates="parameter", cascade="all, delete-orphan")
+
 
 class TelemetryData(Base):
     __tablename__ = "telemetry_data"

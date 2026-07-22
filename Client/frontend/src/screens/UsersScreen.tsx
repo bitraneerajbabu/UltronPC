@@ -103,18 +103,51 @@ function UserModal({ mode, user, onClose, onSave }: UserModalProps) {
   const [showPwd, setShowPwd] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const isMasterUser = user?.username === 'Master';
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const set = (k: string, v: string | boolean) => setForm(prev => ({ ...prev, [k]: v }));
+
+  const getPasswordStrength = (pwd: string) => {
+    if (!pwd) return { score: 0, label: '', color: '#cbd5e1' };
+    let score = 0;
+    if (pwd.length >= 6) score += 1;
+    if (pwd.length >= 10) score += 1;
+    if (/[A-Z]/.test(pwd)) score += 1;
+    if (/[0-9]/.test(pwd)) score += 1;
+    if (/[^A-Za-z0-9]/.test(pwd)) score += 1;
+
+    if (score <= 2) return { score: 33, label: 'Weak', color: '#ef4444' };
+    if (score <= 4) return { score: 66, label: 'Medium', color: '#f59e0b' };
+    return { score: 100, label: 'Strong', color: '#10b981' };
+  };
+
+  const pwdStrength = getPasswordStrength(form.password);
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!form.username.trim()) e.username = 'Username is required';
+    if (mode === 'add') {
+      const trimmedName = form.username.trim();
+      if (!trimmedName) e.username = 'Username is required';
+      else if (trimmedName.length < 3) e.username = 'Username must be at least 3 characters';
+      else if (!/^[a-zA-Z0-9_-]+$/.test(trimmedName)) e.username = 'Username can only contain letters, numbers, underscores and hyphens';
+    }
+
     if (mode === 'add') {
       if (!form.password) e.password = 'Password is required';
-      else if (form.password.length < 4) e.password = 'Minimum 4 characters';
-    } else if (form.password && form.password.length < 4) {
-      e.password = 'Minimum 4 characters';
+      else if (form.password.length < 4) e.password = 'Password must be at least 4 characters';
+    } else if (form.password && !isMasterUser && form.password.length < 4) {
+      e.password = 'Password must be at least 4 characters';
     }
-    if (form.password && form.password !== form.confirmPassword) {
+
+    if (form.password && !isMasterUser && form.password !== form.confirmPassword) {
       e.confirmPassword = 'Passwords do not match';
     }
     setErrors(e);
@@ -132,7 +165,7 @@ function UserModal({ mode, user, onClose, onSave }: UserModalProps) {
       payload.full_name = form.full_name.trim() || null;
       payload.is_active = form.is_active;
     } else {
-      if (form.password) payload.password = form.password;
+      if (form.password && !isMasterUser) payload.password = form.password;
       payload.full_name = form.full_name.trim() || null;
       payload.is_active = form.is_active;
       payload.role = form.role;
@@ -143,109 +176,213 @@ function UserModal({ mode, user, onClose, onSave }: UserModalProps) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
-      background: 'rgba(13,79,73,0.6)', backdropFilter: 'blur(6px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
     }}>
       <div style={{
-        background: '#0d4f49', border: '1px solid #1a7a6e', borderRadius: '16px',
-        width: '460px', maxWidth: '95vw', padding: '28px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+        background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0',
+        width: '480px', maxWidth: '95vw', overflow: 'hidden',
+        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column'
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#f1f5f9' }}>
-            {mode === 'add' ? 'Create New User' : 'Edit User'}
-          </h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px' }}>
+        {/* Header */}
+        <div style={{
+          padding: '20px 24px', borderBottom: '1px solid #e2e8f0',
+          background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+        }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>
+              {mode === 'add' ? 'Create New User' : `Edit User — ${user?.username}`}
+            </h3>
+            <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>
+              {mode === 'add' ? 'Set credentials and role permissions for new account' : 'Modify user details, role access or active status'}
+            </p>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8',
+            padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }} title="Close">
             <XIcon />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {/* Username — only for add */}
           {mode === 'add' && (
             <div className="form-group">
-              <label className="form-label">Username *</label>
+              <label className="form-label" style={{ fontWeight: '600', color: '#334155', fontSize: '13px', marginBottom: '6px', display: 'block' }}>
+                Username <span style={{ color: '#ef4444' }}>*</span>
+              </label>
               <input
                 type="text" className={`form-input ${errors.username ? 'error' : ''}`}
                 value={form.username} onChange={e => set('username', e.target.value)}
-                placeholder="e.g. operator1" autoComplete="off"
+                placeholder="e.g. operator_site1" autoComplete="off"
+                style={{
+                  width: '100%', padding: '10px 14px', borderRadius: '8px', border: errors.username ? '1px solid #ef4444' : '1px solid #cbd5e1',
+                  fontSize: '14px', color: '#0f172a', outline: 'none'
+                }}
               />
-              {errors.username && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.username}</div>}
+              {errors.username && <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', fontWeight: '500' }}>{errors.username}</div>}
             </div>
           )}
 
           {/* Full Name */}
           <div className="form-group">
-            <label className="form-label">Full Name</label>
+            <label className="form-label" style={{ fontWeight: '600', color: '#334155', fontSize: '13px', marginBottom: '6px', display: 'block' }}>
+              Full Name
+            </label>
             <input
               type="text" className="form-input"
               value={form.full_name} onChange={e => set('full_name', e.target.value)}
-              placeholder="Optional display name"
+              placeholder="e.g. Rajesh Sharma"
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                fontSize: '14px', color: '#0f172a', outline: 'none'
+              }}
             />
           </div>
 
           {/* Role */}
           <div className="form-group">
-            <label className="form-label">Role *</label>
-            <select className="form-input form-select" value={form.role} onChange={e => set('role', e.target.value)}>
-              <option value="client">Client — Dashboard, Trends, Reports only</option>
-              <option value="admin">Admin — Full Access</option>
+            <label className="form-label" style={{ fontWeight: '600', color: '#334155', fontSize: '13px', marginBottom: '6px', display: 'block' }}>
+              Role & Permissions <span style={{ color: '#ef4444' }}>*</span>
+            </label>
+            <select
+              className="form-input form-select"
+              value={form.role} onChange={e => set('role', e.target.value)}
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                fontSize: '14px', color: '#0f172a', background: '#fff', outline: 'none'
+              }}
+            >
+              <option value="client">Client — Read-only access (Dashboard, Trends, Reports)</option>
+              <option value="admin">Admin — Full Administrative Access</option>
             </select>
+            <div style={{
+              marginTop: '8px', padding: '10px 12px', borderRadius: '6px',
+              background: form.role === 'admin' ? 'rgba(220,38,38,0.06)' : 'rgba(15,118,110,0.06)',
+              border: form.role === 'admin' ? '1px solid rgba(220,38,38,0.2)' : '1px solid rgba(15,118,110,0.2)',
+              fontSize: '12px', color: form.role === 'admin' ? '#b91c1c' : '#0f766e', lineHeight: '1.4'
+            }}>
+              {form.role === 'admin'
+                ? '⚡ Admin role: Can modify configuration, manage parameters, stations, devices, and control user accounts.'
+                : '👁️ Client role: Read-only telemetry access. Cannot modify gateway parameters, settings, or users.'}
+            </div>
           </div>
 
           {/* Password */}
           <div className="form-group">
-            <label className="form-label">{mode === 'add' ? 'Password *' : 'New Password (leave blank to keep)'}</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showPwd ? 'text' : 'password'}
-                className={`form-input ${errors.password ? 'error' : ''}`}
-                value={form.password} onChange={e => set('password', e.target.value)}
-                placeholder={mode === 'add' ? 'Min 4 characters' : 'Leave blank to keep current'}
-                style={{ paddingRight: '44px' }} autoComplete="new-password"
-              />
-              <button type="button" onClick={() => setShowPwd(v => !v)} style={{
-                position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
-                background: 'none', border: 'none', cursor: 'pointer', color: '#64748b',
+            <label className="form-label" style={{ fontWeight: '600', color: '#334155', fontSize: '13px', marginBottom: '6px', display: 'block' }}>
+              {mode === 'add' ? 'Password *' : 'New Password'}
+            </label>
+            {isMasterUser ? (
+              <div style={{
+                padding: '10px 12px', borderRadius: '8px', background: '#fef3c7', border: '1px solid #fde68a',
+                color: '#92400e', fontSize: '12px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '8px'
               }}>
-                {showPwd ? <EyeOffIcon /> : <EyeIcon />}
-              </button>
-            </div>
-            {errors.password && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.password}</div>}
+                <ShieldIcon />
+                <span>Master user password is locked and cannot be changed via API.</span>
+              </div>
+            ) : (
+              <>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showPwd ? 'text' : 'password'}
+                    className={`form-input ${errors.password ? 'error' : ''}`}
+                    value={form.password} onChange={e => set('password', e.target.value)}
+                    placeholder={mode === 'add' ? 'Min 4 characters' : 'Leave blank to keep existing password'}
+                    style={{
+                      width: '100%', padding: '10px 44px 10px 14px', borderRadius: '8px',
+                      border: errors.password ? '1px solid #ef4444' : '1px solid #cbd5e1',
+                      fontSize: '14px', color: '#0f172a', outline: 'none'
+                    }}
+                    autoComplete="new-password"
+                  />
+                  <button type="button" onClick={() => setShowPwd(v => !v)} style={{
+                    position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px'
+                  }}>
+                    {showPwd ? <EyeOffIcon /> : <EyeIcon />}
+                  </button>
+                </div>
+                {errors.password && <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', fontWeight: '500' }}>{errors.password}</div>}
+
+                {/* Password Strength Meter */}
+                {form.password && (
+                  <div style={{ marginTop: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontWeight: '600', color: pwdStrength.color, marginBottom: '4px' }}>
+                      <span>Strength</span>
+                      <span>{pwdStrength.label}</span>
+                    </div>
+                    <div style={{ width: '100%', height: '4px', background: '#e2e8f0', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div style={{ width: `${pwdStrength.score}%`, height: '100%', background: pwdStrength.color, transition: 'width 0.25s' }} />
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Confirm Password */}
-          {form.password && (
+          {form.password && !isMasterUser && (
             <div className="form-group">
-              <label className="form-label">Confirm Password *</label>
+              <label className="form-label" style={{ fontWeight: '600', color: '#334155', fontSize: '13px', marginBottom: '6px', display: 'block' }}>
+                Confirm Password <span style={{ color: '#ef4444' }}>*</span>
+              </label>
               <input
                 type={showPwd ? 'text' : 'password'}
                 className={`form-input ${errors.confirmPassword ? 'error' : ''}`}
                 value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)}
                 placeholder="Re-enter password"
+                style={{
+                  width: '100%', padding: '10px 14px', borderRadius: '8px',
+                  border: errors.confirmPassword ? '1px solid #ef4444' : '1px solid #cbd5e1',
+                  fontSize: '14px', color: '#0f172a', outline: 'none'
+                }}
               />
-              {errors.confirmPassword && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.confirmPassword}</div>}
+              {errors.confirmPassword && <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', fontWeight: '500' }}>{errors.confirmPassword}</div>}
             </div>
           )}
 
           {/* Active toggle */}
-          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <label className="form-label" style={{ margin: 0 }}>Account Active</label>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>Account Status</div>
+              <div style={{ fontSize: '11px', color: '#64748b' }}>Disabled users cannot log in to the portal</div>
+            </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
               <input
                 type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)}
-                style={{ width: '16px', height: '16px' }}
+                style={{ width: '18px', height: '18px', accentColor: '#0f766e', cursor: 'pointer' }}
               />
-              <span style={{ fontSize: '13px', color: form.is_active ? '#10b981' : '#64748b' }}>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: form.is_active ? '#059669' : '#64748b' }}>
                 {form.is_active ? 'Active' : 'Disabled'}
               </span>
             </label>
           </div>
 
-          <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}>
-            <button type="button" className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>
+          {/* Form Actions */}
+          <div style={{ display: 'flex', gap: '12px', marginTop: '12px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onClose}
+              style={{
+                flex: 1, padding: '10px 16px', borderRadius: '8px', border: '1px solid #cbd5e1',
+                background: '#ffffff', color: '#475569', fontWeight: '600', fontSize: '14px', cursor: 'pointer'
+              }}
+            >
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" style={{ flex: 2 }}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              style={{
+                flex: 2, padding: '10px 16px', borderRadius: '8px', border: 'none',
+                background: '#0f766e', color: '#ffffff', fontWeight: '600', fontSize: '14px', cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(15,118,110,0.2)'
+              }}
+            >
               {mode === 'add' ? 'Create User' : 'Save Changes'}
             </button>
           </div>
@@ -263,24 +400,63 @@ interface DeleteConfirmModalProps {
 }
 
 function DeleteConfirmModal({ user, onClose, onConfirm }: DeleteConfirmModalProps) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
-      background: 'rgba(13,79,73,0.6)', backdropFilter: 'blur(6px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
     }}>
       <div style={{
-        background: '#0d4f49', border: '1px solid #1a7a6e', borderRadius: '16px',
-        width: '380px', padding: '28px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+        background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '16px',
+        width: '400px', maxWidth: '95vw', padding: '24px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
       }}>
-        <h3 style={{ margin: '0 0 12px', fontSize: '18px', fontWeight: '700', color: '#f1f5f9' }}>Delete User</h3>
-        <p style={{ color: '#94a3b8', fontSize: '14px', margin: '0 0 24px' }}>
-          Are you sure you want to delete <strong style={{ color: '#f1f5f9' }}>{user.username}</strong>?
-          This action cannot be undone.
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+          <div style={{
+            width: '40px', height: '40px', borderRadius: '10px', background: '#fee2e2',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', flexShrink: 0
+          }}>
+            <TrashIcon />
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>Delete User Account</h3>
+            <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#64748b' }}>This action is permanent and cannot be undone</p>
+          </div>
+        </div>
+
+        <p style={{ color: '#475569', fontSize: '14px', margin: '0 0 24px', lineHeight: '1.5' }}>
+          Are you sure you want to permanently delete user account <strong style={{ color: '#0f172a' }}>{user.username}</strong>?
         </p>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</button>
-          <button className="btn btn-danger" onClick={onConfirm} style={{ flex: 1 }}>Delete User</button>
+
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={onClose}
+            style={{
+              flex: 1, padding: '10px 16px', borderRadius: '8px', border: '1px solid #cbd5e1',
+              background: '#ffffff', color: '#475569', fontWeight: '600', fontSize: '14px', cursor: 'pointer'
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            className="btn btn-danger"
+            onClick={onConfirm}
+            style={{
+              flex: 1, padding: '10px 16px', borderRadius: '8px', border: 'none',
+              background: '#dc2626', color: '#ffffff', fontWeight: '600', fontSize: '14px', cursor: 'pointer',
+              boxShadow: '0 2px 4px rgba(220,38,38,0.2)'
+            }}
+          >
+            Delete User
+          </button>
         </div>
       </div>
     </div>

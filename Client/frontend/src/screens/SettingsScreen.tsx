@@ -12,6 +12,49 @@ const PlusIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="no
 const EditIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>);
 const TrashIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>);
 
+// ─── User Modal ───
+function UserModal({ mode, user, onClose, onSave }: { mode: 'add' | 'edit'; user?: UserData; onClose: () => void; onSave: (p: UserPayload) => void }) {
+  const [form, setForm] = useState({ username: user?.username || '', password: '', confirmPassword: '', full_name: user?.full_name || '', role: user?.role || 'client', is_active: user?.is_active !== undefined ? user.is_active : true });
+  const [showPwd, setShowPwd] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const set = (k: string, v: string | boolean) => setForm(prev => ({ ...prev, [k]: v }));
+  const validate = () => {
+    const e: Record<string, string> = {};
+    if (!form.username.trim()) e.username = 'Required';
+    if (mode === 'add' && !form.password) e.password = 'Required';
+    else if (form.password && form.password.length < 4) e.password = 'Min 4 chars';
+    if (form.password && form.password !== form.confirmPassword) e.confirmPassword = 'No match';
+    setErrors(e); return Object.keys(e).length === 0;
+  };
+  const handleSubmit = (ev: React.FormEvent) => {
+    ev.preventDefault();
+    if (!validate()) return;
+    const p: UserPayload = {};
+    if (mode === 'add') { p.username = form.username.trim(); p.password = form.password; p.role = form.role; p.full_name = form.full_name.trim() || null; p.is_active = form.is_active; }
+    else { if (form.password) p.password = form.password; p.full_name = form.full_name.trim() || null; p.is_active = form.is_active; p.role = form.role; }
+    onSave(p);
+  };
+  const ms = { position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(13,79,73,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' } as const;
+  const mc: React.CSSProperties = { background: '#0d4f49', border: '1px solid #1a7a6e', borderRadius: '16px', width: '460px', maxWidth: '95vw', padding: '28px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)' };
+  return (<div style={ms}>
+    <div style={mc}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#f1f5f9' }}>{mode === 'add' ? 'Create User' : 'Edit User'}</h3>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px', fontSize: '18px' }}>×</button>
+      </div>
+      <form onSubmit={handleSubmit}>
+        {mode === 'add' && (<div className="form-group"><label className="form-label">Username *</label><input autoFocus type="text" className={`form-input ${errors.username ? 'error' : ''}`} value={form.username} onChange={e => set('username', e.target.value)} placeholder="e.g. operator1" autoComplete="off" />{errors.username && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.username}</div>}</div>)}
+        <div className="form-group"><label className="form-label">Full Name</label><input type="text" className="form-input" value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Optional display name" /></div>
+        <div className="form-group"><label className="form-label">Role</label><select className="form-input form-select" value={form.role} onChange={e => set('role', e.target.value)}><option value="client">Client — Dashboard, Trends, Reports only</option><option value="admin">Admin — Full Access</option></select></div>
+        <div className="form-group"><label className="form-label">{mode === 'add' ? 'Password *' : 'New Password'}</label><div style={{ position: 'relative' }}><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.password ? 'error' : ''}`} value={form.password} onChange={e => set('password', e.target.value)} placeholder={mode === 'add' ? 'Min 4 chars' : 'Leave blank to keep'} style={{ paddingRight: '44px' }} autoComplete="new-password" /><button type="button" onClick={() => setShowPwd(v => !v)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>{showPwd ? '🙈' : '👁'}</button></div>{errors.password && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.password}</div>}</div>)
+        {form.password && (<div className="form-group"><label className="form-label">Confirm Password</label><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.confirmPassword ? 'error' : ''}`} value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} placeholder="Re-enter" />{errors.confirmPassword && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.confirmPassword}</div>}</div>)}
+        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><label className="form-label" style={{ margin: 0 }}>Active</label><label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}><input type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)} style={{ width: '16px', height: '16px' }} /><span style={{ fontSize: '13px', color: form.is_active ? '#10b981' : '#64748b' }}>{form.is_active ? 'Active' : 'Disabled'}</span></label></div>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}><button type="button" className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</button><button type="submit" className="btn btn-primary" style={{ flex: 2 }}>{mode === 'add' ? 'Create User' : 'Save Changes'}</button></div>
+      </form>
+    </div>
+  </div>);
+}
+
 export const SettingsScreen = () => {
   const { API_BASE, showToast, loadAllData, authFetch, pendingStatus, usersList, loadUsers, addUser, editUser, deleteUser, currentUser, parseUtcDate } = useContext(AppContext);
   const [settingsTab, setSettingsTab] = useState('system');
@@ -298,49 +341,6 @@ export const SettingsScreen = () => {
   const RoleBadge = ({ role }: { role: string }) => {
     const isAdmin = role === 'admin';
     return (<span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', background: isAdmin ? 'rgba(220,38,38,0.1)' : 'rgba(15,118,110,0.1)', color: isAdmin ? '#dc2626' : '#0f766e', border: isAdmin ? '1px solid rgba(220,38,38,0.3)' : '1px solid rgba(15,118,110,0.3)' }}>{isAdmin ? <ShieldIcon /> : <UserIcon />} {isAdmin ? 'Admin' : 'Client'}</span>);
-  };
-
-  // ─── User Modal ───
-  const UserModal = ({ mode, user, onClose, onSave }: { mode: 'add' | 'edit'; user?: UserData; onClose: () => void; onSave: (p: UserPayload) => void }) => {
-    const [form, setForm] = useState({ username: user?.username || '', password: '', confirmPassword: '', full_name: user?.full_name || '', role: user?.role || 'client', is_active: user?.is_active !== undefined ? user.is_active : true });
-    const [showPwd, setShowPwd] = useState(false);
-    const [errors, setErrors] = useState<Record<string, string>>({});
-    const set = (k: string, v: string | boolean) => setForm(prev => ({ ...prev, [k]: v }));
-    const validate = () => {
-      const e: Record<string, string> = {};
-      if (!form.username.trim()) e.username = 'Required';
-      if (mode === 'add' && !form.password) e.password = 'Required';
-      else if (form.password && form.password.length < 4) e.password = 'Min 4 chars';
-      if (form.password && form.password !== form.confirmPassword) e.confirmPassword = 'No match';
-      setErrors(e); return Object.keys(e).length === 0;
-    };
-    const handleSubmit = (ev: React.FormEvent) => {
-      ev.preventDefault();
-      if (!validate()) return;
-      const p: UserPayload = {};
-      if (mode === 'add') { p.username = form.username.trim(); p.password = form.password; p.role = form.role; p.full_name = form.full_name.trim() || null; p.is_active = form.is_active; }
-      else { if (form.password) p.password = form.password; p.full_name = form.full_name.trim() || null; p.is_active = form.is_active; p.role = form.role; }
-      onSave(p);
-    };
-    const ms = { position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(13,79,73,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' } as const;
-    const mc: React.CSSProperties = { background: '#0d4f49', border: '1px solid #1a7a6e', borderRadius: '16px', width: '460px', maxWidth: '95vw', padding: '28px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)' };
-    return (<div style={ms}>
-      <div style={mc}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#f1f5f9' }}>{mode === 'add' ? 'Create User' : 'Edit User'}</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px', fontSize: '18px' }}>×</button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          {mode === 'add' && (<div className="form-group"><label className="form-label">Username *</label><input type="text" className={`form-input ${errors.username ? 'error' : ''}`} value={form.username} onChange={e => set('username', e.target.value)} placeholder="e.g. operator1" autoComplete="off" />{errors.username && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.username}</div>}</div>)}
-          <div className="form-group"><label className="form-label">Full Name</label><input type="text" className="form-input" value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Optional display name" /></div>
-          <div className="form-group"><label className="form-label">Role</label><select className="form-input form-select" value={form.role} onChange={e => set('role', e.target.value)}><option value="client">Client — Dashboard, Trends, Reports only</option><option value="admin">Admin — Full Access</option></select></div>
-          <div className="form-group"><label className="form-label">{mode === 'add' ? 'Password *' : 'New Password'}</label><div style={{ position: 'relative' }}><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.password ? 'error' : ''}`} value={form.password} onChange={e => set('password', e.target.value)} placeholder={mode === 'add' ? 'Min 4 chars' : 'Leave blank to keep'} style={{ paddingRight: '44px' }} autoComplete="new-password" /><button type="button" onClick={() => setShowPwd(v => !v)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>{showPwd ? '🙈' : '👁'}</button></div>{errors.password && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.password}</div>}</div>)
-          {form.password && (<div className="form-group"><label className="form-label">Confirm Password</label><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.confirmPassword ? 'error' : ''}`} value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} placeholder="Re-enter" />{errors.confirmPassword && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.confirmPassword}</div>}</div>)}
-          <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><label className="form-label" style={{ margin: 0 }}>Active</label><label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}><input type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)} style={{ width: '16px', height: '16px' }} /><span style={{ fontSize: '13px', color: form.is_active ? '#10b981' : '#64748b' }}>{form.is_active ? 'Active' : 'Disabled'}</span></label></div>
-          <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}><button type="button" className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</button><button type="submit" className="btn btn-primary" style={{ flex: 2 }}>{mode === 'add' ? 'Create User' : 'Save Changes'}</button></div>
-        </form>
-      </div>
-    </div>);
   };
 
   const handleShutdown = async () => {

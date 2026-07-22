@@ -10,6 +10,7 @@ from app.models.calibration import CalibrationJob, CalibrationResult, Calibratio
 from app.models.plant_settings import PlantSettings
 from app.models.security import RefreshToken, RevokedToken, PasswordHistory, LoginAttempt, SecurityEvent
 from app.models.rajapi import RajAPIConfig, RajAPIStationConfig
+from app.models.system_state import SystemState
 
 __all__ = [
     "Station", "StationStatus", "StationType",
@@ -23,4 +24,5 @@ __all__ = [
     "PlantSettings",
     "RefreshToken", "RevokedToken", "PasswordHistory", "LoginAttempt", "SecurityEvent",
     "RajAPIConfig", "RajAPIStationConfig",
+    "SystemState",
 ]

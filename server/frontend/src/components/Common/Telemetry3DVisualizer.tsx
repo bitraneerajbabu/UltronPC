@@ -29,12 +29,22 @@ interface Node3D {
   status: 'live' | 'recent' | 'offline' | 'never';
 }
 
+function parseISTDate(ts?: string | null): Date | null {
+  if (!ts) return null;
+  const cleanTs = ts.includes('T') ? ts : ts.replace(' ', 'T');
+  const d = new Date(cleanTs);
+  if (isNaN(d.getTime())) return null;
+  return d;
+}
+
 function getSiteStatus(site: Site): { label: string; color: string; type: 'live' | 'recent' | 'offline' | 'never' } {
   if (!site.is_active) return { label: 'Deactivated', color: '#EF4444', type: 'offline' };
   if (!site.last_sync) return { label: 'Never Connected', color: '#9CA3AF', type: 'never' };
   
-  const utcStr = site.last_sync.endsWith('Z') ? site.last_sync : site.last_sync + 'Z';
-  const diffMs = Date.now() - new Date(utcStr).getTime();
+  const d = parseISTDate(site.last_sync);
+  if (!d) return { label: 'Never Connected', color: '#9CA3AF', type: 'never' };
+  
+  const diffMs = Math.abs(Date.now() - d.getTime());
   const diffMins = diffMs / 60000;
   
   if (diffMins < 5) return { label: 'Live', color: '#16A34A', type: 'live' };

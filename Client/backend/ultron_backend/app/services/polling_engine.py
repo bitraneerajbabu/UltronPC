@@ -219,14 +219,33 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
     if not readings:
         return
 
-    # ─── Data Quality ─────────────────────────────────────────────────────────
-    param_meta = {p.id: {"min_valid": p.min_valid, "max_valid": p.max_valid} for p in parameters}
+    # ─── Data Quality & Warning High Capping ──────────────────────────────────
+    param_meta = {
+        p.id: {
+            "min_valid": p.min_valid,
+            "max_valid": p.max_valid,
+            "alarm_high": p.alarm_high,
+        }
+        for p in parameters
+    }
     readings = dq_engine.bulk_check(readings, param_meta)
 
-    # ─── Round Values to 2 Decimals ───────────────────────────────────────────
+    # ─── Lock Value at Warning High Limit if Real Value Exceeds High Limit ────
     for r in readings:
-        if r.get("value") is not None and isinstance(r["value"], (int, float)):
-            r["value"] = round(float(r["value"]), 2)
+        val = r.get("value")
+        if val is not None and isinstance(val, (int, float)):
+            meta = param_meta.get(r["parameter_id"], {})
+            alarm_high = meta.get("alarm_high")
+            if alarm_high is not None and val > alarm_high:
+                if r.get("raw_value") is None:
+                    r["raw_value"] = val
+                r["value"] = round(float(alarm_high), 2)
+                log.info(
+                    f"Param {r['parameter_id']}: Real value {val} exceeded Warning High limit {alarm_high} "
+                    f"-> Locked & saved as {r['value']}"
+                )
+            else:
+                r["value"] = round(float(val), 2)
 
     # ─── Persist + Alarm Check ────────────────────────────────────────────────
     now = datetime.utcnow()

@@ -18,8 +18,8 @@ def _validate_site(site: IndustrySite, status_code: int = 403):
         raise HTTPException(status_code=status_code, detail="Could not validate API Key")
 
 
-def _get_or_create_param(db: Session, site: IndustrySite, tag_name: str, unit: str = "") -> Parameter:
-    """Find or create a parameter for this site, optionally updating unit."""
+def _get_or_create_param(db: Session, site: IndustrySite, tag_name: str, unit: str = "", std_limit: Optional[float] = None, station_name: Optional[str] = None) -> Parameter:
+    """Find or create a parameter for this site, optionally updating unit, std_limit, and station_name."""
     param = db.query(Parameter).filter(
         Parameter.tag_name == tag_name,
         Parameter.device.has(site_id=site.id)
@@ -39,12 +39,19 @@ def _get_or_create_param(db: Session, site: IndustrySite, tag_name: str, unit: s
             tag_name=tag_name,
             name=tag_name,
             unit=unit or "",
+            std_limit=std_limit,
+            station_name=station_name,
             device_id=generic_device.id
         )
         db.add(param)
         db.flush()
-    elif not param.unit and unit:
-        param.unit = unit
+    else:
+        if not param.unit and unit:
+            param.unit = unit
+        if std_limit is not None:
+            param.std_limit = std_limit
+        if station_name:
+            param.station_name = station_name
 
     return param
 

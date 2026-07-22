@@ -21,7 +21,7 @@ def sync_telemetry(
 
     # Process the incoming points
     for point in payload.points:
-        param = _get_or_create_param(db, site, point.tag_name, point.unit or "")
+        param = _get_or_create_param(db, site, point.tag_name, point.unit or "", std_limit=point.std_limit, station_name=point.station_name)
 
         telemetry = TelemetryData(
             site_id=site.id,
@@ -123,7 +123,7 @@ def heartbeat(
             for b in active_broadcasts
         ],
         "commands": [
-            {"id": c.id, "type": c.action, "payload": {}}
+            {"id": c.id, "type": c.action, "action": c.action, "payload": {}}
             for c in pending_cmds
         ]
     }

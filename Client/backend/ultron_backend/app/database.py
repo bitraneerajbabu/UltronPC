@@ -70,7 +70,7 @@ async def init_db():
     Create all tables, and ensure schema migrations are applied.
     """
     # Import all models so SQLAlchemy sees them
-    from app.models import station, device, parameter, telemetry, user, server_config, cpcb, calibration, plant_settings, security, rajapi  # noqa: F401
+    from app.models import station, device, parameter, telemetry, user, server_config, cpcb, calibration, plant_settings, security, rajapi, system_state  # noqa: F401
     from sqlalchemy import text
 
     log.info("Initialising database tables …")

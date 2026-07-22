@@ -10,6 +10,8 @@ class TelemetryPoint(BaseModel):
     quality: str
     timestamp: datetime
     unit: Optional[str] = ""
+    std_limit: Optional[float] = None  # CPCB standard limit (client alarm_high)
+    station_name: Optional[str] = None  # client station name for grouping
 
 class ClientSyncPayload(BaseModel):
     client_id: str
@@ -62,6 +64,8 @@ class LatestTelemetryPoint(BaseModel):
     value: Optional[float] = None
     quality: str
     timestamp: datetime
+    std_limit: Optional[float] = None  # CPCB standard limit
+    station_name: Optional[str] = None  # station grouping label
 
     class Config:
         from_attributes = True

@@ -19,20 +19,10 @@ from app.models.telemetry import Broadcast
 from app.config import settings
 from app.core.logger import get_logger
 from app.services.lock_store import update_from_sync_response
+from app.services.validation_state import set_last_successful_validation, get_last_successful_validation
+from app.services.grace_period import is_within_grace, grace_remaining
 
 log = get_logger("ultron.rajapi_sync")
-
-IGNORED_PLACEHOLDER_BROADCASTS = {
-    "scheduled maintenance tonight at 2 am": {"2026-07-05"},
-}
-
-
-def _is_ignored_placeholder_broadcast(message: str, expires_at: str | None = None) -> bool:
-    normalized = " ".join((message or "").strip().lower().split())
-    ignored_expiry_dates = IGNORED_PLACEHOLDER_BROADCASTS.get(normalized)
-    if not ignored_expiry_dates or not expires_at:
-        return False
-    return any(str(expires_at).startswith(expiry_date) for expiry_date in ignored_expiry_dates)
 
 
 async def _get_system_stats() -> dict:
@@ -57,7 +47,7 @@ async def _check_internet() -> bool:
 
 async def _execute_command(cmd: dict):
     """Execute a remote command received from RajAPI."""
-    cmd_type = cmd.get("type", "")
+    cmd_type = cmd.get("type") or cmd.get("action", "")
     payload = cmd.get("payload", {})
     log.info(f"Executing remote command: {cmd_type}")
 
@@ -118,8 +108,9 @@ async def _execute_command(cmd: dict):
 
 async def _load_rajapi_config(db) -> tuple[str | None, str | None]:
     """Load auth token and station ID from DB config (fallback to env)."""
-    if settings.CENTRAL_API_KEY:
-        return settings.CENTRAL_API_KEY, settings.RAJAPI_STATION_ID or "default"
+    central_key = getattr(settings, "CENTRAL_API_KEY", "")
+    if central_key:
+        return central_key, getattr(settings, "RAJAPI_STATION_ID", "default") or "default"
     from app.models.rajapi import RajAPIConfig
     result = await db.execute(select(RajAPIConfig).where(RajAPIConfig.is_enabled == True))
     config = result.scalars().first()
@@ -176,6 +167,9 @@ async def send_heartbeat():
                 # Update lock/AMC status
                 await update_from_sync_response(data)
 
+                # Phase 2: Record successful validation for license grace period
+                await set_last_successful_validation()
+
                 # Handle broadcasts
                 broadcasts = data.get("broadcasts") or data.get("broadcast", [])
                 if broadcasts:
@@ -184,9 +178,6 @@ async def send_heartbeat():
                         for msg in broadcasts:
                             text = msg.get("message", str(msg)) if isinstance(msg, dict) else str(msg)
                             expires_raw = msg.get("expires_at") if isinstance(msg, dict) else None
-                            if _is_ignored_placeholder_broadcast(text, expires_raw):
-                                log.info("[RajAPI] Ignored placeholder broadcast")
-                                continue
                             sev = msg.get("severity", "info") if isinstance(msg, dict) else "info"
                             expires = None
                             if expires_raw:
@@ -228,8 +219,22 @@ async def send_heartbeat():
 
     except httpx.ConnectError:
         log.debug("[RajAPI] Offline — heartbeat skipped")
+        # Phase 2: Check grace period when RajAPI is unreachable
+        last_valid = await get_last_successful_validation()
+        if last_valid is None:
+            log.info("[RajAPI] No prior validation recorded — outside grace period")
+        elif is_within_grace(last_valid):
+            remaining = grace_remaining(last_valid)
+            log.info(f"[RajAPI] Offline but within grace period ({remaining} remaining)")
+        else:
+            log.warning("[RajAPI] Offline and beyond grace period — license may be at risk")
     except Exception as e:
         log.debug(f"[RajAPI] Heartbeat error: {e}")
+        last_valid = await get_last_successful_validation()
+        if last_valid is None:
+            log.info("[RajAPI] Heartbeat error, no prior validation recorded")
+        elif not is_within_grace(last_valid):
+            log.warning(f"[RajAPI] Heartbeat error and beyond grace period: {e}")
 
 
 # Legacy alias — existing scheduler references this name

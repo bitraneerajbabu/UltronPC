@@ -219,7 +219,7 @@ class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.71"
+    APP_VERSION: str = "1.0.71.2"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -241,13 +241,15 @@ class Settings(BaseSettings):
     def DATABASE_URL(self) -> str:
         if self.DB_TYPE == "postgresql":
             return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        return f"sqlite+aiosqlite:///{APP_DIR}/ultron.db"
+        db_path = (APP_DIR / "ultron.db").as_posix()
+        return f"sqlite+aiosqlite:///{db_path}"
 
     @property
     def SYNC_DATABASE_URL(self) -> str:
         if self.DB_TYPE == "postgresql":
             return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        return f"sqlite:///{APP_DIR}/ultron.db"
+        db_path = (APP_DIR / "ultron.db").as_posix()
+        return f"sqlite:///{db_path}"
 
     # ─── Security ─────────────────────────────────────────────
     SECRET_KEY: str = Field(default_factory=lambda: _load_or_create_secret_key())
@@ -286,6 +288,7 @@ class Settings(BaseSettings):
         return str(v).strip().lower()
 
     # ─── RajAPI Central Sync (background, invisible to user) ────
+    CENTRAL_API_KEY: str = ""
     RAJAPI_API_KEY: str = ""                  # Legacy API key — kept for backward compatibility
     RAJAPI_SYNC_ENABLED: bool = True
 

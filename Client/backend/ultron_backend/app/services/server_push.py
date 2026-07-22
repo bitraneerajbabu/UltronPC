@@ -173,11 +173,10 @@ async def _push_spcb(config: ServerConfig, db, mode: str):
     """HTTP POST each payload to the configured SPCB URL."""
     target_url = config.live_url if mode == "live" else config.delay_url
     if not target_url:
-        if mode == "delay":
-            log.warning(
-                f"[SPCB/DELAY] ⚠ Server '{config.name}' has no Delay URL configured — "
-                f"delay push skipped. Set a Delay URL in Server Push Mappings to fix this."
-            )
+        log.warning(
+            f"[SPCB/{mode.upper()}] ⚠ Server '{config.name}' has no {'Live' if mode == 'live' else 'Delay'} URL configured — "
+            f"{mode} push skipped."
+        )
         return
 
     # Quick per-server connectivity check
@@ -619,8 +618,8 @@ async def _push_telemetry_to_rajapi(db, mode: str):
     Pushes live values when mode == "live", and 15-minute averages when mode == "delay".
     """
     from app.config import settings
-    api_key = settings.CENTRAL_API_KEY
-    station_id = settings.RAJAPI_STATION_ID or "default_station"
+    api_key = getattr(settings, "CENTRAL_API_KEY", "")
+    station_id = getattr(settings, "RAJAPI_STATION_ID", "default_station") or "default_station"
     if not api_key:
         return
 
@@ -631,7 +630,9 @@ async def _push_telemetry_to_rajapi(db, mode: str):
     points = []
     try:
         if mode == "live":
-            ld_stmt = select(LiveData).options(selectinload(LiveData.parameter))
+            ld_stmt = select(LiveData).options(
+                selectinload(LiveData.parameter).selectinload(Parameter.device).selectinload(Device.station)
+            )
             ld_res = await db.execute(ld_stmt)
             live_data_list = ld_res.scalars().all()
             for ld in live_data_list:
@@ -641,16 +642,25 @@ async def _push_telemetry_to_rajapi(db, mode: str):
                     except (ValueError, TypeError):
                         v = None
                     q = ld.quality.value if hasattr(ld.quality, "value") else str(ld.quality)
+                    st_name = (
+                        ld.parameter.device.station.name
+                        if ld.parameter.device and ld.parameter.device.station
+                        else None
+                    )
                     points.append({
                         "tag_name": ld.parameter.tag_name,
                         "value": v,
                         "quality": q,
                         "timestamp": ld.timestamp.isoformat() if hasattr(ld.timestamp, "isoformat") else str(ld.timestamp),
-                        "unit": ld.parameter.unit or ""
+                        "unit": ld.parameter.unit or "",
+                        "std_limit": ld.parameter.alarm_high,
+                        "station_name": st_name,
                     })
         elif mode == "delay":
             cutoff = datetime.utcnow() - timedelta(minutes=30)
-            avg_stmt = select(Averages).options(selectinload(Averages.parameter)).where(
+            avg_stmt = select(Averages).options(
+                selectinload(Averages.parameter).selectinload(Parameter.device).selectinload(Device.station)
+            ).where(
                 Averages.avg_type == AverageType.avg_15min,
                 Averages.timestamp >= cutoff
             )
@@ -663,12 +673,19 @@ async def _push_telemetry_to_rajapi(db, mode: str):
                     except (ValueError, TypeError):
                         v = None
                     q = avg.quality.value if hasattr(avg.quality, "value") else str(avg.quality)
+                    st_name = (
+                        avg.parameter.device.station.name
+                        if avg.parameter.device and avg.parameter.device.station
+                        else None
+                    )
                     points.append({
                         "tag_name": avg.parameter.tag_name,
                         "value": v,
                         "quality": q,
                         "timestamp": avg.timestamp.isoformat() if hasattr(avg.timestamp, "isoformat") else str(avg.timestamp),
-                        "unit": avg.parameter.unit or ""
+                        "unit": avg.parameter.unit or "",
+                        "std_limit": avg.parameter.alarm_high,
+                        "station_name": st_name,
                     })
 
         if not points:
@@ -746,20 +763,23 @@ async def run_server_push(mode: str = "live"):
         servers = conf_result.scalars().all()
 
         for config in servers:
-            proto = (config.protocol or "tspcb").lower()
+            try:
+                proto = (config.protocol or "tspcb").lower()
 
-            if proto == "cpcb":
-                await _push_cpcb(config, db)
+                if proto == "cpcb":
+                    await _push_cpcb(config, db)
 
-            elif proto == "both":
-                if mode == "live":
-                    await _push_spcb(config, db, "live")
-                elif mode == "delay":
-                    await _push_spcb(config, db, "delay")
-                await _push_cpcb(config, db)
+                elif proto == "both":
+                    if mode == "live":
+                        await _push_spcb(config, db, "live")
+                    elif mode == "delay":
+                        await _push_spcb(config, db, "delay")
+                    await _push_cpcb(config, db)
 
-            else:
-                await _push_spcb(config, db, mode)
+                else:
+                    await _push_spcb(config, db, mode)
+            except Exception as e:
+                log.error(f"[PUSH] Server '{config.name}' push failed: {e}")
 
         # Sync telemetry to RajAPI
         await _push_telemetry_to_rajapi(db, mode)
