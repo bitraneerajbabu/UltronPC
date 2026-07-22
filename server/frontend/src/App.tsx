@@ -15,7 +15,7 @@ import { getTheme } from './theme'
 // --- State Interfaces ---
 interface Site { id: number; name: string; api_key: string; location: string; is_active: boolean; amc_expiry?: string; last_sync?: string; lock_status?: string; lock_reason?: string; lock_updated_at?: string; last_error?: string; last_error_at?: string; client_version?: string; notes?: string; }
 interface TelemetryPoint { id?: number; value: number | null; quality: string; timestamp: string; }
-interface LatestPoint { tag_name: string; name: string; unit?: string; value?: number; quality: string; timestamp: string; }
+interface LatestPoint { tag_name: string; name: string; unit?: string; value?: number; quality: string; timestamp: string; std_limit?: number | null; station_name?: string | null; }
 interface BroadcastItem { id: string; message: string; message_type: string; is_active: boolean; created_at: string; expires_at?: string; target_all: boolean; target_site_id?: number | null; }
 interface LockSummary { id: number; lock_status: string; lock_reason?: string; lock_updated_at?: string; }
 
@@ -32,13 +32,43 @@ import BroadcastDialog from './components/Dialogs/BroadcastDialog'
 import LockDialog from './components/Dialogs/LockDialog'
 import Telemetry3DVisualizer from './components/Common/Telemetry3DVisualizer'
 
+function parseUTCDate(ts?: string | null): Date | null {
+  if (!ts) return null;
+  let iso = ts.trim();
+  if (!iso.includes('T')) iso = iso.replace(' ', 'T');
+  if (!iso.endsWith('Z') && !iso.includes('+') && !iso.includes('-')) {
+    iso = iso + 'Z';
+  }
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d;
+}
+
 function getConnectionStatus(last_sync?: string): { label: string; color: string; statusKey: string } {
   if (!last_sync) return { label: 'NC', color: '#9CA3AF', statusKey: 'nc' };
-  const utcStr = last_sync.endsWith('Z') ? last_sync : last_sync + 'Z';
-  const diffMs = Date.now() - new Date(utcStr).getTime();
+  const d = parseUTCDate(last_sync);
+  if (!d) return { label: 'NC', color: '#9CA3AF', statusKey: 'nc' };
+  const diffMs = Math.abs(Date.now() - d.getTime());
   const diffMins = diffMs / 60000;
   if (diffMins < 5) return { label: 'online', color: '#16A34A', statusKey: 'online' };
   return { label: 'offline', color: '#DC2626', statusKey: 'offline' };
+}
+
+function formatIST(ts?: string | null): string {
+  const d = parseUTCDate(ts);
+  if (!d) return '—';
+  const formatter = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  const parts = formatter.formatToParts(d);
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '';
+  return `${getPart('day')}/${getPart('month')}/${getPart('year')} ${getPart('hour')}:${getPart('minute')}`;
 }
 
 function App() {
@@ -100,6 +130,7 @@ function App() {
   const [newStation, setNewStation] = useState({ station_id: '', username: '', category: 'emission', station_name: '' })
   const [editingStationId, setEditingStationId] = useState<number | null>(null)
   const [editStationForm, setEditStationForm] = useState({ station_id: '', username: '', category: '', station_name: '' })
+  const [expandedStationId, setExpandedStationId] = useState<number | null>(null)
 
   // CPCB Dashboard State
   const [cpcbStatus, setCpcbStatus] = useState<any[]>([])
@@ -381,10 +412,15 @@ function App() {
   }, [activeSite, fetchLiveData]);
 
   useEffect(() => {
-    if (!activeSite) { setSiteStations([]); return; }
+    if (!activeSite) { setSiteStations([]); setExpandedStationId(null); return; }
     adminFetch(`/api/v1/stations/?site_id=${activeSite.id}`)
       .then(r => r.ok ? r.json() : [])
-      .then(d => { if (Array.isArray(d)) setSiteStations(d); });
+      .then(d => {
+        if (Array.isArray(d)) {
+          setSiteStations(d);
+          if (d.length > 0) setExpandedStationId(d[0].id);
+        }
+      });
   }, [activeSite]);
 
   // --- LOGIN PAGE ---
@@ -608,68 +644,14 @@ function App() {
                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: c.color }} />
                   <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>{c.label}</Typography>
                   {c.statusKey === 'online' && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#16A34A', animation: 'pulse 2s infinite', ml: 1 }} />}
-                  {activeSite.last_sync && <Typography variant="caption" sx={{ color: 'text.disabled', ml: 1 }}>Last sync: {new Date(activeSite.last_sync).toLocaleString()}</Typography>}
+                  {activeSite.last_sync && <Typography variant="caption" sx={{ color: 'text.disabled', ml: 1 }}>
+                    Last sync: {formatIST(activeSite.last_sync)}
+                  </Typography>}
                 </Box>;
               })()}
 
-              {activeSite.api_key && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, bgcolor: 'action.hover', px: 1.5, py: 0.75, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
-                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: 10 }}>Site Key:</Typography>
-                  <Typography variant="caption" sx={{ fontFamily: 'mono', color: 'text.primary', fontSize: 10 }}>
-                    {activeSite.api_key.length > 25 ? `${activeSite.api_key.substring(0, 15)}...${activeSite.api_key.substring(activeSite.api_key.length - 10)}` : activeSite.api_key}
-                  </Typography>
-                  <IconButton size="small" onClick={() => { navigator.clipboard.writeText(activeSite.api_key); }} sx={{ color: 'text.secondary', ml: 'auto', p: 0.25 }}>
-                    <Icon name="Copy" size={16} />
-                  </IconButton>
-                </Box>
-              )}
-
-              {/* Live data table */}
-              {liveData.length === 0 && !liveDataLoading ? (
-                <EmptyState icon={<Icon name="Radio" size={56} />} title="No Telemetry Data" description="UltrON client will sync data here." />
-              ) : (
-                <TableContainer>
-                  <Table size="small" sx={{ '& .MuiTableCell-root': { px: 1, py: 1 } }}>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Tag</TableCell>
-                        <TableCell align="right">Value</TableCell>
-                        <TableCell align="center">Quality</TableCell>
-                        <TableCell align="right">Time</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {liveDataLoading && liveData.length === 0 ? (
-                        <TableRow><TableCell colSpan={4} sx={{ textAlign: 'center', py: 4 }}><div className="loader"></div></TableCell></TableRow>
-                      ) : liveData.map((pt) => {
-                        const isGood = pt.quality?.toLowerCase() === 'good';
-                        const ago = pt.timestamp ? (() => {
-                          const utcTs = pt.timestamp.endsWith('Z') ? pt.timestamp : pt.timestamp + 'Z';
-                          const diff = Math.floor((Date.now() - new Date(utcTs).getTime()) / 1000);
-                          if (diff < 60) return `${diff}s`; if (diff < 3600) return `${Math.floor(diff / 60)}m`; return `${Math.floor(diff / 3600)}h`;
-                        })() : '-';
-                        return (
-                          <TableRow key={pt.tag_name} hover>
-                            <TableCell>
-                              <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: 'mono' }}>{pt.tag_name}</Typography>
-                              {pt.name !== pt.tag_name && <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{pt.name}</Typography>}
-                            </TableCell>
-                            <TableCell align="right">
-                              <Typography variant="body2" sx={{ fontWeight: 700 }}>{pt.value != null ? Number(pt.value).toFixed(2) : '—'}</Typography>
-                              {pt.unit && <Typography variant="caption" sx={{ color: 'text.secondary' }}>{pt.unit}</Typography>}
-                            </TableCell>
-                            <TableCell align="center"><StatusBadge status={isGood ? 'healthy' : 'error'} size="small" /></TableCell>
-                            <TableCell align="right"><Typography variant="caption" sx={{ color: 'text.secondary' }}>{ago}</Typography></TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
-
-
-              <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+              {/* Stations & Telemetry section */}
+              <Box sx={{ mt: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                   <Typography variant="overline" sx={{ color: 'text.secondary' }}>Stations</Typography>
                   <Button size="small" variant="outlined" startIcon={<Icon name="Plus" size={14} />}
@@ -696,49 +678,210 @@ function App() {
                     </Box>
                   </Box>
                 )}
+
                 {siteStations.length === 0 ? (
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>No stations configured.</Typography>
-                ) : siteStations.map(s => (
-                  <Box key={s.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', bgcolor: 'action.hover', borderRadius: 1, px: 1.5, py: 1, mb: 0.5 }}>
-                    {editingStationId === s.id ? (
-                      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                        <TextField size="small" label="Station ID" value={editStationForm.station_id} onChange={e => setEditStationForm({ ...editStationForm, station_id: e.target.value })} />
-                        <TextField size="small" label="Username" value={editStationForm.username} onChange={e => setEditStationForm({ ...editStationForm, username: e.target.value })} />
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          {['emission', 'effluent', 'ambient'].map(c => (
-                            <Button key={c} size="small" variant={editStationForm.category === c ? 'contained' : 'outlined'}
-                              onClick={() => setEditStationForm({ ...editStationForm, category: c })} sx={{ textTransform: 'capitalize' }}>{c}</Button>
-                          ))}
-                        </Box>
-                        <TextField size="small" label="Station Name" value={editStationForm.station_name} onChange={e => setEditStationForm({ ...editStationForm, station_name: e.target.value })} />
-                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                          <Button size="small" onClick={() => { setEditingStationId(null); }}>Cancel</Button>
-                          <Button size="small" variant="contained" onClick={async () => {
-                            const res = await adminFetch(`/api/v1/stations/${s.id}?site_id=${activeSite!.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editStationForm) });
-                            if (res.ok) { const u = await res.json(); setSiteStations(siteStations.map(x => x.id === s.id ? u : x)); setEditingStationId(null); }
-                          }}>Save</Button>
-                        </Box>
+                  /* Fallback flat telemetry table if no stations exist */
+                  liveData.length === 0 && !liveDataLoading ? (
+                    <EmptyState icon={<Icon name="Radio" size={56} />} title="No Telemetry Data" description="UltrON client will sync data here." />
+                  ) : (
+                    <TableContainer>
+                      <Table size="small" sx={{ '& .MuiTableCell-root': { px: 1.5, py: 1 } }}>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Parameter</TableCell>
+                            <TableCell align="right">Value</TableCell>
+                            <TableCell align="right">Std Limit</TableCell>
+                            <TableCell align="center">Quality</TableCell>
+                            <TableCell align="right">Time</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {liveDataLoading && liveData.length === 0 ? (
+                            <TableRow><TableCell colSpan={5} sx={{ textAlign: 'center', py: 4 }}><div className="loader"></div></TableCell></TableRow>
+                          ) : liveData.map((pt) => {
+                            const q = pt.quality?.toUpperCase();
+                            const qualityMap: Record<string, { label: string; color: string }> = {
+                              U: { label: 'Valid',   color: '#16A34A' },
+                              O: { label: 'Invalid', color: '#D97706' },
+                              E: { label: 'Error',   color: '#DC2626' },
+                              N: { label: 'No Data', color: '#6B7280' },
+                            };
+                            const qInfo = qualityMap[q] ?? { label: q || '?', color: '#6B7280' };
+                            const ago = formatIST(pt.timestamp);
+                            return (
+                              <TableRow key={pt.tag_name} hover>
+                                <TableCell><Typography variant="caption" sx={{ fontWeight: 700, fontFamily: 'mono' }}>{pt.tag_name}</Typography></TableCell>
+                                <TableCell align="right">
+                                  <Typography variant="body2" sx={{ fontWeight: 700 }}>{pt.value != null ? Number(pt.value).toFixed(2) : '—'}</Typography>
+                                  {pt.unit && <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{pt.unit}</Typography>}
+                                </TableCell>
+                                <TableCell align="right"><Typography variant="body2">{pt.std_limit != null ? Number(pt.std_limit).toFixed(2) : '—'}</Typography></TableCell>
+                                <TableCell align="center">
+                                  <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: qInfo.color, flexShrink: 0 }} />
+                                    <Typography variant="caption" sx={{ fontWeight: 600, color: qInfo.color }}>{qInfo.label}</Typography>
+                                  </Box>
+                                </TableCell>
+                                <TableCell align="right"><Typography variant="caption" sx={{ color: 'text.secondary' }}>{ago}</Typography></TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )
+                ) : (
+                  /* Station Cards — Expandable with telemetry table inside */
+                  siteStations.map((s, idx) => {
+                    const isExpanded = expandedStationId === s.id;
+                    const stationParams = liveData.filter(pt => pt.station_name === s.station_name || (!pt.station_name && idx === 0));
+                    return (
+                      <Box key={s.id} sx={{
+                        mb: 1.5, border: '1px solid', borderColor: isExpanded ? 'primary.main' : 'divider',
+                        borderRadius: 1.5, overflow: 'hidden', bgcolor: 'background.paper',
+                        boxShadow: isExpanded ? '0 1px 4px rgba(0,0,0,0.05)' : 'none'
+                      }}>
+                        {/* Station Card Header */}
+                        {editingStationId === s.id ? (
+                          <Box sx={{ p: 1.5, bgcolor: 'action.hover' }}>
+                            <TextField size="small" label="Station ID" value={editStationForm.station_id} onChange={e => setEditStationForm({ ...editStationForm, station_id: e.target.value })} sx={{ mb: 1 }} fullWidth />
+                            <TextField size="small" label="Username" value={editStationForm.username} onChange={e => setEditStationForm({ ...editStationForm, username: e.target.value })} sx={{ mb: 1 }} fullWidth />
+                            <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                              {['emission', 'effluent', 'ambient'].map(c => (
+                                <Button key={c} size="small" variant={editStationForm.category === c ? 'contained' : 'outlined'}
+                                  onClick={() => setEditStationForm({ ...editStationForm, category: c })} sx={{ textTransform: 'capitalize' }}>{c}</Button>
+                              ))}
+                            </Box>
+                            <TextField size="small" label="Station Name" value={editStationForm.station_name} onChange={e => setEditStationForm({ ...editStationForm, station_name: e.target.value })} sx={{ mb: 1 }} fullWidth />
+                            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                              <Button size="small" onClick={() => { setEditingStationId(null); }}>Cancel</Button>
+                              <Button size="small" variant="contained" onClick={async () => {
+                                const res = await adminFetch(`/api/v1/stations/${s.id}?site_id=${activeSite!.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editStationForm) });
+                                if (res.ok) { const u = await res.json(); setSiteStations(siteStations.map(x => x.id === s.id ? u : x)); setEditingStationId(null); }
+                              }}>Save</Button>
+                            </Box>
+                          </Box>
+                        ) : (
+                          <Box sx={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            px: 2, py: 1.5, cursor: 'pointer',
+                            bgcolor: isExpanded ? 'action.selected' : 'action.hover',
+                            '&:hover': { bgcolor: 'action.focus' }
+                          }} onClick={() => setExpandedStationId(isExpanded ? -1 : s.id)}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                              <Icon name={isExpanded ? "ChevronDown" : "ChevronRight"} size={18} color="#64748B" />
+                              <Box>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{s.station_name}</Typography>
+                                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                  {s.station_id} · {s.username} · <Box component="span" sx={{ textTransform: 'capitalize' }}>{s.category}</Box>
+                                </Typography>
+                              </Box>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} onClick={e => e.stopPropagation()}>
+                              <Chip label={`${stationParams.length} Params`} size="small" variant="outlined" sx={{ fontSize: 10, height: 20, mr: 0.5 }} />
+                              <Tooltip title="Edit"><IconButton size="small" onClick={() => { setEditingStationId(s.id); setEditStationForm({ station_id: s.station_id, username: s.username, category: s.category, station_name: s.station_name }); }} sx={{ color: 'text.secondary' }}><Icon name="Pencil" size={16} /></IconButton></Tooltip>
+                              <Tooltip title="Delete"><IconButton size="small" onClick={async () => {
+                                if (!confirm(`Delete station "${s.station_name}"?`)) return;
+                                const res = await adminFetch(`/api/v1/stations/${s.id}?site_id=${activeSite!.id}`, { method: 'DELETE' });
+                                if (res.ok) setSiteStations(siteStations.filter(x => x.id !== s.id));
+                              }} sx={{ color: 'text.secondary' }}><Icon name="Trash2" size={16} /></IconButton></Tooltip>
+                            </Box>
+                          </Box>
+                        )}
+
+                        {/* Station Telemetry Table (Expanded) */}
+                        {isExpanded && !editingStationId && (
+                          <Box sx={{ borderTop: '1px solid', borderColor: 'divider', p: 1.5 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, bgcolor: 'action.hover', px: 1.5, py: 0.75, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+                              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: 10 }}>Site Key:</Typography>
+                              {activeSite.api_key ? (
+                                <>
+                                  <Typography variant="caption" sx={{ fontFamily: 'mono', color: 'text.primary', fontSize: 10 }}>
+                                    {activeSite.api_key.length > 25 ? `${activeSite.api_key.substring(0, 15)}...${activeSite.api_key.substring(activeSite.api_key.length - 10)}` : activeSite.api_key}
+                                  </Typography>
+                                  <IconButton size="small" onClick={() => { navigator.clipboard.writeText(activeSite.api_key); }} sx={{ color: 'text.secondary', ml: 'auto', p: 0.25 }}>
+                                    <Icon name="Copy" size={14} />
+                                  </IconButton>
+                                </>
+                              ) : (
+                                <Typography variant="caption" sx={{ fontFamily: 'mono', color: '#DC2626', fontSize: 10, fontStyle: 'italic' }}>
+                                  Not Generated
+                                </Typography>
+                              )}
+                              <Tooltip title="Regenerate Site Key">
+                                <IconButton size="small" onClick={async () => {
+                                  if (!confirm(`Are you sure you want to regenerate the API key for ${activeSite.name}? This will disconnect existing clients!`)) return;
+                                  const res = await adminFetch(`/api/v1/sites/${activeSite.id}/renew-key`, { method: 'POST' });
+                                  if (res.ok) {
+                                    const u = await res.json();
+                                    setSites(sites.map((x: Site) => x.id === activeSite.id ? u : x));
+                                  }
+                                }} sx={{ color: 'text.secondary', ml: activeSite.api_key ? 0 : 'auto', p: 0.25 }}>
+                                  <Icon name="RefreshCw" size={14} />
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
+                            {stationParams.length === 0 && !liveDataLoading ? (
+                              <Typography variant="caption" sx={{ color: 'text.secondary', p: 2, display: 'block', textAlign: 'center' }}>
+                                No telemetry data received for this station yet.
+                              </Typography>
+                            ) : (
+                              <TableContainer>
+                                <Table size="small" sx={{ '& .MuiTableCell-root': { px: 1.5, py: 1 } }}>
+                                  <TableHead>
+                                    <TableRow>
+                                      <TableCell>Parameter</TableCell>
+                                      <TableCell align="right">Value</TableCell>
+                                      <TableCell align="right">Std Limit</TableCell>
+                                      <TableCell align="center">Quality</TableCell>
+                                      <TableCell align="right">Time</TableCell>
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    {liveDataLoading && stationParams.length === 0 ? (
+                                      <TableRow><TableCell colSpan={5} sx={{ textAlign: 'center', py: 3 }}><div className="loader"></div></TableCell></TableRow>
+                                    ) : stationParams.map((pt) => {
+                                      const q = pt.quality?.toUpperCase();
+                                      const qualityMap: Record<string, { label: string; color: string }> = {
+                                        U: { label: 'Valid',   color: '#16A34A' },
+                                        O: { label: 'Invalid', color: '#D97706' },
+                                        E: { label: 'Error',   color: '#DC2626' },
+                                        N: { label: 'No Data', color: '#6B7280' },
+                                      };
+                                      const qInfo = qualityMap[q] ?? { label: q || '?', color: '#6B7280' };
+                                      const ago = formatIST(pt.timestamp);
+                                      return (
+                                        <TableRow key={pt.tag_name} hover>
+                                          <TableCell>
+                                            <Typography variant="caption" sx={{ fontWeight: 700, fontFamily: 'mono' }}>{pt.tag_name}</Typography>
+                                          </TableCell>
+                                          <TableCell align="right">
+                                            <Typography variant="body2" sx={{ fontWeight: 700 }}>{pt.value != null ? Number(pt.value).toFixed(2) : '—'}</Typography>
+                                            {pt.unit && <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{pt.unit}</Typography>}
+                                          </TableCell>
+                                          <TableCell align="right">
+                                            <Typography variant="body2">{pt.std_limit != null ? Number(pt.std_limit).toFixed(2) : '—'}</Typography>
+                                          </TableCell>
+                                          <TableCell align="center">
+                                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                                              <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: qInfo.color, flexShrink: 0 }} />
+                                              <Typography variant="caption" sx={{ fontWeight: 600, color: qInfo.color }}>{qInfo.label}</Typography>
+                                            </Box>
+                                          </TableCell>
+                                          <TableCell align="right"><Typography variant="caption" sx={{ color: 'text.secondary' }}>{ago}</Typography></TableCell>
+                                        </TableRow>
+                                      );
+                                    })}
+                                  </TableBody>
+                                </Table>
+                              </TableContainer>
+                            )}
+                          </Box>
+                        )}
                       </Box>
-                    ) : (
-                      <>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>{s.station_name}</Typography>
-                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                            {s.station_id} · {s.username} · <Box component="span" sx={{ textTransform: 'capitalize' }}>{s.category}</Box>
-                          </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', gap: 0.25 }}>
-                          <Tooltip title="Edit"><IconButton size="small" onClick={() => { setEditingStationId(s.id); setEditStationForm({ station_id: s.station_id, username: s.username, category: s.category, station_name: s.station_name }); }} sx={{ color: 'text.secondary' }}><Icon name="Pencil" size={18} /></IconButton></Tooltip>
-                          <Tooltip title="Delete"><IconButton size="small" onClick={async () => {
-                            if (!confirm(`Delete station "${s.station_name}"?`)) return;
-                            const res = await adminFetch(`/api/v1/stations/${s.id}?site_id=${activeSite!.id}`, { method: 'DELETE' });
-                            if (res.ok) setSiteStations(siteStations.filter(x => x.id !== s.id));
-                          }} sx={{ color: 'text.secondary' }}><Icon name="Trash2" size={18} /></IconButton></Tooltip>
-                        </Box>
-                      </>
-                    )}
-                  </Box>
-                ))}
+                    );
+                  })
+                )}
               </Box>
             </SectionCard>
           ) : (

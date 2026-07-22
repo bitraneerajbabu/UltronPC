@@ -141,6 +141,20 @@ def renew_site_amc(site_id: int, db: Session = Depends(get_db), auth: AuthContex
     db.refresh(db_site)
     return db_site
 
+@router.post("/{site_id}/renew-key", response_model=SiteResponse)
+def renew_site_key(site_id: int, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
+    if not auth.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    db_site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
+    if not db_site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    
+    db_site.api_key = generate_token(db_site.name)
+    db.commit()
+    db.refresh(db_site)
+    return db_site
+
+
 from pydantic import BaseModel
 
 class SiteUpdate(BaseModel):
@@ -194,6 +208,8 @@ def get_latest_telemetry(site_id: int, db: Session = Depends(get_db), auth: Auth
                p.tag_name,
                p.name       AS param_name,
                p.unit,
+               p.std_limit,
+               p.station_name,
                t.value,
                t.quality,
                t.timestamp
@@ -210,6 +226,8 @@ def get_latest_telemetry(site_id: int, db: Session = Depends(get_db), auth: Auth
             tag_name=r.tag_name,
             name=r.param_name,
             unit=r.unit,
+            std_limit=r.std_limit,
+            station_name=r.station_name,
             value=r.value,
             quality=r.quality,
             timestamp=r.timestamp,
