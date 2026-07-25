@@ -678,7 +678,12 @@ export const DevicesScreen = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div>
                         <label style={s()}>Station Name</label>
-                        <input type="text" name="station_name" value={form.station_name} onChange={handleChange} style={ipt} placeholder="e.g. PM10, SO2" />
+                        <select name="station_name" value={form.station_name} onChange={handleChange} style={ipt}>
+                          <option value="">-- Select Station --</option>
+                          {stations.map(s => (
+                            <option key={s.id} value={s.name}>{s.name}</option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label style={s()}>Parameter Name</label>

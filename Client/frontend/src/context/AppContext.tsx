@@ -767,7 +767,7 @@ export const AppProvider = ({ children }) => {
       async (res) => {
         const d = await res.json();
         showToast('Device added successfully.');
-        // Refresh stations list — backend may have created a new station from station_name
+        // Refresh stations list
         authFetch(`${API_BASE}/stations/`).then(r => { if (r.ok) r.json().then(s => setStations(s)); }).catch(() => {});
         return d;
       },
@@ -783,7 +783,7 @@ export const AppProvider = ({ children }) => {
         const updated = await res.json();
         setDevices(prev => prev.map(d => d.id == id ? updated : d));
         showToast('Device updated successfully.');
-        // Refresh stations list — backend may have created/renamed a station from station_name
+        // Refresh stations list
         authFetch(`${API_BASE}/stations/`).then(r => { if (r.ok) r.json().then(s => setStations(s)); }).catch(() => {});
       },
     );
