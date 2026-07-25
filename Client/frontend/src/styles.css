@@ -329,7 +329,7 @@ body {
 
 .nav-rail {
 
-  width: 90px;
+  width: clamp(64px, 7vw, 90px);
 
   background: #fefcf5;
 
@@ -771,32 +771,28 @@ body {
 
 
 
-.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
-.grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; }
+.grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; }
+.grid-5 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 18px; }
 
 
 
-.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
 
 
 
-.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
 
-
-
-@media (max-width: 1200px) {
-
-  .grid-4 { grid-template-columns: repeat(2, 1fr); }
-  .grid-5 { grid-template-columns: repeat(3, 1fr); }
-  .grid-3 { grid-template-columns: repeat(2, 1fr); }
-
-}
 
 
 
 @media (max-width: 768px) {
 
   .grid-4, .grid-5, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+
+  .nav-rail { width: 56px; }
+  .nav-rail-label { display: none; }
+  .nav-rail-btn { height: 52px; }
+  .nav-rail-btn svg { width: 18px; height: 18px; }
 
 }
 
@@ -1442,6 +1438,8 @@ body {
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 
 }
+
+.table-wrapper table { min-width: max-content; }
 
 
 
