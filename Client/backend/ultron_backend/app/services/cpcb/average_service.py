@@ -7,6 +7,7 @@ and stores them as CPCBExportRecord rows.
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
+from sqlalchemy.orm import selectinload
 from app.models.telemetry import Averages, AverageType
 from app.models.cpcb import CPCBExportRecord, CPCBStationConfig, CPCBParameterMapping
 from app.core.logger import get_logger
@@ -70,10 +71,12 @@ async def compute_15min_averages_for_station(
 
         converted_val = round(float(avg_val) * mapping.conversion_factor, 4)
 
+        live_name = station_config.station.name if station_config.station else station_config.station_name
+
         existing = await db.execute(
             select(CPCBExportRecord).where(
                 and_(
-                    CPCBExportRecord.station_name == station_config.station_name,
+                    CPCBExportRecord.station_name == live_name,
                     CPCBExportRecord.parameter == cpcb_param,
                     CPCBExportRecord.date_from == window_start,
                     CPCBExportRecord.date_to == window_end,
@@ -81,7 +84,7 @@ async def compute_15min_averages_for_station(
             )
         )
         if existing.scalar_one_or_none():
-            log.debug(f"Duplicate skipped: {station_config.station_name}/{cpcb_param} @ {window_start}")
+            log.debug(f"Duplicate skipped: {live_name}/{cpcb_param} @ {window_start}")
             continue
 
         cal_flag = 1 if station_config.calibration_mode else 0
@@ -89,7 +92,7 @@ async def compute_15min_averages_for_station(
         remark = "Calibration" if cal_flag else ("Maintenance" if maint_flag else "")
 
         db.add(CPCBExportRecord(
-            station_name=station_config.station_name,
+            station_name=live_name,
             parameter=cpcb_param,
             date_from=window_start,
             date_to=window_end,
@@ -102,7 +105,7 @@ async def compute_15min_averages_for_station(
 
     if records_created > 0:
         await db.flush()
-        log.info(f"Created {records_created} CPCB records for {station_config.station_name} window {window_start}")
+        log.info(f"Created {records_created} CPCB records for {station_config.station.name if station_config.station else station_config.station_name} window {window_start}")
 
     return records_created
 
@@ -112,7 +115,9 @@ async def run_cpcb_averaging(db: AsyncSession) -> dict:
     window_start, window_end = get_cpcb_window(now)
 
     configs_result = await db.execute(
-        select(CPCBStationConfig).where(CPCBStationConfig.export_enabled == True)
+        select(CPCBStationConfig)
+        .options(selectinload(CPCBStationConfig.station))
+        .where(CPCBStationConfig.export_enabled == True)
     )
     configs = configs_result.scalars().all()
 
