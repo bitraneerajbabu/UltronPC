@@ -20,8 +20,11 @@ def sync_telemetry(
     site.last_sync = datetime.now(timezone.utc)
 
     # Process the incoming points
+    synced_count = 0
     for point in payload.points:
         param = _get_or_create_param(db, site, point.tag_name, point.unit or "", std_limit=point.std_limit, station_name=point.station_name)
+        if not param:
+            continue
 
         telemetry = TelemetryData(
             site_id=site.id,
@@ -31,6 +34,7 @@ def sync_telemetry(
             timestamp=point.timestamp
         )
         db.add(telemetry)
+        synced_count += 1
 
     db.commit()
 
@@ -46,7 +50,7 @@ def sync_telemetry(
 
     return {
         "status": "success",
-        "synced_points": len(payload.points),
+        "synced_points": synced_count,
         "broadcasts": [
             {"id": b.id, "message": b.message, "message_type": b.message_type, "expires_at": b.expires_at.isoformat() if b.expires_at else None}
             for b in active_broadcasts

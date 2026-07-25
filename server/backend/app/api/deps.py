@@ -18,41 +18,97 @@ def _validate_site(site: IndustrySite, status_code: int = 403):
         raise HTTPException(status_code=status_code, detail="Could not validate API Key")
 
 
-def _get_or_create_param(db: Session, site: IndustrySite, tag_name: str, unit: str = "", std_limit: Optional[float] = None, station_name: Optional[str] = None) -> Parameter:
-    """Find or create a parameter for this site, optionally updating unit, std_limit, and station_name."""
-    param = db.query(Parameter).filter(
-        Parameter.tag_name == tag_name,
+import logging
+
+logger = logging.getLogger(__name__)
+
+def _get_or_create_param(
+    db: Session,
+    site: IndustrySite,
+    tag_name: str,
+    unit: str = "",
+    std_limit: Optional[float] = None,
+    station_name: Optional[str] = None
+) -> Optional[Parameter]:
+    """
+    Find or create a parameter for this site.
+
+    1. Reuse Existing: Checks if a parameter with matching tag_name already exists for this site/station.
+       If found, updates metadata and returns it without creating a new row (prevents duplicates).
+    2. Require Station for New Parameters: Before creating a new device/parameter, an explicit, non-empty
+       station_name must be provided. If no station_name is specified, logs a warning and returns None.
+    """
+    clean_tag = tag_name.strip() if tag_name else ""
+    if not clean_tag:
+        return None
+
+    clean_station = station_name.strip() if station_name else None
+
+    # 1. Check if parameter already exists for this site (Duplicate Prevention)
+    query = db.query(Parameter).filter(
+        Parameter.tag_name == clean_tag,
         Parameter.device.has(site_id=site.id)
-    ).first()
+    )
+
+    param = None
+    if clean_station:
+        param = query.filter(Parameter.station_name == clean_station).first()
 
     if not param:
-        generic_device = db.query(Device).filter(
-            Device.site_id == site.id,
-            Device.name == "Default Sync Device"
-        ).first()
-        if not generic_device:
-            generic_device = Device(site_id=site.id, name="Default Sync Device", status="online")
-            db.add(generic_device)
-            db.flush()
+        param = query.first()
 
-        param = Parameter(
-            tag_name=tag_name,
-            name=tag_name,
-            unit=unit or "",
-            std_limit=std_limit,
-            station_name=station_name,
-            device_id=generic_device.id
-        )
-        db.add(param)
-        db.flush()
-    else:
+    if param:
+        # Parameter already exists — reuse existing row
         if not param.unit and unit:
             param.unit = unit
         if std_limit is not None:
             param.std_limit = std_limit
-        if station_name:
-            param.station_name = station_name
+        if clean_station and not param.station_name:
+            param.station_name = clean_station
+        return param
 
+    # 2. Require explicit station_name for auto-creation
+    if not clean_station:
+        logger.warning(
+            f"[Sync Auto-Provisioning Guard] Skipped parameter auto-creation for tag_name='{clean_tag}' "
+            f"on site '{site.name}' (ID: {site.id}): No explicit station specified in sync payload."
+        )
+        return None
+
+    # 3. Find or create device linked to explicit station
+    device_name = f"{clean_station} Device"
+    device = db.query(Device).filter(
+        Device.site_id == site.id,
+        Device.name == device_name
+    ).first()
+
+    if not device:
+        device = db.query(Device).filter(
+            Device.site_id == site.id,
+            Device.name == "Default Sync Device"
+        ).first()
+
+    if not device:
+        device = Device(site_id=site.id, name=device_name, status="online")
+        db.add(device)
+        db.flush()
+
+    # 4. Create new parameter with explicit station linkage
+    param = Parameter(
+        tag_name=clean_tag,
+        name=clean_tag,
+        unit=unit or "",
+        std_limit=std_limit,
+        station_name=clean_station,
+        device_id=device.id
+    )
+    db.add(param)
+    db.flush()
+
+    logger.info(
+        f"[Sync Auto-Provisioning] Created parameter '{clean_tag}' under station '{clean_station}' "
+        f"for site '{site.name}' (ID: {site.id})."
+    )
     return param
 
 
@@ -67,36 +123,32 @@ class AuthContext:
         self.auth_key = auth_key
 
 
+import hashlib
+
 def find_site_by_key(db: Session, key: str) -> Optional[IndustrySite]:
     if not key:
         return None
-    # Exact match first
-    site = db.query(IndustrySite).filter(IndustrySite.api_key == key).first()
+    clean_key = key.strip()
+    hashed_key = hashlib.sha256(clean_key.encode('utf-8')).hexdigest()
+    # Support both plaintext matching (legacy) and SHA-256 hashed keys
+    site = db.query(IndustrySite).filter(
+        (IndustrySite.api_key == clean_key) | (IndustrySite.api_key == hashed_key)
+    ).first()
     if site:
         return site
-    # Backwards compatibility check for legacy prefixes
-    if key.startswith("uk_") or key.startswith("in_"):
-        random_part = key[3:]
-        # Find key ending with _{random_part}
-        site = db.query(IndustrySite).filter(IndustrySite.api_key.like(f"%_{random_part}")).first()
-        if site:
-            return site
     return None
 
 
 def find_device_by_key(db: Session, key: str) -> Optional[Device]:
     if not key:
         return None
-    # Exact match first
-    device = db.query(Device).filter(Device.api_key == key).first()
+    clean_key = key.strip()
+    hashed_key = hashlib.sha256(clean_key.encode('utf-8')).hexdigest()
+    device = db.query(Device).filter(
+        (Device.api_key == clean_key) | (Device.api_key == hashed_key)
+    ).first()
     if device:
         return device
-    # Backwards compatibility check for legacy prefixes
-    if key.startswith("uk_") or key.startswith("in_"):
-        random_part = key[3:]
-        device = db.query(Device).filter(Device.api_key.like(f"%_{random_part}")).first()
-        if device:
-            return device
     return None
 
 

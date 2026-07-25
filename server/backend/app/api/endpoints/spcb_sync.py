@@ -119,6 +119,8 @@ def spcb_sync(payload: SpcbPayload, db: Session = Depends(get_db)):
             val = None
 
         param = _get_or_create_param(db, site, var.Variablename, var.Unit or "")
+        if not param:
+            continue
 
         telemetry = TelemetryData(
             site_id=site.id,
