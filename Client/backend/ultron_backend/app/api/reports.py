@@ -25,6 +25,7 @@ from app.models.station import Station
 from app.core.security import require_admin
 from app.core.logger import get_logger
 from app.config import settings
+from app.services.report_data import fetch_interval_data, MAX_EXPORT_ROWS
 
 log = get_logger("ultron.reports")
 router = APIRouter(prefix="/reports", tags=["Reports"])
@@ -44,46 +45,24 @@ async def _fetch_report_data(
     avg_type: AverageType,
     step_minutes: int = 0,
 ) -> tuple[list[Parameter], list]:
-    param_result = await db.execute(
-        select(Parameter).where(Parameter.id.in_(parameter_ids))
+    """
+    Fetch telemetry data for a report, delegating to the shared
+    :func:`fetch_interval_data` so preview and export use identical logic.
+
+    ``avg_type`` and ``step_minutes`` are mapped as follows:
+
+    * ``avg_type != raw`` (Average Reports) → average mode with that avg_type.
+    * ``avg_type == raw`` and ``step_minutes > 0`` (Normal Reports) → step mode.
+    * ``avg_type == raw`` and ``step_minutes == 0`` → raw mode (capped).
+    """
+    return await fetch_interval_data(
+        db=db,
+        parameter_ids=parameter_ids,
+        start=start,
+        end=end,
+        interval_minutes=step_minutes if avg_type == AverageType.raw else 0,
+        avg_type=avg_type.value if isinstance(avg_type, AverageType) else str(avg_type),
     )
-    params = param_result.scalars().all()
-
-    if avg_type == AverageType.raw:
-        model = HistoricalData
-    else:
-        model = Averages
-
-    query = select(model).where(
-        and_(
-            model.parameter_id.in_(parameter_ids),
-            model.timestamp >= start,
-            model.timestamp <= end,
-        )
-    )
-    if avg_type != AverageType.raw:
-        query = query.where(model.avg_type == avg_type)
-
-    tel_result = await db.execute(
-        query.order_by(model.timestamp)
-    )
-    readings = list(tel_result.scalars().all())
-
-    # Step filtering: keep one point per interval for normal (raw) reports
-    if step_minutes > 0 and avg_type == AverageType.raw:
-        seen = {}
-        filtered = []
-        for r in readings:
-            bucket = r.timestamp.replace(second=0, microsecond=0)
-            bucket_key = bucket.minute // step_minutes
-            bucket_ts = bucket.replace(minute=bucket_key * step_minutes)
-            key = (r.parameter_id, bucket_ts)
-            if key not in seen:
-                seen[key] = True
-                filtered.append(r)
-        readings = filtered
-
-    return params, readings
 
 
 @router.get("/excel")
@@ -215,10 +194,15 @@ async def generate_pdf(
 
     pdf = FPDF()
     pdf.add_page()
+    # Sunshine logo top-right
+    logo_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui_dist", "assets", "sunshine_logo.png")
+    logo_path = os.path.normpath(logo_path)
+    if os.path.exists(logo_path):
+        pdf.image(logo_path, x=155, y=6, w=40)
     pdf.set_font("Helvetica", "B", 16)
     pdf.set_fill_color(0, 102, 102)
     pdf.set_text_color(255, 255, 255)
-    pdf.cell(0, 12, "UltrON Industrial Monitoring Report", fill=True, ln=True, align="C")
+    pdf.cell(0, 12, "Sunshine Industrial Monitoring Report", fill=True, ln=True, align="C")
     pdf.ln(4)
 
     pdf.set_font("Helvetica", "", 10)
@@ -231,19 +215,20 @@ async def generate_pdf(
     pdf.cell(0, 7, f"Type: {report_type_label}  |  Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC", ln=True)
     pdf.ln(6)
 
-    # Table header
+    # Table header — centered
     col_w = 38
     pdf.set_fill_color(0, 102, 102)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 8)
-    pdf.cell(48, 8, "Date & Time", border=1, fill=True)
+    pdf.cell(48, 8, "Date & Time", border=1, fill=True, align="C")
     for pid in ids:
         if pid in param_map:
             p = param_map[pid]
-            pdf.cell(col_w, 8, f"{p.tag_name}", border=1, fill=True)
+            unit_label = f" ({p.unit})" if p.unit else ""
+            pdf.cell(col_w, 8, f"{p.tag_name}{unit_label}", border=1, fill=True, align="C")
     pdf.ln()
 
-    # Data rows
+    # Data rows — centered
     pdf.set_text_color(0, 0, 0)
     pdf.set_font("Helvetica", "", 8)
     timestamps = sorted(set(r.timestamp for r in readings))
@@ -254,15 +239,15 @@ async def generate_pdf(
     fill = False
     for ts in timestamps[:21600]:   # cap at 15 days (21600 rows)
         pdf.set_fill_color(240, 248, 248) if fill else pdf.set_fill_color(255, 255, 255)
-        pdf.cell(48, 7, ts.strftime("%Y/%m/%d %H:%M"), border=1, fill=True)
+        pdf.cell(48, 7, ts.strftime("%Y/%m/%d %H:%M"), border=1, fill=True, align="C")
         for pid in ids:
             val = data_by_ts[ts].get(pid)
-            pdf.cell(col_w, 7, f"{val:.3f}" if val is not None else "NA", border=1, fill=True)
+            pdf.cell(col_w, 7, f"{val:.3f}" if val is not None else "NA", border=1, fill=True, align="C")
         pdf.ln()
         fill = not fill
 
     buf = io.BytesIO(pdf.output())
-    fname = f"UltrON_Report_{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}.pdf"
+    fname = f"Sunshine_Report_{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}.pdf"
     # Save to Reports dir
     try:
         report_path = _reports_dir() / fname

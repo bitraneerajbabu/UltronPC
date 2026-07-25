@@ -640,7 +640,7 @@ def main() -> None:
             y=win_y,
             resizable=True,
             fullscreen=False,
-            min_size=(900, 600),
+            min_size=(600, 500),
             confirm_close=False,
         )
 
