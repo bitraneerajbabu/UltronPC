@@ -1,16 +1,17 @@
-import React, { useContext, useState, useEffect } from 'react';
-import { AppContext } from './context/AppContext';
+import React, { useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { AppContext, LiveDataContext } from './context/AppContext';
 import './App.css';
 
 // Import Screens
 import { DashboardScreen } from './screens/DashboardScreen';
 import { DevicesScreen } from './screens/DevicesScreen';
-import { ReportsScreen } from './screens/ReportsScreen';
-
 import { SettingsScreen } from './screens/SettingsScreen';
-import { CPCB } from './screens/CPCB';
-import { CalibrationScreen } from './screens/CalibrationScreen';
 import { ContactScreen } from './screens/ContactScreen';
+
+// Lazy load heavy secondary screens for code splitting & optimal bundle chunking
+const ReportsScreen = React.lazy(() => import('./screens/ReportsScreen').then(m => ({ default: m.ReportsScreen })));
+const CPCB = React.lazy(() => import('./screens/CPCB').then(m => ({ default: m.CPCB })));
+const CalibrationScreen = React.lazy(() => import('./screens/CalibrationScreen').then(m => ({ default: m.CalibrationScreen })));
 
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
@@ -101,7 +102,28 @@ const ContactIcon = () => (
   </svg>
 );
 
-
+// ─── Clock — self-contained, prevents App re-render on every second ──────────
+const Clock = React.memo(() => {
+  const [timeStr, setTimeStr] = useState('');
+  useEffect(() => {
+    const updateClock = () => {
+      const d = new Date();
+      const pad = (n, width = 2) => String(n).padStart(width, '0');
+      const year = d.getFullYear();
+      const month = pad(d.getMonth() + 1);
+      const date = pad(d.getDate());
+      const rawHours = d.getHours();
+      const ampm = rawHours >= 12 ? 'PM' : 'AM';
+      let hours = rawHours % 12;
+      if (hours === 0) hours = 12;
+      setTimeStr(`${year}.${month}.${date} || ${pad(hours)}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${ampm}`);
+    };
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    return () => clearInterval(interval);
+  }, []);
+  return <>{timeStr}</>;
+});
 
 // ─── Nav definitions ──────────────────────────────────────────────────────────
 const ALL_NAV = [
@@ -128,7 +150,6 @@ function App() {
     plantName,
     plantAddress,
     plantLogo,
-    fetchLatestTelemetryAndKpis,
     showToast,
     broadcasts,
     amcExpiry,
@@ -138,7 +159,9 @@ function App() {
     lockStatus,
     setLockStatus,
     lockReason,
+    prefetchScreen,
   } = useContext(AppContext);
+  const { fetchLatestTelemetryAndKpis } = useContext(LiveDataContext) || {};
 
   const [refreshing, setRefreshing] = useState(false);
   const [localVersion, setLocalVersion] = useState('');
@@ -238,30 +261,6 @@ function App() {
   const [loginError, setLoginError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
-
-  // Clock state
-  const [timeStr, setTimeStr] = useState('');
-
-  useEffect(() => {
-    const updateClock = () => {
-      const d = new Date();
-      const pad = (n, width = 2) => String(n).padStart(width, '0');
-      const year = d.getFullYear();
-      const month = pad(d.getMonth() + 1);
-      const date = pad(d.getDate());
-      const rawHours = d.getHours();
-      const ampm = rawHours >= 12 ? 'PM' : 'AM';
-      let hours = rawHours % 12;
-      if (hours === 0) hours = 12;
-      const hoursStr = pad(hours);
-      const minutes = pad(d.getMinutes());
-      const seconds = pad(d.getSeconds());
-      setTimeStr(`${year}.${month}.${date} || ${hoursStr}:${minutes}:${seconds} ${ampm}`);
-    };
-    updateClock();
-    const interval = setInterval(updateClock, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -470,18 +469,22 @@ function App() {
 
   // ─── Screen renderer ───────────────────────────────────────────────────────
   const renderScreen = () => {
+    let screenComponent;
     switch (activeScreen) {
-      case 'dashboardScreen': return <DashboardScreen />;
-      case 'devicesScreen': return currentUserRole === 'admin' ? <DevicesScreen /> : <DashboardScreen />;
-      case 'reportsScreen': return <ReportsScreen />;
-
-      case 'settingsScreen': return currentUserRole === 'admin' ? <SettingsScreen /> : <DashboardScreen />;
-
-      case 'cpcbScreen': return currentUserRole === 'admin' ? <CPCB /> : <DashboardScreen />;
-      case 'calibrationScreen': return currentUserRole === 'admin' ? <CalibrationScreen /> : <DashboardScreen />;
-      case 'contactScreen': return <ContactScreen />;
-      default: return <DashboardScreen />;
+      case 'dashboardScreen': screenComponent = <DashboardScreen />; break;
+      case 'devicesScreen': screenComponent = currentUserRole === 'admin' ? <DevicesScreen /> : <DashboardScreen />; break;
+      case 'reportsScreen': screenComponent = <ReportsScreen />; break;
+      case 'settingsScreen': screenComponent = currentUserRole === 'admin' ? <SettingsScreen /> : <DashboardScreen />; break;
+      case 'cpcbScreen': screenComponent = currentUserRole === 'admin' ? <CPCB /> : <DashboardScreen />; break;
+      case 'calibrationScreen': screenComponent = currentUserRole === 'admin' ? <CalibrationScreen /> : <DashboardScreen />; break;
+      case 'contactScreen': screenComponent = <ContactScreen />; break;
+      default: screenComponent = <DashboardScreen />; break;
     }
+    return (
+      <React.Suspense fallback={<div style={{ padding: '32px', textAlign: 'center', color: '#64748b', fontSize: '13px', fontWeight: '600' }}>Loading module…</div>}>
+        {screenComponent}
+      </React.Suspense>
+    );
   };
 
   return (
@@ -503,6 +506,8 @@ function App() {
               key={key}
               className={`nav-rail-btn ${activeScreen === key ? 'active' : ''}`}
               onClick={() => setActiveScreen(key)}
+              onMouseEnter={() => prefetchScreen && prefetchScreen(key)}
+              onFocus={() => prefetchScreen && prefetchScreen(key)}
               title={label}
             >
               <Icon />
@@ -524,7 +529,7 @@ function App() {
           <div className="top-left" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {/* System Live Clock */}
             <div style={{ fontSize: '14px', fontWeight: '600', color: '#0d4f49', background: 'rgba(13,79,73,0.06)', padding: '6px 14px', borderRadius: '6px', border: '1px solid rgba(13,79,73,0.15)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
-              {timeStr}
+              <Clock />
             </div>
           </div>
 

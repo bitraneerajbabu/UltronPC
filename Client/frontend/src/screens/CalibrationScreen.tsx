@@ -37,7 +37,7 @@ const STAT_COLORS: Record<string, string> = {
   approved: '#0f766e', rejected: '#ef4444',
 };
 
-export const CalibrationScreen = () => {
+export const CalibrationScreen = React.memo(() => {
   const { stations, devices, parameters, API_BASE, showToast, authFetch, currentUser } = useContext(AppContext);
 
   const [activeTab, setActiveTab] = useState('jobs');
@@ -143,7 +143,31 @@ export const CalibrationScreen = () => {
     }
   };
 
+  const jobCacheRef = useRef<Record<number, { job: any; cc: any }>>({});
+
+  const prefetchJob = async (jobId: number) => {
+    if (jobCacheRef.current[jobId]) return;
+    try {
+      const [jRes, ccRes] = await Promise.all([
+        authFetch(`${API_BASE}/calibration/jobs/${jobId}`),
+        authFetch(`${API_BASE}/calibration/control-chart/${jobId}`),
+      ]);
+      if (jRes.ok) {
+        const job = await jRes.json();
+        const cc = ccRes.ok ? await ccRes.json() : null;
+        jobCacheRef.current[jobId] = { job, cc };
+      }
+    } catch {}
+  };
+
   const handleViewResults = async (jobId: number) => {
+    if (jobCacheRef.current[jobId]) {
+      const { job, cc } = jobCacheRef.current[jobId];
+      setViewingJob(job);
+      setControlChartData(cc);
+      setActiveTab('results');
+      return;
+    }
     setResultsLoading(true);
     try {
       const res = await authFetch(`${API_BASE}/calibration/jobs/${jobId}`);
@@ -153,12 +177,9 @@ export const CalibrationScreen = () => {
       setActiveTab('results');
 
       const ccRes = await authFetch(`${API_BASE}/calibration/control-chart/${jobId}`);
-      if (ccRes.ok) {
-        const cc = await ccRes.json();
-        setControlChartData(cc);
-      } else {
-        setControlChartData(null);
-      }
+      const cc = ccRes.ok ? await ccRes.json() : null;
+      setControlChartData(cc);
+      jobCacheRef.current[jobId] = { job, cc };
     } catch {
       showToast('Failed to load job results.', 'error');
     }
@@ -167,22 +188,33 @@ export const CalibrationScreen = () => {
 
   const handleApproveReject = async (jobId: number, decision: 'approve' | 'reject') => {
     setProcessingJobId(jobId);
+    const newStatus = decision === 'approve' ? 'approved' : 'rejected';
+    const previousJobs = [...jobs];
+    const previousViewing = viewingJob;
+
+    // Optimistic UI Update
+    setJobs(prev => prev.map(j => j.id == jobId ? { ...j, status: newStatus } : j));
+    if (viewingJob && viewingJob.id == jobId) {
+      setViewingJob((prev: any) => prev ? { ...prev, status: newStatus } : null);
+    }
+    showToast(`Job ${decision}d. Pressing commit in background...`, 'success');
+
     try {
       const res = await authFetch(`${API_BASE}/calibration/${jobId}/${decision}`, {
         method: 'POST',
         body: JSON.stringify({ comments: approveComment || null }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      showToast(`Job ${decision}d successfully.`);
       setApproveComment('');
+      delete jobCacheRef.current[jobId];
       fetchJobs();
-      if (viewingJob && viewingJob.id == jobId) {
-        setViewingJob((prev: any) => prev ? { ...prev, status: decision === 'approve' ? 'approved' : 'rejected' } : null);
-      }
     } catch {
-      showToast(`Failed to ${decision} job.`, 'error');
+      setJobs(previousJobs);
+      setViewingJob(previousViewing);
+      showToast(`Failed to ${decision} job. Rollback applied.`, 'error');
+    } finally {
+      setProcessingJobId(null);
     }
-    setProcessingJobId(null);
   };
 
   // Draw trend chart for a phase
@@ -214,6 +246,7 @@ export const CalibrationScreen = () => {
       },
       options: {
         responsive: true,
+        animation: false,
         plugins: {
           legend: { labels: { color: '#475569', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
         },
@@ -345,7 +378,7 @@ export const CalibrationScreen = () => {
                     <tr><td colSpan={9} className="table-empty">No calibration jobs found. Start a new one.</td></tr>
                   ) : (
                     jobs.map((job: any) => (
-                      <tr key={job.id}>
+                      <tr key={job.id} onMouseEnter={() => prefetchJob(job.id)} onFocus={() => prefetchJob(job.id)}>
                         <td><strong>{job.job_name}</strong></td>
                         <td>{stations.find(s => s.id == job.station_id)?.name || `Station #${job.station_id}`}</td>
                         <td>{parameters.find(p => p.id == job.parameter_id)?.name || `Param #${job.parameter_id}`}</td>
@@ -586,7 +619,7 @@ export const CalibrationScreen = () => {
       )}
     </div>
   );
-};
+});
 
 function drawExtraChart(canvas: HTMLCanvasElement, data: any, color: string, label: string) {
   if (!data || !data.labels) return;

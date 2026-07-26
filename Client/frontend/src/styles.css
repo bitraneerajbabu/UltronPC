@@ -1,4 +1,4 @@
-﻿/* ============================================================
+/* ============================================================
 
    UltrON Industrial Monitoring Platform — Modern Glass UI
 
@@ -95,6 +95,7 @@ body {
 
 .login-card {
   width: 460px;
+  max-width: calc(100vw - 32px);
   background: #fefcf5;
   border: 1px solid #e2d8c8;
   border-radius: 20px;
@@ -2786,6 +2787,21 @@ body {
   color: #0d4f49;
   font-size: 13px;
   margin-bottom: 12px;
+}
+
+/* ─── Zero-delay immediate paint for Largest Contentful Paint (LCP) Elements ─── */
+.screen,
+.card,
+.login-screen,
+.login-card,
+.kpi-card,
+.sensor-card,
+.table-wrapper,
+.top-bar,
+.nav-rail {
+  animation: none !important;
+  animation-delay: 0s !important;
+  transition-delay: 0s !important;
 }
 
 

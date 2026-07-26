@@ -15,7 +15,7 @@ interface ModalProps {
   children?: React.ReactNode;
 }
 
-export const Modal: React.FC<ModalProps> = ({
+export const Modal: React.FC<ModalProps> = React.memo(({
   isOpen = false,
   title = '',
   size = '',
@@ -69,4 +69,4 @@ export const Modal: React.FC<ModalProps> = ({
       </div>
     </div>
   );
-};
+});

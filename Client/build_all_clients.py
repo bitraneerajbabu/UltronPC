@@ -25,11 +25,11 @@ from pathlib import Path
 # Get api_key from rajapi.com dashboard (click the site, copy the key)
 # =============================================================================
 CLIENT_LIST = [
-    # {
-    #     "name":       "example_site",
-    #     "api_key":    "your-rajapi-api-key",
-    #     "station_id": "example_station",
-    # },
+    {
+        "name":       "KTPP_AAQMS1",
+        "api_key":    "IN_UltronSST_260725_4b545050_6e656572616a5f776f6b_899fe672b29bac2115fb2a3439d6e564",
+        "station_id": "AAQMS 1",
+    },
 ]
 
 # =============================================================================

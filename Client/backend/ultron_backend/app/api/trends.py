@@ -15,6 +15,7 @@ from app.models.telemetry import HistoricalData, Averages, AverageType, DataQual
 from app.models.parameter import Parameter
 from app.core.security import get_current_user
 from app.config import settings
+from app.services.report_data import fetch_interval_data, MAX_EXPORT_ROWS
 
 router = APIRouter(prefix="/trends", tags=["Trends"], dependencies=[Depends(get_current_user)])
 
@@ -31,16 +32,27 @@ async def get_chart_data(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
     avg_type: AverageType = AverageType.raw,
+    step_minutes: int = Query(0, description="Step interval in minutes (for raw mode, Normal Reports)"),
     limit: int = Query(50000, le=200000),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Returns time-series data for Chart.js rendering.
     Format: { parameter_id: { labels: [...timestamps], data: [...values] } }
+
+    Uses the shared :func:`fetch_interval_data` to ensure preview and export
+    return identical row counts and data for the same parameters/range/interval.
+
+    * ``avg_type`` controls the data source:
+      - ``raw`` with ``step_minutes > 0`` → step mode (HistoricalData, first per bucket)
+      - ``raw`` with ``step_minutes == 0`` → raw mode (HistoricalData, capped)
+      - ``avg_5min`` / ``avg_1hr`` / etc. → average mode (Averages table)
     """
     ids = [int(x) for x in parameter_ids.split(",") if x.strip().isdigit()]
     if not ids:
         raise HTTPException(status_code=400, detail="No valid parameter IDs provided")
+    if len(ids) > 200:
+        raise HTTPException(status_code=400, detail="Maximum 200 parameters allowed per request")
 
     if not end:
         end = datetime.utcnow()
@@ -52,14 +64,24 @@ async def get_chart_data(
     elif start.tzinfo is not None:
         start = start.replace(tzinfo=None)
 
-    param_result = await db.execute(
-        select(Parameter).where(Parameter.id.in_(ids))
+    # ── Use the shared data-fetching function ─────────────────────────────
+    interval = step_minutes if avg_type == AverageType.raw else 0
+    avg_t = avg_type.value if isinstance(avg_type, AverageType) else str(avg_type)
+    params, readings = await fetch_interval_data(
+        db=db,
+        parameter_ids=ids,
+        start=start,
+        end=end,
+        interval_minutes=interval,
+        avg_type=avg_t,
+        limit=limit,
     )
-    params = {p.id: p for p in param_result.scalars().all()}
+    param_map = {p.id: p for p in params}
 
+    # ── Build Chart.js series format ──────────────────────────────────────
     series: dict = {}
     for pid in ids:
-        p = params.get(pid)
+        p = param_map.get(pid)
         series[pid] = {
             "parameter_id": pid,
             "tag_name": p.tag_name if p else str(pid),
@@ -70,51 +92,18 @@ async def get_chart_data(
             "qualities": [],
         }
 
-        if avg_type == AverageType.raw:
-            rows = (await db.execute(
-                select(HistoricalData)
-                .where(and_(HistoricalData.parameter_id == pid, HistoricalData.timestamp >= start, HistoricalData.timestamp <= end))
-                .order_by(HistoricalData.timestamp).limit(limit)
-            )).scalars().all()
-        else:
-            # Sample one raw reading per interval window (last reading in each window)
-            mins = {"avg_5min": 5, "avg_15min": 15, "avg_30min": 30, "avg_1hr": 60, "avg_3hr": 180, "avg_6hr": 360, "avg_12hr": 720, "avg_24hr": 1440, "avg_8hr": 480, "avg_daily": 1440}.get(avg_type.value, 15)
-            raw_rows = (await db.execute(
-                select(HistoricalData)
-                .where(and_(HistoricalData.parameter_id == pid, HistoricalData.timestamp >= start, HistoricalData.timestamp <= end))
-                .order_by(HistoricalData.timestamp)
-            )).scalars().all()
-            # Align start to interval boundary
-            bucket_t = start.replace(minute=(start.minute // mins) * mins, second=0, microsecond=0)
-            bucket_end = bucket_t + timedelta(minutes=mins)
-            bucket_reading = None
-            for r in raw_rows:
-                while r.timestamp >= bucket_end:
-                    # Emit bucket reading (last raw value in the window)
-                    if bucket_reading is not None:
-                        series[pid]["labels"].append(bucket_reading.timestamp.isoformat())
-                        series[pid]["values"].append(bucket_reading.value)
-                        series[pid]["qualities"].append(str(bucket_reading.quality))
-                        bucket_reading = None
-                    bucket_t = bucket_end
-                    bucket_end = bucket_t + timedelta(minutes=mins)
-                bucket_reading = r  # keep updating — last one in window wins
-            if bucket_reading is not None:
-                series[pid]["labels"].append(bucket_reading.timestamp.isoformat())
-                series[pid]["values"].append(bucket_reading.value)
-                series[pid]["qualities"].append(str(bucket_reading.quality))
-            continue
-
-        for row in rows:
-            series[pid]["labels"].append(row.timestamp.isoformat())
-            series[pid]["values"].append(row.value)
-            series[pid]["qualities"].append(str(row.quality))
+    for r in readings:
+        sid = r.parameter_id
+        if sid in series:
+            series[sid]["labels"].append(r.timestamp.isoformat())
+            series[sid]["values"].append(r.value)
+            series[sid]["qualities"].append(str(r.quality))
 
     return {
         "start": start.isoformat(),
         "end": end.isoformat(),
         "avg_type": str(avg_type),
-        "series": list(series.values()),
+        "series": [s for s in series.values() if s["labels"]],
     }
 
 
@@ -182,10 +171,16 @@ async def export_trend_csv(
     avg_type: AverageType = AverageType.raw,
     db: AsyncSession = Depends(get_db),
 ):
-    """Export trend data as CSV saved to the Reports directory."""
+    """Export trend data as CSV saved to the Reports directory.
+
+    Uses the shared :func:`fetch_interval_data` — identical query path
+    as chart-data preview and Reports PDF/Excel exports.
+    """
     ids = [int(x) for x in parameter_ids.split(",") if x.strip().isdigit()]
     if not ids:
         raise HTTPException(status_code=400, detail="No valid parameter IDs provided")
+    if len(ids) > 200:
+        raise HTTPException(status_code=400, detail="Maximum 200 parameters allowed per request")
 
     if not end:
         end = datetime.utcnow()
@@ -197,38 +192,28 @@ async def export_trend_csv(
     elif start.tzinfo is not None:
         start = start.replace(tzinfo=None)
 
-    model = HistoricalData if avg_type == AverageType.raw else Averages
-
-    param_result = await db.execute(
-        select(Parameter).where(Parameter.id.in_(ids))
+    # ── Use the shared data-fetching function ─────────────────────────────
+    avg_t = avg_type.value if isinstance(avg_type, AverageType) else str(avg_type)
+    params, readings = await fetch_interval_data(
+        db=db,
+        parameter_ids=ids,
+        start=start,
+        end=end,
+        interval_minutes=0,  # trend CSV uses avg_type for interval selection
+        avg_type=avg_t,
     )
-    params = {p.id: p for p in param_result.scalars().all()}
+    param_map = {p.id: p for p in params}
 
     rows = []
-    for pid in ids:
-        p = params.get(pid)
-        conditions = [
-            model.parameter_id == pid,
-            model.timestamp >= start,
-            model.timestamp <= end,
-        ]
-        if avg_type != AverageType.raw:
-            conditions.append(model.avg_type == avg_type)
-
-        result = await db.execute(
-            select(model)
-            .where(and_(*conditions))
-            .order_by(model.timestamp)
-        )
-        readings = result.scalars().all()
-        for r in readings:
-            rows.append({
-                "timestamp": r.timestamp.strftime("%Y/%m/%d %H:%M"),
-                "parameter": p.tag_name if p else str(pid),
-                "unit": p.unit if p else "",
-                "value": f"{r.value:.3f}" if r.value is not None else "NA",
-                "quality": str(r.quality),
-            })
+    for r in readings:
+        p = param_map.get(r.parameter_id)
+        rows.append({
+            "timestamp": r.timestamp.strftime("%Y/%m/%d %H:%M"),
+            "parameter": p.tag_name if p else str(r.parameter_id),
+            "unit": p.unit if p else "",
+            "value": f"{r.value:.3f}" if r.value is not None else "NA",
+            "quality": getattr(r.quality, 'value', str(r.quality)),
+        })
 
     headers = ["Timestamp", "Parameter", "Value", "Unit", "Quality"]
     buf = io.StringIO()

@@ -340,6 +340,12 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     ALERT_RECIPIENTS: str = ""
 
+    # ─── Pending Upload Flush (Phase 7) ─────────────────────────
+    # Rate limit for backlog flush on unlock transition (records/sec).
+    FLUSH_RATE_PER_SECOND: int = 5
+    # Max exponential backoff in seconds for HTTP 429/5xx during flush.
+    FLUSH_BACKOFF_CAP_SECONDS: int = 300
+
     # ─── LED Board LAN Endpoint ───────────────────────────────────
     # Auth is validated against active user usernames in the DB.
     # LED_AUTH_TOKEN in .env can override as a static fallback if needed.

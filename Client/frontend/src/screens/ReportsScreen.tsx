@@ -143,7 +143,7 @@ const ReportSection = ({
   </div>
 );
 
-export const ReportsScreen = () => {
+export const ReportsScreen = React.memo(() => {
   const { stations, devices, parameters, API_BASE, showToast, parseUtcDate, authFetch } = useContext(AppContext);
 
   const [stationId, setStationId] = useState('');
@@ -298,6 +298,7 @@ export const ReportsScreen = () => {
           },
           options: {
             responsive: true,
+            animation: false,
             plugins: {
               legend: { labels: { color: '#475569', font: { weight: 600, family: 'Inter, sans-serif' } } }
             },
@@ -428,7 +429,7 @@ export const ReportsScreen = () => {
     const avgType = isNormal ? 'raw' : avgInterval;
 
     try {
-      const url = `${API_BASE}/trends/chart-data?parameter_ids=${paramIds}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${avgType}&limit=100000`;
+      const url = `${API_BASE}/trends/chart-data?parameter_ids=${paramIds}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${avgType}&step_minutes=${stepMin}&limit=100000`;
       const res = await authFetch(url, { signal: ac.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const resData: any = await res.json();
@@ -446,24 +447,9 @@ export const ReportsScreen = () => {
         s.labels.forEach((lbl: string, idx: number) => { if (dataByTs[lbl]) dataByTs[lbl][s.name] = s.values[idx]; });
       });
 
-      let filteredTimestamps = timestamps;
-      if (isNormal && stepMin > 1) {
-        const seen = new Set<string>();
-        filteredTimestamps = timestamps.filter(ts => {
-          const d = new Date(ts);
-          const bucketKey = Math.floor(d.getUTCMinutes() / stepMin);
-          const key = `${d.toISOString().slice(0,10)}:${d.getUTCHours()}:${bucketKey}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-        if (filteredTimestamps.length > 0 && timestamps.length > 0) {
-          if (filteredTimestamps[0] !== timestamps[0]) filteredTimestamps.unshift(timestamps[0]);
-          if (filteredTimestamps[filteredTimestamps.length - 1] !== timestamps[timestamps.length - 1]) filteredTimestamps.push(timestamps[timestamps.length - 1]);
-        }
-      }
-
-      const rows = filteredTimestamps.map(ts => {
+      // Client-side step filter removed — backend now returns correctly
+      // bucketed data via the shared fetch_interval_data().
+      const rows = timestamps.map(ts => {
         const row: Record<string, any> = { 'Date & Time': fmtTs(parseUtcDate(ts)) };
         seriesList.forEach((s, idx) => {
           const val = dataByTs[ts][s.name];
@@ -547,7 +533,7 @@ export const ReportsScreen = () => {
           </div>
           <div className="form-group">
             <label className="form-label">Parameter</label>
-            <div className="form-input" style={{ height: 'auto', minHeight: '38px', maxHeight: '180px', overflowY: 'auto', padding: '4px 8px', width: '220px' }}>
+            <div className="form-input" style={{ height: 'auto', minHeight: '38px', maxHeight: '180px', overflowY: 'auto', padding: '4px 8px', maxWidth: '220px' }}>
               {filteredParams.length === 0 ? (
                 <div style={{ color: T.textFaint, fontSize: '12px', padding: '4px 0' }}>No parameters</div>
               ) : (
@@ -661,4 +647,4 @@ export const ReportsScreen = () => {
 
     </div>
   );
-};
+});

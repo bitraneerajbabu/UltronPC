@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useCallback, useRef } from 'react';
 
 export const AppContext = createContext(null);
+export { LiveDataContext } from './LiveDataContext';
 
 // When running via `npm run dev` (Vite dev server on :5173) or production, proxy/server handles routing.
 // Using relative/same-origin URLs makes it dynamically compatible with any local port (8000, 8765, etc.).
@@ -474,6 +475,49 @@ export const AppProvider = ({ children }) => {
     }
   }, [showToast, authFetch, fetchLatestTelemetryAndKpis]);
 
+  // ─── Screen Prefetch Manager ─────────────────────────────────────────────
+  const lastPrefetchedRef = useRef<Record<string, number>>({});
+
+  const prefetchScreen = useCallback(async (screenKey: string) => {
+    const now = Date.now();
+    const last = lastPrefetchedRef.current[screenKey] || 0;
+    if (now - last < 15000) return; // 15s TTL cache
+    lastPrefetchedRef.current[screenKey] = now;
+
+    try {
+      if (screenKey === 'dashboardScreen') {
+        await fetchLatestTelemetryAndKpis();
+      } else if (screenKey === 'devicesScreen') {
+        const [sRes, dRes, pRes] = await Promise.all([
+          authFetch(`${API_BASE}/stations/`),
+          authFetch(`${API_BASE}/devices/`),
+          authFetch(`${API_BASE}/parameters/`),
+        ]);
+        if (sRes.ok) setStations(await sRes.json());
+        if (dRes.ok) setDevices(await dRes.json());
+        if (pRes.ok) setParameters(await pRes.json());
+      } else if (screenKey === 'reportsScreen') {
+        const pRes = await authFetch(`${API_BASE}/parameters/`);
+        if (pRes.ok) setParameters(await pRes.json());
+      } else if (screenKey === 'cpcbScreen') {
+        await Promise.all([
+          authFetch(`${API_BASE}/server-config/`),
+          authFetch(`${API_BASE}/server-config/mappings`),
+        ]);
+      } else if (screenKey === 'calibrationScreen') {
+        await authFetch(`${API_BASE}/calibration/jobs?limit=200`);
+      } else if (screenKey === 'settingsScreen') {
+        await Promise.all([
+          authFetch(`${API_BASE}/settings/general`),
+          authFetch(`${API_BASE}/settings/plant`),
+          authFetch(`${API_BASE}/users/`).then(async r => { if (r.ok) setUsersList(await r.json()); }),
+        ]);
+      }
+    } catch (e) {
+      console.warn(`[Prefetch] Error prefetching for ${screenKey}:`, e);
+    }
+  }, [authFetch, fetchLatestTelemetryAndKpis]);
+
   // WebSocket Live telemetry channel
   const connectWebSocket = useCallback(() => {
     // Clear any pending reconnect timer
@@ -874,7 +918,7 @@ export const AppProvider = ({ children }) => {
       addDevice, editDevice, deleteDevice,
       addParameter, editParameter, deleteParameter,
       testDeviceConnection, testParameterConnection,
-      loadAllData, fetchLatestTelemetryAndKpis, showToast, API_BASE, WS_BASE, authFetch,
+      loadAllData, fetchLatestTelemetryAndKpis, prefetchScreen, showToast, API_BASE, WS_BASE, authFetch,
       plantName, plantAddress, plantLogo, saveLocalSettings, pendingStatus,
       loading, parseUtcDate, hasLoadedOnce,
       broadcasts, amcExpiry,

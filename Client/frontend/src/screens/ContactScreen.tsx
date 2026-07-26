@@ -84,7 +84,7 @@ const MapPinIcon = () => (
   </svg>
 );
 
-export const ContactScreen = () => {
+export const ContactScreen = React.memo(() => {
   const { currentUser } = useContext(AppContext);
   const [localVersion, setLocalVersion] = useState('');
   useEffect(() => { fetch('/api/v1/version').then(r => r.ok ? r.json() : {version:''}).then(d => setLocalVersion(d.version || '')).catch(() => {}); }, []);
@@ -155,4 +155,4 @@ export const ContactScreen = () => {
       </div>
     </div>
   );
-};
+});

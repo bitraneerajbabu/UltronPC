@@ -70,7 +70,7 @@ const renderCsvPattern = (pattern) => {
     .replace('{date}', d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()));
 };
 
-export const DevicesScreen = () => {
+export const DevicesScreen = React.memo(() => {
   const { parameters, devices, stations, addParameter, editParameter, deleteParameter, addDevice, editDevice, deleteDevice, showToast, testParameterConnection } = useContext(AppContext);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -272,7 +272,7 @@ export const DevicesScreen = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8fafc', fontFamily: T.fontBase }}>
 
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '16px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '16px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.02em' }}>Channel Configuration</h1>
           <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#94a3b8', fontWeight: '600' }}>Manage telemetry parameters and gateway rules</p>
@@ -415,9 +415,9 @@ export const DevicesScreen = () => {
 
                     <div>
                       <label style={s()}>Protocol / Data Source</label>
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         {['modbus_tcp', 'modbus_rtu', 'udp_custom', 'csv'].map(proto => (
-                          <button key={proto} onClick={() => setForm(p => ({ ...p, input_type: proto }))} style={btnStyle(form.input_type === proto)}>
+                          <button key={proto} onClick={() => setForm(p => ({ ...p, input_type: proto }))} style={{ ...btnStyle(form.input_type === proto), minWidth: '80px', flex: '1 1 auto' }}>
                             {proto === 'modbus_tcp' ? 'TCP' : proto === 'modbus_rtu' ? 'RS485' : proto === 'udp_custom' ? 'UDP Custom' : 'CSV / Excel'}
                           </button>
                         ))}
@@ -719,4 +719,4 @@ export const DevicesScreen = () => {
 
     </div>
   );
-};
+});

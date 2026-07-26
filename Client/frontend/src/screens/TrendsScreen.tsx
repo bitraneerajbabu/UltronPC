@@ -176,6 +176,7 @@ export const TrendsScreen = () => {
           },
           options: {
             responsive: true,
+            animation: false,
             plugins: {
               legend: { labels: { color: '#475569', font: { weight: 600, family: 'Inter, sans-serif' } } }
             },

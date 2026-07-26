@@ -9,7 +9,7 @@ import React from 'react';
  * @param {string} [props.color='#0f766e'] - Color of the stroke line
  * @param {number} [props.strokeWidth=1.5] - Thickness of the stroke line
  */
-export const Sparkline = ({ data = [], width = 120, height = 30, color = '#0f766e', strokeWidth = 1.5 }) => {
+export const Sparkline = React.memo(({ data = [], width = 120, height = 30, color = '#0f766e', strokeWidth = 1.5 }) => {
   const clean = data.filter(v => v != null);
   if (!data || data.length === 0 || clean.length === 0) {
     return (
@@ -47,4 +47,4 @@ export const Sparkline = ({ data = [], width = 120, height = 30, color = '#0f766
       />
     </svg>
   );
-};
+});

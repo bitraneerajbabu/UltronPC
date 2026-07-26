@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { AppContext } from '../context/AppContext';
+import { AppContext, LiveDataContext } from '../context/AppContext';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, LineController, Filler } from 'chart.js';
 import { T, GLASS_CARD, getParamState, getParamTheme } from '../theme';
 import { Sparkline } from '../components/Sparkline';
@@ -162,7 +162,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
       position: 'relative', cursor: 'pointer', transition: 'all 0.2s ease'
     }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', flexWrap: 'wrap', gap: '6px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ width: '40px', height: '40px', backgroundColor: paramTheme.bg, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {renderIcon()}
@@ -212,7 +212,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', flexWrap: 'wrap', gap: '4px' }}>
         <span style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Raw Feed: {data?.raw_value != null ? parseFloat(data.raw_value).toFixed(2) : formattedVal} {unit}</span>
         <span style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Received: <span style={{ color: '#475569', fontWeight: '700' }}>{formattedTimestamp}</span></span>
       </div>
@@ -220,8 +220,9 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
   );
 });
 
-export const DashboardScreen = () => {
-  const { kpis, stations, devices, parameters, liveData, showToast, authFetch, API_BASE, parseUtcDate, fetchLatestTelemetryAndKpis, amcExpiry, broadcasts } = useContext(AppContext);
+export const DashboardScreen = React.memo(() => {
+  const { stations, devices, parameters, showToast, authFetch, API_BASE, parseUtcDate, amcExpiry, broadcasts } = useContext(AppContext);
+  const { kpis, liveData, fetchLatestTelemetryAndKpis } = useContext(LiveDataContext) || {};
   const [selectedParam, setSelectedParam] = useState('');
   const [currentTime, setCurrentTime] = useState(formatCurrentTime());
   const [showAlarmsModal, setShowAlarmsModal] = useState(false);
@@ -420,7 +421,7 @@ export const DashboardScreen = () => {
             },
             options: {
               responsive: true,
-              animation: { duration: 400 },
+              animation: false,
               plugins: {
                 legend: {
                   labels: {
@@ -759,13 +760,13 @@ export const DashboardScreen = () => {
                 <button onClick={() => setIsTrendsModalOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: T.textFaint }}>
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
                 </button>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
                   <div className="section-title" style={{ margin: 0, fontSize: '20px' }}>Live Trends</div>
-                  <div style={{ display: 'flex', gap: '16px', alignItems: 'center', paddingRight: '32px' }}>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <select value={selectedParam} onChange={handleParamChange} style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${T.borderSoft}`, fontSize: '14px', fontWeight: '700', color: T.text, backgroundColor: '#f8fafc', outline: 'none', cursor: 'pointer' }}>
                       {parameters.map(p => <option key={p.id} value={p.tag_name}>{p.name || p.tag_name}</option>)}
                     </select>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       <button onClick={downloadPNG} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PNG</button>
                       <button onClick={downloadPDF} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PDF</button>
                       <button onClick={exportTrendCSV} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>CSV</button>
@@ -831,7 +832,7 @@ export const DashboardScreen = () => {
           localStorage.setItem('ultron_dismissed_broadcasts', JSON.stringify([...next]));
         };
         return (
-          <div style={{ position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999, maxWidth: '400px', padding: '16px 20px', background: c.bg, border: `1px solid ${c.border}`, borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+          <div style={{ position: 'fixed', bottom: '80px', right: '24px', left: '24px', zIndex: 9999, maxWidth: '400px', padding: '16px 20px', background: c.bg, border: `1px solid ${c.border}`, borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'flex-start', gap: '12px', margin: '0 auto' }}>
             <span style={{ fontSize: '24px', flexShrink: 0 }}>{c.icon}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '13px', fontWeight: '700', color: c.title, marginBottom: '4px' }}>{c.label}</div>
@@ -844,4 +845,4 @@ export const DashboardScreen = () => {
 
     </div>
   );
-};
+});

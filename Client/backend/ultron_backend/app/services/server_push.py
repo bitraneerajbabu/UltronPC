@@ -13,19 +13,23 @@ Supports two push protocols:
 
 import os
 import asyncio
+import json
 import httpx
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload, selectinload
 from collections import defaultdict
 
+from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.server_config import ServerConfig, ServerParameterMapping
+from app.models.system_state import SystemState
 from app.models.telemetry import LiveData, Averages, AverageType, DataQuality, PendingUpload, SystemLog
 from app.models.parameter import Parameter
 from app.models.device import Device
 from app.models.station import Station
 from app.core.logger import get_logger
+from app.services.license_manager import is_cpcb_upload_allowed
 from app.services.lock_store import is_push_allowed, get_lock_status
 from app.services.rajapi_sync import _load_rajapi_config
 
@@ -171,6 +175,22 @@ async def _check_server_reachable(url: str, timeout: float = 5.0) -> bool:
 
 async def _push_spcb(config: ServerConfig, db, mode: str):
     """HTTP POST each payload to the configured SPCB URL."""
+    if not await is_cpcb_upload_allowed(db):
+        log.warning(f"[SPCB/{mode.upper()}] Push blocked by license — queuing to PendingUpload")
+        payloads = await _build_spcb_payloads(db, config.id, mode)
+        target = config.live_url if mode == "live" else config.delay_url
+        for payload in payloads:
+            db.add(PendingUpload(
+                server_config_id=config.id,
+                url=target or "",
+                payload=payload,
+                mode=mode,
+                last_error="Queued (license blocked)",
+            ))
+        await db.commit()
+        log.info(f"[SPCB/{mode.upper()}] Queued {len(payloads)} payload(s)")
+        return
+
     target_url = config.live_url if mode == "live" else config.delay_url
     if not target_url:
         log.warning(
@@ -311,6 +331,10 @@ def _append_to_cpcb_file(file_path: str, new_rows: list[str]) -> None:
 
 async def _push_cpcb(config: ServerConfig, db):
     """Write missing 15-minute averages to CPCB Annexure-I CSV file."""
+    if not await is_cpcb_upload_allowed(db):
+        log.warning(f"[CPCB] Push blocked by license — deferring")
+        return
+
     if not getattr(config, "is_cpcb_active", True):
         log.debug(f"[CPCB] CPCB push is disabled for server '{config.name}'.")
         return
@@ -563,6 +587,9 @@ async def retry_pending_uploads(db):
     On success, the PendingUpload record is deleted.
     On failure, retry_count is incremented and last_error updated.
     """
+    if not await is_cpcb_upload_allowed(db):
+        log.warning(f"[RETRY] Upload blocked by license — deferring retry")
+        return
     result = await db.execute(
         select(PendingUpload).order_by(PendingUpload.created_at.asc())
     )
@@ -708,6 +735,294 @@ async def _push_telemetry_to_rajapi(db, mode: str):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Pending Upload FIFO Cap & Audit (Phase 6 — LICENSE_LOCK_PLAN.md §7)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def enforce_pending_upload_cap(db):
+    """
+    Bounded backlog queue with FIFO overflow policy per LICENSE_LOCK_PLAN.md §7.
+
+    - Reads cap from PENDING_UPLOAD_MAX_RECORDS (default 500000).
+    - Warns when queue reaches 90% capacity.
+    - When cap exceeded: drops OLDEST pending upload records (FIFO).
+    - Each dropped record writes immutable SystemLog audit entry with:
+        event_type='PUSH_BACKLOG_DROPPED_FIFO'
+        tag_name, record_timestamp, dropped_at, reason
+    - historical_data and Averages tables are NEVER touched.
+    """
+    max_records = getattr(settings, "PENDING_UPLOAD_MAX_RECORDS", 500000)
+    warning_threshold = int(max_records * 0.9)
+
+    # 1. Count current queue depth
+    count_result = await db.execute(select(func.count(PendingUpload.id)))
+    total = count_result.scalar() or 0
+
+    # 2. 90% capacity warning
+    if total >= warning_threshold:
+        pct = round(total / max_records * 100, 1)
+        msg = (
+            f"[PENDING] Upload queue at {total}/{max_records} ({pct}%)"
+        )
+        if total > max_records:
+            msg += " — CAPACITY EXCEEDED, dropping oldest FIFO records"
+        else:
+            msg += " — near capacity"
+        log.warning(msg)
+
+    if total <= max_records:
+        return
+
+    # 3. FIFO overflow: drop oldest excess records
+    excess = total - max_records
+    result = await db.execute(
+        select(PendingUpload)
+        .order_by(PendingUpload.created_at.asc())
+        .limit(excess)
+    )
+    to_drop = result.scalars().all()
+    dropped_count = 0
+
+    for record in to_drop:
+        # Parse tag_names from payload JSON
+        tag_names = []
+        if record.payload and isinstance(record.payload, dict):
+            variables = record.payload.get("Variables", [])
+            timestamp = record.payload.get("Datetime", "")
+            for v in variables:
+                tn = v.get("Variablename", "")
+                if tn:
+                    tag_names.append(tn)
+
+        # Immutable audit log entry
+        details = {
+            "event_type": "PUSH_BACKLOG_DROPPED_FIFO",
+            "tag_name": tag_names,
+            "payload_id": record.id,
+            "server_config_id": record.server_config_id,
+            "record_timestamp": str(record.created_at),
+            "dropped_at": datetime.utcnow().isoformat(),
+            "reason": f"Queue capacity reached — exceeded cap of {max_records}",
+        }
+        db.add(SystemLog(
+            log_type="audit",
+            level="WARNING",
+            source="ultron.server_push.fifo",
+            message=f"PUSH_BACKLOG_DROPPED_FIFO: dropped pending upload #{record.id} (tag_names={tag_names})",
+            details=json.dumps(details),
+        ))
+        await db.delete(record)
+        dropped_count += 1
+
+    await db.commit()
+    log.warning(
+        f"[PENDING] Dropped {dropped_count} oldest record(s). "
+        f"Queue now at {max_records}/{max_records}."
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Unlock Transition Detection (Phase 7)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_FLUSH_STATE_KEY = "last_known_upload_allowed"
+
+
+async def _detect_and_trigger_flush(db):
+    """
+    Check if license state transitioned from blocked → allowed.
+    If so, trigger the controlled flush of PendingUpload backlog.
+    Stores last-known state in system_state for edge-to-edge comparison.
+
+    Called at the start of each run_server_push() cycle.
+    """
+    allowed_now = await is_cpcb_upload_allowed(db)
+
+    # Read last-known state
+    r = await db.execute(
+        select(SystemState.value).where(SystemState.key == _FLUSH_STATE_KEY)
+    )
+    row = r.scalar_one_or_none()
+    was_allowed = (row == "True") if row else None
+
+    # Store current state for next cycle
+    r2 = await db.execute(
+        select(SystemState).where(SystemState.key == _FLUSH_STATE_KEY)
+    )
+    existing = r2.scalar_one_or_none()
+    if existing:
+        existing.value = "True" if allowed_now else "False"
+        existing.updated_at = datetime.utcnow()
+    else:
+        db.add(SystemState(
+            key=_FLUSH_STATE_KEY,
+            value="True" if allowed_now else "False",
+        ))
+    await db.commit()
+
+    # Detect transition: blocked → allowed
+    if was_allowed is False and allowed_now is True:
+        log.info("[FLUSH] License state transitioned to allowed — triggering backlog flush")
+        await flush_pending_uploads_on_unlock(db)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Controlled Delayed Flush (Phase 7 — LICENSE_LOCK_PLAN.md §8)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# SystemState keys for flush progress
+_FLUSH_PROGRESS_TOTAL = "flush_total_records"
+_FLUSH_PROGRESS_FLUSHED = "flush_flushed_records"
+_FLUSH_PROGRESS_IN_PROGRESS = "flush_in_progress"
+_FLUSH_PROGRESS_LAST_ID = "last_flushed_record_id"
+
+# Backoff schedule for HTTP 429/5xx responses (seconds)
+_BACKOFF_SCHEDULE = [5, 10, 20, 60, 300]
+
+
+async def _upsert_system_state(db, key: str, value: str):
+    """Upsert a single system_state key. Caller must commit."""
+    r = await db.execute(
+        select(SystemState).where(SystemState.key == key)
+    )
+    existing = r.scalar_one_or_none()
+    if existing:
+        existing.value = value
+        existing.updated_at = datetime.utcnow()
+    else:
+        db.add(SystemState(key=key, value=value))
+
+
+async def flush_pending_uploads_on_unlock(db):
+    """
+    Rate-limited flush of pending upload backlog triggered on license unlock.
+
+    - Reads PendingUpload in chronological order (oldest created_at first).
+    - Rate limited to FLUSH_RATE_PER_SECOND records/sec (default 5).
+    - Exponential backoff on HTTP 429/5xx: 5s, 10s, 20s, 60s, 300s cap.
+    - Resumable: skips records with id <= last_flushed_record_id.
+    - Records deleted ONLY after confirmed HTTP < 300 success.
+    - Progress tracked via system_state keys.
+
+    Does NOT modify or replace retry_pending_uploads() — that function
+    continues to handle transient failures during normal (non-flush) operation.
+    """
+    rate = getattr(settings, "FLUSH_RATE_PER_SECOND", 5)
+    backoff_cap = getattr(settings, "FLUSH_BACKOFF_CAP_SECONDS", 300)
+
+    # Read last flushed record ID for resumability
+    r = await db.execute(
+        select(SystemState.value).where(SystemState.key == _FLUSH_PROGRESS_LAST_ID)
+    )
+    last_id_row = r.scalar_one_or_none()
+    last_flushed_id = int(last_id_row) if (last_id_row and last_id_row.isdigit()) else 0
+
+    # Count total records to flush
+    count_q = await db.execute(
+        select(func.count(PendingUpload.id)).where(PendingUpload.id > last_flushed_id)
+    )
+    total_to_flush = count_q.scalar() or 0
+    if total_to_flush == 0:
+        log.info("[FLUSH] No pending uploads to flush — nothing to do.")
+        return
+
+    # Set in-progress marker
+    await _upsert_system_state(db, _FLUSH_PROGRESS_IN_PROGRESS, "true")
+    await _upsert_system_state(db, _FLUSH_PROGRESS_TOTAL, str(total_to_flush))
+    await _upsert_system_state(db, _FLUSH_PROGRESS_FLUSHED, "0")
+    await db.commit()
+
+    log.info(f"[FLUSH] Starting flush of {total_to_flush} record(s) at {rate}/sec")
+
+    flushed_count = 0
+
+    # Preload server configs for URL lookup
+    pending_result = await db.execute(
+        select(PendingUpload)
+        .where(PendingUpload.id > last_flushed_id)
+        .order_by(PendingUpload.created_at.asc())
+    )
+    pending_list = pending_result.scalars().all()
+    config_ids = {p.server_config_id for p in pending_list}
+    configs = {}
+    for cid in config_ids:
+        c_res = await db.execute(select(ServerConfig).where(ServerConfig.id == cid))
+        c = c_res.scalar_one_or_none()
+        if c:
+            configs[cid] = c
+
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        for p in pending_list:
+            cfg = configs.get(p.server_config_id)
+            target_url = cfg.delay_url if (cfg and cfg.delay_url) else p.url
+            if not target_url:
+                continue
+
+            # Build headers
+            headers = {}
+            if target_url == settings.CENTRAL_API_URL or "api/v1/sync" in target_url:
+                api_key, _ = await _load_rajapi_config(db)
+                if api_key:
+                    headers["X-API-Key"] = api_key
+
+            # Attempt POST with exponential backoff on 429/5xx
+            success = False
+            backoff_idx = 0
+            while not success:
+                try:
+                    res = await client.post(target_url, json=p.payload, headers=headers)
+                    if res.status_code < 300:
+                        await db.delete(p)
+                        flushed_count += 1
+                        success = True
+                        log.info(
+                            f"[FLUSH] [OK] Delivered pending #{p.id} via {target_url} "
+                            f"({flushed_count}/{total_to_flush})"
+                        )
+                    elif res.status_code in (429,) or 500 <= res.status_code < 600:
+                        delay = _BACKOFF_SCHEDULE[min(backoff_idx, len(_BACKOFF_SCHEDULE) - 1)]
+                        delay = min(delay, backoff_cap)
+                        log.warning(
+                            f"[FLUSH] [BACKOFF] Pending #{p.id} HTTP {res.status_code} "
+                            f"— retrying in {delay}s (backoff idx {backoff_idx})"
+                        )
+                        await asyncio.sleep(delay)
+                        backoff_idx += 1
+                    else:
+                        # Non-retryable HTTP error (4xx other than 429)
+                        p.retry_count += 1
+                        p.last_error = f"HTTP {res.status_code}"
+                        log.warning(
+                            f"[FLUSH] [FAIL] Pending #{p.id} HTTP {res.status_code} "
+                            f"— skipped (non-retryable)"
+                        )
+                        success = True  # Skip this record, don't retry
+                except Exception as e:
+                    delay = _BACKOFF_SCHEDULE[min(backoff_idx, len(_BACKOFF_SCHEDULE) - 1)]
+                    delay = min(delay, backoff_cap)
+                    log.warning(
+                        f"[FLUSH] [BACKOFF] Pending #{p.id} network error: {e} "
+                        f"— retrying in {delay}s"
+                    )
+                    await asyncio.sleep(delay)
+                    backoff_idx += 1
+
+            # Persist progress after each record
+            await _upsert_system_state(db, _FLUSH_PROGRESS_LAST_ID, str(p.id))
+            await _upsert_system_state(db, _FLUSH_PROGRESS_FLUSHED, str(flushed_count))
+            await db.commit()
+
+            # Rate limiting: sleep between records
+            await asyncio.sleep(1.0 / rate)
+
+    # Clear in-progress marker
+    await _upsert_system_state(db, _FLUSH_PROGRESS_IN_PROGRESS, "false")
+    await db.commit()
+    log.info(
+        f"[FLUSH] Completed flush of {flushed_count}/{total_to_flush} record(s)."
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main scheduler entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -725,6 +1040,9 @@ async def run_server_push(mode: str = "live"):
     async with AsyncSessionLocal() as db:
         # Check internet connectivity (logs state transitions)
         await check_connectivity()
+
+        # Phase 7: detect license unlock transition and trigger backlog flush
+        await _detect_and_trigger_flush(db)
 
         # Check lock status — if push blocked, queue instead of push
         push_allowed = await is_push_allowed()
@@ -751,10 +1069,12 @@ async def run_server_push(mode: str = "live"):
                         last_error="Queued (locked/AMC expired)",
                     ))
             await db.commit()
+            await enforce_pending_upload_cap(db)
             log.info(f"[PUSH] [OK] Queued {len(servers)} server config(s) for delayed push")
             # Skip live push, still process delay retry
             if mode == "delay":
                 await retry_pending_uploads(db)
+            await enforce_pending_upload_cap(db)
             return
 
         conf_result = await db.execute(
@@ -807,3 +1127,5 @@ async def run_server_push(mode: str = "live"):
 
         if mode == "delay":
             await retry_pending_uploads(db)
+
+        await enforce_pending_upload_cap(db)

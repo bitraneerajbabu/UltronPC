@@ -55,7 +55,7 @@ function UserModal({ mode, user, onClose, onSave }: { mode: 'add' | 'edit'; user
   </div>);
 }
 
-export const SettingsScreen = () => {
+export const SettingsScreen = React.memo(() => {
   const { API_BASE, showToast, loadAllData, authFetch, pendingStatus, usersList, loadUsers, addUser, editUser, deleteUser, currentUser, parseUtcDate } = useContext(AppContext);
   const [settingsTab, setSettingsTab] = useState('system');
 
@@ -191,12 +191,16 @@ export const SettingsScreen = () => {
     }));
   };
 
-  const handleLogoUpload = (e) => {
+  const handleLogoUpload = (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) { showToast('Image size should be less than 2MB.', 'warn'); return; }
+    showToast('Processing logo image...', 'info');
     const reader = new FileReader();
-    reader.onload = (evt) => setFormData(prev => ({ ...prev, plantLogo: evt.target.result as string }));
+    reader.onload = (evt) => {
+      setFormData(prev => ({ ...prev, plantLogo: evt.target.result as string }));
+      showToast('Logo image processed & staged! Click "Save Configuration" to commit.', 'success');
+    };
     reader.readAsDataURL(file);
   };
 
@@ -589,6 +593,11 @@ export const SettingsScreen = () => {
               {formData.plantLogo && <img src={formData.plantLogo} alt="Logo" style={{ maxHeight: '48px', maxWidth: '160px', borderRadius: '6px', border: `1px solid ${T.primaryBorder}` }} />}
               <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} id="logoInput" />
               <button style={BTN.ghost} onClick={() => document.getElementById('logoInput').click()}>Select Logo</button>
+              {formData.plantLogo && (
+                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  ✓ Staged for save
+                </span>
+              )}
               {formData.plantLogo && <button style={BTN.danger} onClick={() => setFormData(prev => ({ ...prev, plantLogo: '' }))}>Remove</button>}
             </div>
           </div>
@@ -635,8 +644,8 @@ export const SettingsScreen = () => {
         <div style={{ marginBottom: '12px' }}>
           <input type="text" placeholder="Search users…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ ...INP, maxWidth: '300px' }} />
         </div>
-        <div style={{ ...GLASS_CARD, padding: '0', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <div style={{ ...GLASS_CARD, padding: '0', overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '600px' }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${T.primaryBorder}`, background: T.primaryBg }}>
                 {['Username', 'Full Name', 'Role', 'Status', 'Created', 'Last Login', ''].map(h => (<th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '10px', fontWeight: '700', color: T.textMuted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</th>))}
@@ -692,7 +701,16 @@ export const SettingsScreen = () => {
     <div className="screen active" id="settingsScreen" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <div style={{ display: 'flex', gap: '4px', borderBottom: `1px solid ${T.primaryBorder}`, marginBottom: '4px' }}>
         {SUB_TABS.map(t => (
-          <button key={t.key} onClick={() => setSettingsTab(t.key)} style={{
+          <button key={t.key} onClick={() => setSettingsTab(t.key)}
+            onMouseEnter={() => {
+              if (t.key === 'users') loadUsers();
+              else if (t.key === 'license') authFetch(`${API_BASE}/license/status`).then(r => { if (r.ok) r.json().then(d => setLicenseStatus(d)); }).catch(() => {});
+            }}
+            onFocus={() => {
+              if (t.key === 'users') loadUsers();
+              else if (t.key === 'license') authFetch(`${API_BASE}/license/status`).then(r => { if (r.ok) r.json().then(d => setLicenseStatus(d)); }).catch(() => {});
+            }}
+            style={{
             padding: '8px 16px', fontSize: '12px', fontWeight: '700', cursor: 'pointer',
             border: 'none', borderBottom: `3px solid ${settingsTab === t.key ? t.icon : 'transparent'}`,
             background: 'transparent', color: settingsTab === t.key ? t.icon : T.textMuted,
@@ -705,4 +723,4 @@ export const SettingsScreen = () => {
       {settingsTab === 'users' && renderUsersTab()}
     </div>
   );
-};
+});

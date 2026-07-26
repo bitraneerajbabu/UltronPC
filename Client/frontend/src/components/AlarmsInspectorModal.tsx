@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect, useCallback } from 'react';
-import { AppContext } from '../context/AppContext';
+import { AppContext, LiveDataContext } from '../context/AppContext';
 
 /**
  * AlarmsInspectorModal displays threshold alarms and communication failures,
@@ -9,13 +9,13 @@ export const AlarmsInspectorModal = ({ isOpen, onClose }) => {
   const {
     devices,
     parameters,
-    liveData,
     authFetch,
     API_BASE,
     parseUtcDate,
     currentUser,
     showToast
   } = useContext(AppContext);
+  const { liveData } = useContext(LiveDataContext) || {};
 
   const [activeTab, setActiveTab] = useState('threshold');
   const [activeAlarmsList, setActiveAlarmsList] = useState([]);

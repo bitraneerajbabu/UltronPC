@@ -62,7 +62,7 @@ const SUB_TABS = [
   { key: 'led', label: 'LED Board (LAN)', icon: '#ea580c' },
 ];
 
-export const CPCB = () => {
+export const CPCB = React.memo(() => {
   const { API_BASE, showToast, authFetch, currentUser } = useContext(AppContext);
   const [subTab, setSubTab] = useState('spcb');
 
@@ -308,7 +308,7 @@ export const CPCB = () => {
     if (filteredServers.length === 0) return null;
 
     return (
-      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', marginTop: '10px' }}>
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', overflowX: 'auto', marginTop: '10px' }}>
         {filteredServers.map((srv) => {
           const isCpcb = srv.protocol === 'cpcb';
           const isBoth = srv.protocol === 'both';
@@ -517,7 +517,10 @@ export const CPCB = () => {
         <p style={{ margin: '2px 0 12px', fontSize: '11px', color: '#94a3b8', fontWeight: '600' }}>SPCB push, CPCB export, LED boards & Central Sync</p>
         <div style={{ display: 'flex', gap: '4px' }}>
           {SUB_TABS.map(t => (
-            <button key={t.key} onClick={() => setSubTab(t.key)} style={{
+            <button key={t.key} onClick={() => setSubTab(t.key)}
+              onMouseEnter={() => loadPushData()}
+              onFocus={() => loadPushData()}
+              style={{
               padding: '8px 16px', fontSize: '12px', fontWeight: '700', cursor: 'pointer',
               border: 'none', borderBottom: `3px solid ${subTab === t.key ? t.icon : 'transparent'}`,
               background: 'transparent', color: subTab === t.key ? t.icon : '#64748b',
@@ -554,4 +557,4 @@ export const CPCB = () => {
       </Modal>
     </div>
   );
-};
+});

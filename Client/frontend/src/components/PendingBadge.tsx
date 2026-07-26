@@ -1,6 +1,6 @@
 import React from 'react'
 
-export const PendingBadge = () => (
+export const PendingBadge = React.memo(() => (
   <span style={{
     display: 'inline-block',
     fontSize: '11px',
@@ -15,7 +15,7 @@ export const PendingBadge = () => (
   }}>saving...</span>
 )
 
-export const ErrorBadge = ({ message }: { message?: string }) => (
+export const ErrorBadge = React.memo(({ message }: { message?: string }) => (
   <span title={message} style={{
     display: 'inline-block',
     fontSize: '11px',
