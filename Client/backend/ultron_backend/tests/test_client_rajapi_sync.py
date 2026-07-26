@@ -76,6 +76,59 @@ class TestClientRajAPISync(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(param1.id, param2.id)
 
+    async def test_device_dedup_same_station_reuses_device(self):
+        """4. Sync two params for same station+name -> one device created, second reuses it."""
+        st = Station(name="AAQMS 1", protocol="modbus_tcp")
+        self.db.add(st)
+        await self.db.flush()
+
+        # First param creates device "AAQMS 1 Sync Device"
+        param1 = await _get_or_create_param(
+            db=self.db, tag_name="PM10", unit="ug/m3", station_id=st.id
+        )
+        # Second param with same station reuses same device
+        param2 = await _get_or_create_param(
+            db=self.db, tag_name="SO2", unit="ppm", station_id=st.id
+        )
+
+        self.assertIsNotNone(param1)
+        self.assertIsNotNone(param2)
+        self.assertEqual(param1.device_id, param2.device_id,
+                         "Both parameters should share the same device")
+
+        # Verify exactly one device exists for this station
+        from sqlalchemy import select
+        from app.models.device import Device
+        res = await self.db.execute(
+            select(Device).where(Device.station_id == st.id)
+        )
+        devices = res.scalars().all()
+        self.assertEqual(len(devices), 1,
+                         "Only one device row should exist for the station")
+
+    async def test_device_dedup_different_stations_create_separate_devices(self):
+        """5. Params for different stations -> separate devices created, no cross-contamination."""
+        st1 = Station(name="Stack A", protocol="modbus_tcp")
+        st2 = Station(name="Stack B", protocol="modbus_tcp")
+        self.db.add(st1)
+        self.db.add(st2)
+        await self.db.flush()
+
+        # Use different tag_names so parameter dedup doesn't short-circuit
+        param1 = await _get_or_create_param(
+            db=self.db, tag_name="CO", unit="ppm", station_id=st1.id
+        )
+        param2 = await _get_or_create_param(
+            db=self.db, tag_name="NO2", unit="ppm", station_id=st2.id
+        )
+
+        self.assertIsNotNone(param1)
+        self.assertIsNotNone(param2)
+        self.assertIsNotNone(param1.device_id)
+        self.assertIsNotNone(param2.device_id)
+        self.assertNotEqual(param1.device_id, param2.device_id,
+                            "Different stations must have different devices")
+
 
 if __name__ == "__main__":
     unittest.main()

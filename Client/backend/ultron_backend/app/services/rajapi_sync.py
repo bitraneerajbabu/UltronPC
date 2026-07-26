@@ -93,6 +93,21 @@ async def _execute_command(cmd: dict):
                 db.add(Broadcast(message=msg, severity=sev))
                 await db.commit()
 
+        elif cmd_type in ("provision_device", "sync_parameters", "add_parameter"):
+            async with AsyncSessionLocal() as sdb:
+                tag_name = payload.get("tag_name") or payload.get("name")
+                unit = payload.get("unit", "")
+                st_id = payload.get("station_id")
+                st_name = payload.get("station_name")
+                dev_id = payload.get("device_id")
+                if tag_name:
+                    param = await _get_or_create_param(
+                        sdb, tag_name=tag_name, unit=unit,
+                        station_id=st_id, station_name=st_name, device_id=dev_id
+                    )
+                    if param:
+                        await sdb.commit()
+
         elif cmd_type == "update_config":
             import os
             for key, val in payload.items():
@@ -104,6 +119,118 @@ async def _execute_command(cmd: dict):
 
     except Exception as e:
         log.error(f"Failed to execute command {cmd_type}: {e}")
+
+
+from app.models.device import Device
+from app.models.parameter import Parameter
+
+async def _get_or_create_param(
+    db,
+    tag_name: str,
+    unit: str = "",
+    station_id: int | None = None,
+    station_name: str | None = None,
+    device_id: int | None = None,
+    std_limit: float | None = None,
+    register_address: int = 40001
+) -> Parameter | None:
+    """
+    Client-side RajAPI Sync Auto-Provisioning Guard & Duplicate Prevention.
+
+    1. Checks if a Parameter with matching tag_name already exists in local client database.
+       If found, reuses existing Parameter row without duplicate creation.
+    2. If creating a new Parameter, REQUIRES an explicit station (valid station_id or station_name).
+       If no station is specified, logs a warning and skips creation (returns None) rather than
+       creating an unassigned/dangling parameter.
+    """
+    clean_tag = tag_name.strip() if tag_name else ""
+    if not clean_tag:
+        return None
+
+    clean_station = station_name.strip() if station_name else None
+
+    # 1. Check if parameter already exists in local DB (Duplicate Prevention)
+    stmt = select(Parameter).where(Parameter.tag_name == clean_tag)
+    res = await db.execute(stmt)
+    existing_params = res.scalars().all()
+
+    if existing_params:
+        # Prefer parameter linked to device_id if provided
+        for p in existing_params:
+            if device_id and p.device_id == device_id:
+                if not p.unit and unit:
+                    p.unit = unit
+                return p
+        param = existing_params[0]
+        if not param.unit and unit:
+            param.unit = unit
+        return param
+
+    # 2. Require explicit station before creating new device/parameter
+    target_station_id = station_id
+    if not target_station_id and clean_station:
+        from app.models.station import Station
+        stmt_st = select(Station).where(Station.name == clean_station)
+        res_st = await db.execute(stmt_st)
+        st_obj = res_st.scalar_one_or_none()
+        if st_obj:
+            target_station_id = st_obj.id
+
+    if not target_station_id or target_station_id <= 0:
+        log.warning(
+            f"[Client Sync Auto-Provisioning Guard] Skipped parameter creation for tag_name='{clean_tag}': "
+            f"No valid explicit station specified (station_id={station_id}, station_name='{station_name}')."
+        )
+        return None
+
+    from app.models.station import Station
+    stmt_verify = select(Station).where(Station.id == target_station_id)
+    res_v = await db.execute(stmt_verify)
+    st_record = res_v.scalar_one_or_none()
+    if not st_record:
+        log.warning(
+            f"[Client Sync Auto-Provisioning Guard] Skipped parameter creation for tag_name='{clean_tag}': "
+            f"Station ID {target_station_id} does not exist in local database."
+        )
+        return None
+
+    # 3. Find or create device for this station
+    target_device_id = device_id
+    if not target_device_id:
+        dev_name = f"{st_record.name} Sync Device"
+        stmt_dev = select(Device).where(Device.station_id == target_station_id, Device.name == dev_name)
+        res_dev = await db.execute(stmt_dev)
+        dev_obj = res_dev.scalar_one_or_none()
+        if not dev_obj:
+            dev_obj = Device(
+                station_id=target_station_id,
+                name=dev_name,
+                protocol="modbus_tcp"
+            )
+            db.add(dev_obj)
+            await db.flush()
+        target_device_id = dev_obj.id
+
+    # 4. Create new Parameter linked to verified station & device
+    from sqlalchemy import func as sa_func
+    max_res = await db.execute(sa_func.max(Parameter.display_order).select())
+    max_ord = max_res.scalar() or 0
+
+    new_param = Parameter(
+        device_id=target_device_id,
+        name=clean_tag,
+        tag_name=clean_tag,
+        unit=unit or "",
+        register_address=register_address or 40001,
+        display_order=max_ord + 1
+    )
+    db.add(new_param)
+    await db.flush()
+    log.info(
+        f"[Client Sync Auto-Provisioning] Created parameter '{clean_tag}' linked to station_id={target_station_id} "
+        f"(device_id={target_device_id})."
+    )
+    return new_param
 
 
 async def _load_rajapi_config(db) -> tuple[str | None, str | None]:
