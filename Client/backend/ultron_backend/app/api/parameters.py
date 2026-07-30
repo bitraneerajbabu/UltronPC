@@ -2,10 +2,10 @@
 
 import asyncio
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
-from typing import List
+from typing import List, Optional
 from app.database import get_db
 from app.models.parameter import Parameter
 from app.models.device import Device
@@ -26,9 +26,9 @@ router = APIRouter(
 
 
 @router.get("/", response_model=List[ParameterOut])
-async def list_parameters(device_id: int = None, db: AsyncSession = Depends(get_db)):
+async def list_parameters(db: AsyncSession = Depends(get_db), device_id: Optional[int] = Query(None)):
     query = select(Parameter).order_by(Parameter.display_order, Parameter.id)
-    if device_id:
+    if device_id is not None and isinstance(device_id, int):
         query = query.where(Parameter.device_id == device_id)
     result = await db.execute(query)
     return result.scalars().all()

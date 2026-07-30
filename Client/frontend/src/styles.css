@@ -229,10 +229,18 @@ body {
 
 
 .form-input[type="date"],
-
-
-
 .form-input[type="time"] { cursor: pointer; }
+
+/* Remove native HTML5 number input spinner arrows */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+input[type="number"] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
 
 
 
@@ -772,7 +780,7 @@ body {
 
 
 
-.grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; }
+.grid-4 { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 420px)); gap: 18px; }
 .grid-5 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 18px; }
 
 
@@ -788,7 +796,7 @@ body {
 
 @media (max-width: 768px) {
 
-  .grid-4, .grid-5, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+  .grid-5, .grid-3, .grid-2 { grid-template-columns: 1fr; }
 
   .nav-rail { width: 56px; }
   .nav-rail-label { display: none; }

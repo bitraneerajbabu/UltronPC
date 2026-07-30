@@ -13,7 +13,7 @@ export const PendingBadge = React.memo(() => (
     verticalAlign: 'middle',
     animation: 'pulse 1.5s ease-in-out infinite',
   }}>saving...</span>
-)
+))
 
 export const ErrorBadge = React.memo(({ message }: { message?: string }) => (
   <span title={message} style={{
@@ -27,4 +27,4 @@ export const ErrorBadge = React.memo(({ message }: { message?: string }) => (
     marginLeft: '6px',
     verticalAlign: 'middle',
   }}>failed</span>
-)
+))

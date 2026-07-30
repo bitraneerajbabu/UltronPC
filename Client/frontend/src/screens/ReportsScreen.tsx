@@ -1,6 +1,7 @@
 import React, { useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { AppContext } from '../context/AppContext';
 import { T, GLASS_CARD } from '../theme';
+import { DateTimeRangePicker } from '../components/DateTimeRangePicker';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
@@ -15,6 +16,7 @@ interface ReportSectionProps {
   interval: string; setInterval: (v: string) => void;
   onExportPDF: () => void;
   onExportCSV: () => void;
+  onExportExcel: () => void;
   previewHeaders: string[];
   previewRows: Record<string, any>[];
   loading: boolean;
@@ -79,93 +81,21 @@ const fmtTs = (date: Date) => {
   return `${date.getFullYear()}/${p(date.getMonth() + 1)}/${p(date.getDate())} ${p(date.getHours())}:${p(date.getMinutes())}`;
 };
 
-const ReportSection = ({
-  title, intervalOptions,
-  fromDate, setFromDate, fromTime, setFromTime,
-  toDate, setToDate, toTime, setToTime,
-  interval, setInterval,
-  onExportPDF, onExportCSV,
-  previewHeaders, previewRows, loading,
-}: ReportSectionProps) => (
-  <div className="card" style={{ marginTop: '18px' }}>
-    <div className="section-title">{title}</div>
-    {loading && <div className="loader" style={{ margin: '12px 0' }}></div>}
-    <div className="filter-grid">
-      <div className="form-group">
-        <label className="form-label">Interval</label>
-        <select className="form-select" value={interval} onChange={e => setInterval(e.target.value)}>
-          {intervalOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-      </div>
-      <div className="form-group">
-        <label className="form-label">From Date</label>
-        <input type="date" className="form-input" value={fromDate} onChange={e => setFromDate(e.target.value)} />
-      </div>
-      <div className="form-group">
-        <label className="form-label">From Time</label>
-        <input type="time" className="form-input" value={fromTime} onChange={e => setFromTime(e.target.value)} />
-      </div>
-      <div className="form-group">
-        <label className="form-label">To Date</label>
-        <input type="date" className="form-input" value={toDate} onChange={e => setToDate(e.target.value)} />
-      </div>
-      <div className="form-group">
-        <label className="form-label">To Time</label>
-        <input type="time" className="form-input" value={toTime} onChange={e => setToTime(e.target.value)} />
-      </div>
-    </div>
-    <div className="toolbar" style={{ marginTop: '16px' }}>
-      <button className="btn btn-primary" onClick={onExportPDF} disabled={loading}>Export PDF</button>
-      <button className="btn" onClick={onExportCSV} disabled={loading}>Export CSV</button>
-    </div>
-    {(previewHeaders.length > 0 && previewRows.length > 0) && (
-      <div className="table-wrapper" style={{ marginTop: '16px' }}>
-        <table className="table">
-          <thead>
-            <tr>
-              {previewHeaders.map(h => <th key={h}>{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {previewRows.slice(0, 50).map((row, idx) => (
-              <tr key={idx}>
-                <td>{row['Date & Time']}</td>
-                {previewHeaders.slice(1).map(h => {
-                  const val = row[h];
-                  return <td key={h} style={{ fontWeight: val !== 'NA' ? '600' : '400' }}>{val}</td>;
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    )}
-  </div>
-);
-
 export const ReportsScreen = React.memo(() => {
   const { stations, devices, parameters, API_BASE, showToast, parseUtcDate, authFetch } = useContext(AppContext);
 
   const [stationId, setStationId] = useState('');
-  const [normalInterval, setNormalInterval] = useState('1');
-  const [normalFromDate, setNormalFromDate] = useState(dlDate(-1));
-  const [normalFromTime, setNormalFromTime] = useState('00:00');
-  const [normalToDate, setNormalToDate] = useState(dlDate(0));
-  const [normalToTime, setNormalToTime] = useState('23:59');
-  const [normalHeaders, setNormalHeaders] = useState<string[]>([]);
-  const [normalRows, setNormalRows] = useState<Record<string, any>[]>([]);
-  const [normalLoading, setNormalLoading] = useState(false);
+  const [reportMode, setReportMode] = useState<'normal' | 'average'>('normal');
+  const [interval, setInterval] = useState('1');
+  const [fromDate, setFromDate] = useState(dlDate(-1));
+  const [fromTime, setFromTime] = useState('00:00');
+  const [toDate, setToDate] = useState(dlDate(0));
+  const [toTime, setToTime] = useState('23:59');
+  const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
+  const [previewRows, setPreviewRows] = useState<Record<string, any>[]>([]);
+  const [reportLoading, setReportLoading] = useState(false);
 
   const [selectedParamIds, setSelectedParamIds] = useState<string[]>([]);
-
-  const [avgInterval, setAvgInterval] = useState('avg_1hr');
-  const [avgFromDate, setAvgFromDate] = useState(dlDate(-1));
-  const [avgFromTime, setAvgFromTime] = useState('00:00');
-  const [avgToDate, setAvgToDate] = useState(dlDate(0));
-  const [avgToTime, setAvgToTime] = useState('23:59');
-  const [avgHeaders, setAvgHeaders] = useState<string[]>([]);
-  const [avgRows, setAvgRows] = useState<Record<string, any>[]>([]);
-  const [avgLoading, setAvgLoading] = useState(false);
 
   // ─── Trend Chart state ──────────────────────────────────────
   const [trendParamId, setTrendParamId] = useState('');
@@ -183,6 +113,15 @@ export const ReportsScreen = React.memo(() => {
 
   const abortRef = useRef<AbortController | null>(null);
 
+  const handleModeChange = (mode: 'normal' | 'average') => {
+    setReportMode(mode);
+    if (mode === 'normal') {
+      setInterval('1');
+    } else {
+      setInterval('avg_1hr');
+    }
+  };
+
   const allStations = useMemo(() => {
     return stations
       .filter(st => {
@@ -195,17 +134,22 @@ export const ReportsScreen = React.memo(() => {
   }, [stations, parameters, devices]);
 
   useEffect(() => {
-    if (allStations.length && !stationId) setStationId(allStations[0].id);
-  }, [allStations, stationId]);
+    if (stations.length && !stationId) setStationId(String(stations[0].id));
+  }, [stations, stationId]);
 
   const filteredParams = useMemo(() => {
+    if (!stationId) return parameters;
     return parameters.filter(p => {
-      if (!stationId) return true;
       const dev = devices.find(d => String(d.id) === String(p.device_id));
       if (!dev) return false;
-      return String(dev.station_id) === stationId;
+      return String(dev.station_id) === String(stationId);
     });
   }, [parameters, stationId, devices]);
+
+  // Sync selected parameters when filtered params change
+  useEffect(() => {
+    setSelectedParamIds(filteredParams.map(p => String(p.id)));
+  }, [filteredParams]);
 
   // Chart cleanup
   useEffect(() => {
@@ -356,27 +300,56 @@ export const ReportsScreen = React.memo(() => {
   };
 
   const downloadTrendPNG = async () => {
-    if (!chartInstanceRef.current) return showToast('Generate a trend first.', 'warn');
-    const dataUrl = chartInstanceRef.current.toBase64Image();
-    const blob = await (await fetch(dataUrl)).blob();
-    const name = `Trend_${trendSeries?.name}_${Date.now()}.png`;
+    const canvas = chartRef.current;
+    if (!canvas) return showToast('Generate a trend first.', 'warn');
+    const dataUrl = canvas.toDataURL('image/png');
+    const bin = atob(dataUrl.split(',')[1]);
+    const buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    const blob = new Blob([buf], { type: 'image/png' });
+    const name = `Trend_${trendSeries?.name || 'chart'}_${Date.now()}.png`;
     await saveAs(blob, name, 'image/png');
     showToast('Trend image exported as PNG.');
   };
 
   const downloadTrendPDF = async () => {
-    if (!trendParamId) return showToast('Generate a trend first.', 'warn');
+    if (!chartInstanceRef.current) return showToast('Generate a trend first.', 'warn');
     setTrendLoading(true);
-    const startIso = `${trendFromDate}T${trendFromTime}:00Z`;
-    const endIso = `${trendToDate}T${trendToTime}:59Z`;
     try {
-      const url = `${API_BASE}/reports/pdf?parameter_ids=${trendParamId}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${trendResolution}&station_name=${encodeURIComponent(stationId)}`;
-      const res = await authFetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const name = `Trend_${trendSeries?.name || 'report'}_${Date.now()}.pdf`;
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF('landscape', 'mm', 'a4');
+      const pw = 297, ph = 210;
+
+      const logoImg = new Image();
+      logoImg.crossOrigin = 'anonymous';
+      logoImg.src = '/assets/sunshine_logo.png';
+      await new Promise<void>(res => { logoImg.onload = () => res(); logoImg.onerror = () => res(); });
+      if (logoImg.complete && logoImg.naturalWidth > 0) {
+        const lw = 40, lh = logoImg.naturalHeight * (lw / logoImg.naturalWidth);
+        doc.addImage(logoImg, 'PNG', (pw - lw) / 2, 6, lw, lh);
+      }
+
+      doc.setFontSize(14);
+      doc.text('Historical Trend Chart', pw / 2, logoImg.complete && logoImg.naturalWidth > 0 ? 32 : 18, { align: 'center' });
+
+      const canvas = chartRef.current;
+      if (canvas) {
+        const chartImg = canvas.toDataURL('image/png');
+        const cw = 260, ch = 130;
+        doc.addImage(chartImg, 'PNG', (pw - cw) / 2, 42, cw, ch);
+      }
+
+      doc.setFontSize(9);
+      const stName = allStations.find(s => s.id === stationId)?.name || stationId;
+      const paramObj = parameters.find(p => String(p.id) === String(trendParamId));
+      const label = paramObj ? `${paramObj.name} (${paramObj.tag_name})` : `Param #${trendParamId}`;
+      doc.text(`Station: ${stName}  |  Parameter: ${label}  |  Resolution: ${trendResolution}`, pw / 2, 190, { align: 'center' });
+      doc.text(`Generated: ${new Date().toLocaleString()}`, pw / 2, 197, { align: 'center' });
+
+      const blob = doc.output('blob');
+      const name = `Trend_${trendSeries?.name || 'chart'}_${Date.now()}.pdf`;
       await saveAs(blob, name, 'application/pdf');
-      showToast('PDF saved.');
+      showToast('Trend chart PDF exported.');
     } catch (e: any) {
       showToast('PDF export failed.', 'error');
     } finally {
@@ -384,49 +357,33 @@ export const ReportsScreen = React.memo(() => {
     }
   };
 
-  const exportTrendCSV = async () => {
-    if (!trendParamId) return showToast('Generate a trend first.', 'warn');
-    setTrendLoading(true);
-    const startIso = `${trendFromDate}T${trendFromTime}:00Z`;
-    const endIso = `${trendToDate}T${trendToTime}:59Z`;
-    try {
-      const url = `${API_BASE}/trends/export-csv?parameter_ids=${trendParamId}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${trendResolution}`;
-      const res = await authFetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      const name = `TrendData_${trendSeries?.name || 'trend'}_${Date.now()}.csv`;
-      await saveAs(blob, name, 'text/csv');
-      showToast('CSV saved.');
-    } catch (e: any) {
-      showToast('CSV export failed.', 'error');
-    } finally {
-      setTrendLoading(false);
-    }
+  const downloadTrendCSV = async () => {
+    if (!trendRows.length) return showToast('Generate a trend first.', 'warn');
+    const cols = ['Timestamp', 'Parameter', 'Value', 'Unit', 'Quality', 'Source'];
+    const rows = trendRows.map(r => [r.timestamp, r.parameter, r.value, r.unit, r.quality, r.source]);
+    const csv = [cols.join(','), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const name = `Trend_${trendSeries?.name || 'chart'}_${Date.now()}.csv`;
+    await saveAs(blob, name, 'text/csv');
+    showToast('Trend data exported as CSV.');
   };
-
-  useEffect(() => {
-    setSelectedParamIds(filteredParams.map(p => String(p.id)));
-  }, [filteredParams]);
 
   const toggleParam = (id: string) => {
     setSelectedParamIds(prev => prev.includes(id) ? prev.filter(pid => pid !== id) : [...prev, id]);
   };
 
-  const fetchData = async (isNormal: boolean) => {
+  const fetchData = async () => {
     if (!selectedParamIds.length) { showToast('No parameters selected.', 'warn'); return null; }
     if (abortRef.current) abortRef.current.abort();
     const ac = new AbortController();
     abortRef.current = ac;
 
     const paramIds = selectedParamIds.join(',');
-    const fromD = isNormal ? normalFromDate : avgFromDate;
-    const fromT = isNormal ? normalFromTime : avgFromTime;
-    const toD = isNormal ? normalToDate : avgToDate;
-    const toT = isNormal ? normalToTime : avgToTime;
-    const startIso = `${fromD}T${fromT}:00Z`;
-    const endIso = `${toD}T${toT}:59Z`;
-    const stepMin = isNormal ? Number(normalInterval) : 0;
-    const avgType = isNormal ? 'raw' : avgInterval;
+    const startIso = `${fromDate}T${fromTime}:00Z`;
+    const endIso = `${toDate}T${toTime}:59Z`;
+    const isNormal = reportMode === 'normal';
+    const stepMin = isNormal ? Number(interval) : 0;
+    const avgType = isNormal ? 'raw' : interval;
 
     try {
       const url = `${API_BASE}/trends/chart-data?parameter_ids=${paramIds}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${avgType}&step_minutes=${stepMin}&limit=100000`;
@@ -447,8 +404,6 @@ export const ReportsScreen = React.memo(() => {
         s.labels.forEach((lbl: string, idx: number) => { if (dataByTs[lbl]) dataByTs[lbl][s.name] = s.values[idx]; });
       });
 
-      // Client-side step filter removed — backend now returns correctly
-      // bucketed data via the shared fetch_interval_data().
       const rows = timestamps.map(ts => {
         const row: Record<string, any> = { 'Date & Time': fmtTs(parseUtcDate(ts)) };
         seriesList.forEach((s, idx) => {
@@ -466,80 +421,99 @@ export const ReportsScreen = React.memo(() => {
     }
   };
 
-  const handlePreview = async (isNormal: boolean) => {
-    if (isNormal) setNormalLoading(true); else setAvgLoading(true);
-    const result = await fetchData(isNormal);
+  const handlePreview = async () => {
+    setReportLoading(true);
+    const result = await fetchData();
     if (result) {
-      if (isNormal) { setNormalHeaders(result.headers); setNormalRows(result.rows); }
-      else { setAvgHeaders(result.headers); setAvgRows(result.rows); }
+      setPreviewHeaders(result.headers);
+      setPreviewRows(result.rows);
       showToast(`${result.rows.length} rows loaded.`);
     }
-    if (isNormal) setNormalLoading(false); else setAvgLoading(false);
+    setReportLoading(false);
   };
 
-  const handleExport = async (isNormal: boolean, format: 'pdf' | 'csv') => {
+  const handleExport = async (format: 'pdf' | 'csv' | 'excel') => {
     if (!selectedParamIds.length) return showToast('No parameters selected.', 'warn');
     const paramIds = selectedParamIds.join(',');
-    const fromD = isNormal ? normalFromDate : avgFromDate;
-    const fromT = isNormal ? normalFromTime : avgFromTime;
-    const toD = isNormal ? normalToDate : avgToDate;
-    const toT = isNormal ? normalToTime : avgToTime;
-    const startIso = `${fromD}T${fromT}:00Z`;
-    const endIso = `${toD}T${toT}:59Z`;
+    const startIso = `${fromDate}T${fromTime}:00Z`;
+    const endIso = `${toDate}T${toTime}:59Z`;
+    const isNormal = reportMode === 'normal';
     const resolvedSt = stations.find(s => String(s.id) === stationId || s.name === stationId);
     const stName = resolvedSt?.name || stationId || 'UltrON Station';
-    const stepMin = isNormal ? Number(normalInterval) : 0;
-    const avgType = isNormal ? 'raw' : avgInterval;
+    const stepMin = isNormal ? Number(interval) : 0;
+    const avgType = isNormal ? 'raw' : interval;
 
-    const numMinutes = (new Date(`${toD}T${toT}`).getTime() - new Date(`${fromD}T${fromT}`).getTime()) / 60000;
+    const numMinutes = (new Date(`${toDate}T${toTime}`).getTime() - new Date(`${fromDate}T${fromTime}`).getTime()) / 60000;
     const numDays = numMinutes / 1440;
     const estRows = isNormal
       ? Math.ceil(numMinutes / Math.max(stepMin, 1))
-      : Math.ceil(numMinutes / ({ avg_15min: 15, avg_30min: 30, avg_1hr: 60, avg_3hr: 180, avg_6hr: 360, avg_12hr: 720, avg_24hr: 1440 } as Record<string, number>)[avgInterval] || 60);
+      : Math.ceil(numMinutes / ({ avg_1min: 1, avg_5min: 5, avg_15min: 15, avg_30min: 30, avg_1hr: 60, avg_3hr: 180, avg_6hr: 360, avg_12hr: 720, avg_24hr: 1440 } as Record<string, number>)[interval] || 60);
     if (numDays > 15 || estRows > 21600) {
       if (!window.confirm(`This export covers ${numDays.toFixed(1)} days (~${estRows.toLocaleString()} rows). Continue?`)) return;
     }
 
-    if (isNormal) setNormalLoading(true); else setAvgLoading(true);
+    setReportLoading(true);
 
     try {
-      const endpoint = format === 'csv' ? '/reports/export-csv' : '/reports/pdf';
+      const endpoint = format === 'csv' ? '/reports/export-csv' : format === 'excel' ? '/reports/excel' : '/reports/pdf';
       const url = `${API_BASE}${endpoint}?parameter_ids=${paramIds}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${avgType}&step_minutes=${stepMin}&station_name=${encodeURIComponent(stName)}`;
       const res = await authFetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        let errDetail = 'Export failed.';
+        try {
+          const errJson = await res.json();
+          if (errJson && errJson.detail) errDetail = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
+        } catch (_) {}
+        showToast(errDetail, 'error');
+        return;
+      }
       const blob = await res.blob();
-      const ext = format === 'csv' ? 'csv' : 'pdf';
-      const name = `UltrON_Report_${fromD}_to_${toD}.${ext}`;
-      const mime = format === 'csv' ? 'text/csv' : 'application/pdf';
-      await saveAs(blob, name, mime);
-      showToast(`${format.toUpperCase()} saved — also available in the Reports folder next to the app.`);
+      const ext = format === 'csv' ? 'csv' : format === 'excel' ? 'xlsx' : 'pdf';
+      const mime = format === 'csv' ? 'text/csv' : format === 'excel' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf';
+      const fname = `UltrON_${isNormal ? 'Normal' : 'Average'}_Report_${fromDate.replace(/-/g, '')}_${toDate.replace(/-/g, '')}.${ext}`;
+      await saveAs(blob, fname, mime);
+      showToast(`${format.toUpperCase()} report exported successfully.`);
     } catch (e: any) {
-      showToast(`${format.toUpperCase()} export failed.`, 'error');
+      showToast(`${format.toUpperCase()} export failed: ${e?.message || e}`, 'error');
     } finally {
-      if (isNormal) setNormalLoading(false); else setAvgLoading(false);
+      setReportLoading(false);
     }
   };
 
   return (
     <div className="screen active" id="reportsScreen">
-      <div className="card" style={{ marginBottom: '2px' }}>
-        <div className="section-title">Report Filters</div>
-        <div className="filter-grid">
+      {/* ─── Merged Single Reports Card ─── */}
+      <div className="card" style={{ marginBottom: '18px' }}>
+        <div className="section-title">Reports & Data Export</div>
+        {reportLoading && <div className="loader" style={{ margin: '12px 0' }}></div>}
+        
+        <div className="filter-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '14px', alignItems: 'flex-start' }}>
+          {/* Station Name */}
           <div className="form-group">
             <label className="form-label">Station Name</label>
-            <select className="form-select" value={stationId} onChange={e => setStationId(e.target.value)}>
-              {allStations.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+            <select
+              className="form-select"
+              value={stationId}
+              onChange={e => setStationId(e.target.value)}
+            >
+              {stations.map(st => (
+                <option key={st.id} value={String(st.id)}>
+                  {st.name}
+                </option>
+              ))}
             </select>
           </div>
+
+          {/* Parameter Selection */}
           <div className="form-group">
             <label className="form-label">Parameter</label>
-            <div className="form-input" style={{ height: 'auto', minHeight: '38px', maxHeight: '180px', overflowY: 'auto', padding: '4px 8px', maxWidth: '220px' }}>
+            <div className="form-input" style={{ height: 'auto', minHeight: '38px', maxHeight: '150px', overflowY: 'auto', padding: '4px 8px' }}>
               {filteredParams.length === 0 ? (
                 <div style={{ color: T.textFaint, fontSize: '12px', padding: '4px 0' }}>No parameters</div>
               ) : (
                 <>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '3px 0', fontSize: '12px', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={selectedParamIds.length === filteredParams.length} onChange={e => setSelectedParamIds(e.target.checked ? filteredParams.map(p => String(p.id)) : [])} />
+                    <input type="checkbox" checked={selectedParamIds.length === filteredParams.length && filteredParams.length > 0} onChange={e => setSelectedParamIds(e.target.checked ? filteredParams.map(p => String(p.id)) : [])} />
                     <span style={{ fontWeight: '600' }}>Select All</span>
                   </label>
                   {filteredParams.map(p => (
@@ -552,46 +526,89 @@ export const ReportsScreen = React.memo(() => {
               )}
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button className="btn" style={{ padding: '7px 18px' }} onClick={() => handlePreview(true)} disabled={normalLoading}>Refresh Preview</button>
+
+          {/* Report Type Selector */}
+          <div className="form-group">
+            <label className="form-label">Report Type</label>
+            <select className="form-select" value={reportMode} onChange={e => handleModeChange(e.target.value as 'normal' | 'average')}>
+              <option value="normal">Normal (Raw Data)</option>
+              <option value="average">Average Data</option>
+            </select>
+          </div>
+
+          {/* Interval Selector */}
+          <div className="form-group">
+            <label className="form-label">Interval</label>
+            <select className="form-select" value={interval} onChange={e => setInterval(e.target.value)}>
+              {(reportMode === 'normal' ? NORMAL_INTERVALS : AVG_INTERVALS).map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date & Time Range Picker */}
+          <div className="form-group" style={{ gridColumn: 'span 2', minWidth: '320px' }}>
+            <label className="form-label">Date & Time Range</label>
+            <DateTimeRangePicker
+              fromDate={fromDate} setFromDate={setFromDate}
+              fromTime={fromTime} setFromTime={setFromTime}
+              toDate={toDate} setToDate={setToDate}
+              toTime={toTime} setToTime={setToTime}
+            />
           </div>
         </div>
+
+        {/* Toolbar Action Buttons */}
+        <div className="toolbar" style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button className="btn btn-primary" onClick={() => handleExport('pdf')} disabled={reportLoading}>Export PDF</button>
+          <button className="btn" onClick={() => handleExport('csv')} disabled={reportLoading}>Export CSV</button>
+
+          <button className="btn" onClick={handlePreview} disabled={reportLoading}>Refresh Preview</button>
+        </div>
+
+        {/* Preview Data Table */}
+        {(previewHeaders.length > 0 && previewRows.length > 0) && (
+          <div className="table-wrapper" style={{ marginTop: '16px' }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  {previewHeaders.map(h => <th key={h}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {previewRows.slice(0, 50).map((row, idx) => (
+                  <tr key={idx}>
+                    <td>{row['Date & Time']}</td>
+                    {previewHeaders.slice(1).map(h => {
+                      const val = row[h];
+                      return <td key={h} style={{ fontWeight: val !== 'NA' ? '600' : '400' }}>{val}</td>;
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
-
-      <ReportSection
-        title="Normal Reports"
-        intervalOptions={NORMAL_INTERVALS}
-        fromDate={normalFromDate} setFromDate={setNormalFromDate}
-        fromTime={normalFromTime} setFromTime={setNormalFromTime}
-        toDate={normalToDate} setToDate={setNormalToDate}
-        toTime={normalToTime} setToTime={setNormalToTime}
-        interval={normalInterval} setInterval={setNormalInterval}
-        onExportPDF={() => handleExport(true, 'pdf')}
-        onExportCSV={() => handleExport(true, 'csv')}
-        previewHeaders={normalHeaders}
-        previewRows={normalRows}
-        loading={normalLoading}
-      />
-
-      <ReportSection
-        title="Average Reports"
-        intervalOptions={AVG_INTERVALS}
-        fromDate={avgFromDate} setFromDate={setAvgFromDate}
-        fromTime={avgFromTime} setFromTime={setAvgFromTime}
-        toDate={avgToDate} setToDate={setAvgToDate}
-        toTime={avgToTime} setToTime={setAvgToTime}
-        interval={avgInterval} setInterval={setAvgInterval}
-        onExportPDF={() => handleExport(false, 'pdf')}
-        onExportCSV={() => handleExport(false, 'csv')}
-        previewHeaders={avgHeaders}
-        previewRows={avgRows}
-        loading={avgLoading}
-      />
 
       {/* ─── Trend Chart Section ──────────────────────────── */}
       <div className="card" style={{ marginTop: '18px' }}>
         <div className="section-title">Trend Chart</div>
         <div className="filter-grid">
+          <div className="form-group">
+            <label className="form-label">Station Name</label>
+            <select
+              className="form-select"
+              value={stationId}
+              onChange={e => setStationId(e.target.value)}
+            >
+              {stations.map(st => (
+                <option key={st.id} value={String(st.id)}>
+                  {st.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="form-group">
             <label className="form-label">Parameter</label>
             <select className="form-select" value={trendParamId} onChange={e => setTrendParamId(e.target.value)}>
@@ -612,21 +629,15 @@ export const ReportsScreen = React.memo(() => {
               <option value="avg_24hr">24 Hour Average</option>
             </select>
           </div>
-          <div className="form-group">
-            <label className="form-label">Start Date</label>
-            <input type="date" className="form-input" value={trendFromDate} onChange={e => setTrendFromDate(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Start Time</label>
-            <input type="time" className="form-input" value={trendFromTime} onChange={e => setTrendFromTime(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">End Date</label>
-            <input type="date" className="form-input" value={trendToDate} onChange={e => setTrendToDate(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">End Time</label>
-            <input type="time" className="form-input" value={trendToTime} onChange={e => setTrendToTime(e.target.value)} />
+          {/* Date & Time Range Picker */}
+          <div className="form-group" style={{ gridColumn: 'span 2', minWidth: '320px' }}>
+            <label className="form-label">Date & Time Range</label>
+            <DateTimeRangePicker
+              fromDate={trendFromDate} setFromDate={setTrendFromDate}
+              fromTime={trendFromTime} setFromTime={setTrendFromTime}
+              toDate={trendToDate} setToDate={setTrendToDate}
+              toTime={trendToTime} setToTime={setTrendToTime}
+            />
           </div>
         </div>
         <div className="toolbar" style={{ marginTop: '20px' }}>
@@ -634,7 +645,7 @@ export const ReportsScreen = React.memo(() => {
           <button className="btn" onClick={handleResetTrend} disabled={trendLoading}>Reset Filters</button>
           <button className="btn" onClick={downloadTrendPNG} disabled={trendLoading}>Export PNG</button>
           <button className="btn" onClick={downloadTrendPDF} disabled={trendLoading}>Export PDF</button>
-          <button className="btn" onClick={exportTrendCSV} disabled={trendLoading}>Export CSV</button>
+          <button className="btn" onClick={downloadTrendCSV} disabled={trendLoading}>Export CSV</button>
         </div>
         {trendLoading && <div className="loader" style={{ marginTop: '12px' }}></div>}
       </div>

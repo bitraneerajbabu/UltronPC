@@ -219,7 +219,7 @@ class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.71.3"
+    APP_VERSION: str = "1.0.71.4"
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -230,24 +230,14 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173"
     )
     # ─── Database ───────────────────────────
-    DB_TYPE: str = "sqlite"
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
-    DB_USER: str = "postgres"
-    DB_PASSWORD: str = ""
-    DB_NAME: str = "ultron"
 
     @property
     def DATABASE_URL(self) -> str:
-        if self.DB_TYPE == "postgresql":
-            return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         db_path = (APP_DIR / "ultron.db").as_posix()
         return f"sqlite+aiosqlite:///{db_path}"
 
     @property
     def SYNC_DATABASE_URL(self) -> str:
-        if self.DB_TYPE == "postgresql":
-            return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         db_path = (APP_DIR / "ultron.db").as_posix()
         return f"sqlite:///{db_path}"
 
@@ -303,14 +293,6 @@ class Settings(BaseSettings):
     POLLING_MAX_RETRIES: int = 3
     POLLING_RETRY_DELAY: int = 5
 
-    # ─── Averaging ────────────────────────────────────────────
-    AVG_1MIN: bool = True
-    AVG_5MIN: bool = True
-    AVG_15MIN: bool = True
-    AVG_1HR: bool = True
-    AVG_8HR: bool = True
-    AVG_DAILY: bool = True
-
     # ─── Alarm Engine ─────────────────────────────────────────
     ALARM_CHECK_INTERVAL: int = 30
 
@@ -332,13 +314,6 @@ class Settings(BaseSettings):
     PASSWORD_HISTORY_COUNT: int = 5
     SESSION_TIMEOUT_MINUTES: int = 0
     JWT_BLACKLIST_ENABLED: bool = True
-
-    EMAIL_ENABLED: bool = False
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    ALERT_RECIPIENTS: str = ""
 
     # ─── Pending Upload Flush (Phase 7) ─────────────────────────
     # Rate limit for backlog flush on unlock transition (records/sec).

@@ -408,3 +408,51 @@ class TestPreviewExportConsistency(unittest.IsolatedAsyncioTestCase):
         """MAX_EXPORT_ROWS is the cap for both preview and export."""
         self.assertEqual(MAX_EXPORT_ROWS, 100_000,
                          "Preview and export must share the same hard limit")
+
+    async def test_tzinfo_stripped_properly(self):
+        """Timezone-aware start/end datetimes are handled cleanly without error."""
+        from datetime import timezone
+        start_tz = self.start.replace(tzinfo=timezone.utc)
+        end_tz = self.end.replace(tzinfo=timezone.utc)
+        
+        param_result = MagicMock()
+        param_result.scalars.return_value.all.return_value = [self.param_mock]
+        raw_rows = [_make_hd(self.pid, self.start + timedelta(minutes=i)) for i in range(10)]
+        data_result = MagicMock()
+        data_result.scalars.return_value.all.return_value = raw_rows
+        self.db.execute = AsyncMock(side_effect=[param_result, data_result])
+
+        params, readings = await fetch_interval_data(
+            db=self.db,
+            parameter_ids=[self.pid],
+            start=start_tz,
+            end=end_tz,
+            interval_minutes=1,
+            avg_type="raw",
+        )
+        self.assertEqual(len(readings), 10)
+
+    async def test_multi_hour_interval_bucketing(self):
+        """3-hour (180 min) step mode buckets 12 hours of data into 4 points."""
+        param_result = MagicMock()
+        param_result.scalars.return_value.all.return_value = [self.param_mock]
+
+        raw_rows = [
+            _make_hd(self.pid, self.start + timedelta(minutes=i), val=float(i))
+            for i in range(720)  # 12 hours
+        ]
+        data_result = MagicMock()
+        data_result.scalars.return_value.all.return_value = raw_rows
+
+        self.db.execute = AsyncMock(side_effect=[param_result, data_result])
+
+        params, readings = await fetch_interval_data(
+            db=self.db,
+            parameter_ids=[self.pid],
+            start=self.start,
+            end=self.start + timedelta(hours=12),
+            interval_minutes=180,
+            avg_type="raw",
+        )
+        # 720 minutes / 180 min bucket = 4 points
+        self.assertEqual(len(readings), 4)

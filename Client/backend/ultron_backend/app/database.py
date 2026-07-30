@@ -14,26 +14,17 @@ from app.core.logger import get_logger
 log = get_logger("ultron.database")
 
 # ─── Connection Pool ──────────────────────────────────────────────────────────
-engine_kwargs: dict = {
-    "echo": False,  # Never log SQL statements (performance + security)
-}
-
-if settings.DB_TYPE == "postgresql":
-    engine_kwargs["pool_size"] = 10
-    engine_kwargs["max_overflow"] = 20
-
-engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
+engine = create_async_engine(settings.DATABASE_URL, echo=False)
 
 
-if settings.DB_TYPE == "sqlite":
-    @event.listens_for(engine.sync_engine, "connect")
-    def set_sqlite_pragma(dbapi_connection, connection_record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL;")
-        cursor.execute("PRAGMA synchronous=NORMAL;")
-        cursor.execute("PRAGMA busy_timeout=10000;")  # 10 seconds timeout
-        cursor.execute("PRAGMA foreign_keys=ON;")
-        cursor.close()
+@event.listens_for(engine.sync_engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL;")
+    cursor.execute("PRAGMA synchronous=NORMAL;")
+    cursor.execute("PRAGMA busy_timeout=10000;")
+    cursor.execute("PRAGMA foreign_keys=ON;")
+    cursor.close()
 
 
 

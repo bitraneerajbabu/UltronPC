@@ -1,15 +1,14 @@
 import React from 'react';
 
-/**
- * Sparkline component to render a lightweight SVG graph.
- * @param {Object} props
- * @param {Array<number>} props.data - Array of numerical values to display
- * @param {number} [props.width=120] - Width of the SVG canvas
- * @param {number} [props.height=30] - Height of the SVG canvas
- * @param {string} [props.color='#0f766e'] - Color of the stroke line
- * @param {number} [props.strokeWidth=1.5] - Thickness of the stroke line
- */
-export const Sparkline = React.memo(({ data = [], width = 120, height = 30, color = '#0f766e', strokeWidth = 1.5 }) => {
+interface SparklineProps {
+  data?: number[];
+  width?: number;
+  height?: number;
+  color?: string;
+  strokeWidth?: number;
+}
+
+export const Sparkline = React.memo(({ data = [], width = 120, height = 30, color = '#0f766e', strokeWidth = 1.5 }: SparklineProps) => {
   const clean = data.filter(v => v != null);
   if (!data || data.length === 0 || clean.length === 0) {
     return (

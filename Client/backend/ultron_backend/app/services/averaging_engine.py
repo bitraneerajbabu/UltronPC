@@ -20,6 +20,8 @@ log = get_logger("ultron.averaging")
 
 # ─── Wind Direction Detection ─────────────────────────────────────────────────
 def _is_wind_direction(param) -> bool:
+    if not param:
+        return False
     name_lower = (param.name or "").lower()
     tag_lower = (param.tag_name or "").lower()
     unit_lower = (param.unit or "").lower()
@@ -136,7 +138,8 @@ async def run_averaging_for_all_parameters():
     Called by the scheduler at the end of each averaging window.
     Computes averages for all parameters × all window types.
     """
-    now = datetime.utcnow()
+    from app.services.time_sync import get_utc_now
+    now = get_utc_now()
     log.info(f"Averaging run started at {now.isoformat()}")
 
     async with AsyncSessionLocal() as db:

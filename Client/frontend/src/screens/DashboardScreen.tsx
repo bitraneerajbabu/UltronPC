@@ -153,6 +153,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
     <div className={`sensor-card ${state.cls}`} onClick={onClick} style={{ 
       display: 'flex', flexDirection: 'column', padding: '20px', 
       borderRadius: '12px', 
+      maxWidth: '420px', width: '100%',
       borderLeft: `5px solid ${isSelected ? paramTheme.color : (isGood ? paramTheme.border : state.dot)}`,
       borderTop: '1px solid rgba(235, 225, 205, 0.4)',
       borderRight: '1px solid rgba(235, 225, 205, 0.4)',
@@ -168,7 +169,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
             {renderIcon()}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>{p.tag_name}</span>
+            <span style={{ fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>{p.name || p.tag_name}</span>
             {deviceName && deviceName.trim().toLowerCase() !== 'global gateway' && (
               <span style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>{deviceName}</span>
             )}
@@ -222,7 +223,10 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
 
 export const DashboardScreen = React.memo(() => {
   const { stations, devices, parameters, showToast, authFetch, API_BASE, parseUtcDate, amcExpiry, broadcasts } = useContext(AppContext);
-  const { kpis, liveData, fetchLatestTelemetryAndKpis } = useContext(LiveDataContext) || {};
+  const liveDataCtx = useContext(LiveDataContext) || {};
+  const liveData = liveDataCtx.liveData || {};
+  const kpis = liveDataCtx.kpis || {};
+  const fetchLatestTelemetryAndKpis = liveDataCtx.fetchLatestTelemetryAndKpis;
   const [selectedParam, setSelectedParam] = useState('');
   const [currentTime, setCurrentTime] = useState(formatCurrentTime());
   const [showAlarmsModal, setShowAlarmsModal] = useState(false);
@@ -668,7 +672,7 @@ export const DashboardScreen = React.memo(() => {
               </div>
             </div>
             <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-              {String(kpis.totalStations).padStart(2, '0')}
+              {String(kpis?.totalStations || 0).padStart(2, '0')}
             </div>
           </div>
 
@@ -680,7 +684,7 @@ export const DashboardScreen = React.memo(() => {
               </div>
             </div>
             <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-              {String(kpis.onlineDevices).padStart(2, '0')}
+              {String(kpis?.onlineDevices || 0).padStart(2, '0')}
             </div>
           </div>
 
@@ -692,7 +696,7 @@ export const DashboardScreen = React.memo(() => {
               </div>
             </div>
             <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-              {String(kpis.offlineDevices).padStart(2, '0')}
+              {String(kpis?.offlineDevices || 0).padStart(2, '0')}
             </div>
           </div>
 
@@ -704,8 +708,8 @@ export const DashboardScreen = React.memo(() => {
               </div>
             </div>
             <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {String(kpis.activeAlarms).padStart(2, '0')}
-              {kpis.activeAlarms > 0 && (
+              {String(kpis?.activeAlarms || 0).padStart(2, '0')}
+              {(kpis?.activeAlarms || 0) > 0 && (
                 <span style={{ width: '7px', height: '7px', background: '#ef4444', borderRadius: '50%', display: 'inline-block', boxShadow: '0 0 8px #ef4444' }}></span>
               )}
             </div>
@@ -761,7 +765,19 @@ export const DashboardScreen = React.memo(() => {
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
                 </button>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-                  <div className="section-title" style={{ margin: 0, fontSize: '20px' }}>Live Trends</div>
+                  <div>
+                    <div className="section-title" style={{ margin: 0, fontSize: '20px' }}>Live Trends</div>
+                    {(() => {
+                      const param = parameters.find(p => p.tag_name === selectedParam);
+                      const device = param ? devices.find(d => d.id == param.device_id) : null;
+                      const station = device ? stations.find(s => s.id == device.station_id) : null;
+                      return station ? (
+                        <div style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          {station.name}
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <select value={selectedParam} onChange={handleParamChange} style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${T.borderSoft}`, fontSize: '14px', fontWeight: '700', color: T.text, backgroundColor: '#f8fafc', outline: 'none', cursor: 'pointer' }}>
                       {parameters.map(p => <option key={p.id} value={p.tag_name}>{p.name || p.tag_name}</option>)}
@@ -792,7 +808,7 @@ export const DashboardScreen = React.memo(() => {
                 </div>
                 <div className="grid-4">
                   {(params as any[]).map(p => (
-                    <ParameterCard key={p.id} p={p} data={liveData[p.tag_name]} currentTime={currentTime} avgVal={avg15Mins[p.id]} history={dataPointsRef.current.datasets[p.tag_name] || []} deviceName="" isSelected={selectedParam === p.tag_name} onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }} />
+                    <ParameterCard key={p.id} p={p} data={liveData?.[p.tag_name]} currentTime={currentTime} avgVal={avg15Mins?.[p.id]} history={dataPointsRef.current?.datasets?.[p.tag_name] || []} deviceName="" isSelected={selectedParam === p.tag_name} onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }} />
                   ))}
                 </div>
               </div>
@@ -804,7 +820,7 @@ export const DashboardScreen = React.memo(() => {
                 </div>
                 <div className="grid-4">
                   {unassignedParameters.map(p => (
-                    <ParameterCard key={p.id} p={p} data={liveData[p.tag_name]} currentTime={currentTime} avgVal={avg15Mins[p.id]} history={dataPointsRef.current.datasets[p.tag_name] || []} deviceName="Unassigned" isSelected={selectedParam === p.tag_name} onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }} />
+                    <ParameterCard key={p.id} p={p} data={liveData?.[p.tag_name]} currentTime={currentTime} avgVal={avg15Mins?.[p.id]} history={dataPointsRef.current?.datasets?.[p.tag_name] || []} deviceName="Unassigned" isSelected={selectedParam === p.tag_name} onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }} />
                   ))}
                 </div>
               </div>

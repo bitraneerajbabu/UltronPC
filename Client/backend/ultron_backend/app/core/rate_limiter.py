@@ -59,11 +59,10 @@ class SlidingWindowCounter:
 
 
 class RateLimiter:
-    """In-memory rate limiter with per-IP and per-user buckets."""
+    """In-memory rate limiter with per-IP buckets."""
 
     def __init__(self):
         self._ip_buckets: dict[str, SlidingWindowCounter] = {}
-        self._user_buckets: dict[str, SlidingWindowCounter] = {}
         self._lock = asyncio.Lock()
 
     def _get_ip_key(self, request: Request) -> str:
@@ -88,22 +87,24 @@ class RateLimiter:
     async def check_user(
         self,
         username: str,
-        max_requests: int = 60,
+        max_requests: int = 20,
         window_seconds: float = 60.0,
     ) -> bool:
         key = f"user:{username}"
         async with self._lock:
-            if key not in self._user_buckets:
-                self._user_buckets[key] = SlidingWindowCounter(max_requests, window_seconds)
-            return self._user_buckets[key].allow()
+            if key not in self._ip_buckets:
+                self._ip_buckets[key] = SlidingWindowCounter(max_requests, window_seconds)
+            return self._ip_buckets[key].allow()
+
 
     def cleanup(self):
         """Periodic cleanup of stale buckets."""
         now = time.monotonic()
-        for store in (self._ip_buckets, self._user_buckets):
-            stale = [k for k, v in store.items() if v.timestamps and (now - v.timestamps[-1]) > v.window_seconds * 2]
-            for k in stale:
-                del store[k]
+        for bucket in list(self._ip_buckets.values()):
+            if bucket.timestamps and (now - bucket.timestamps[-1]) > bucket.window_seconds * 2:
+                stale = [k for k, v in self._ip_buckets.items() if v is bucket]
+                for k in stale:
+                    del self._ip_buckets[k]
 
 
 # Singleton

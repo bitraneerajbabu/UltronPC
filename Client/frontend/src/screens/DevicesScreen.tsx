@@ -205,11 +205,11 @@ export const DevicesScreen = React.memo(() => {
         const devExists = devices.find(d => d.id == targetDeviceId);
         if (devExists) {
           const deviceSaved = await editDevice(targetDeviceId, deviceUpdate);
-          if (!deviceSaved) return;
+          if (!deviceSaved) { showToast('Failed to save device config.', 'error'); return; }
         }
       } else {
         const newDevice = await addDevice(deviceUpdate);
-        if (!newDevice) return;
+        if (!newDevice) { showToast('Failed to save device config.', 'error'); return; }
         targetDeviceId = newDevice.id;
       }
 
@@ -243,6 +243,7 @@ export const DevicesScreen = React.memo(() => {
       });
       const success = editingIdx !== null ? await editParameter((form as Record<string, unknown>).id as number, payload) : await addParameter(payload);
       if (success) closeModal();
+      else showToast('Failed to save parameter config.', 'error');
     } catch (err) {
       console.error('Failed to save parameter config:', err);
       showToast('Communication error: Failed to save configuration.', 'error');
@@ -345,10 +346,9 @@ export const DevicesScreen = React.memo(() => {
                       </td>
                       <td style={{ padding: '12px 14px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                          <button onClick={() => { if (testingId) return; setTestingId(p.id); showToast('Testing connection...', 'info'); testParameterConnection(p.id).finally(() => setTestingId(null)); }} disabled={testingId === p.id} title="Test" style={{ background: 'none', border: 'none', color: '#10b981', cursor: testingId === p.id ? 'not-allowed' : 'pointer', padding: '4px', opacity: testingId === p.id ? 0.4 : 1 }}><Bolt /></button>
-                          <button onClick={() => openEdit(i)} title="Edit" style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '4px' }}><Edit /></button>
-                          <button onClick={() => deleteParameter(p.id)} title="Delete param" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}><Trash /></button>
-                          {dev && <button onClick={() => { if (window.confirm('Delete device "' + dev.name + '" and all its parameters?')) deleteDevice(dev.id); }} title="Delete device" style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', padding: '4px', opacity: 0.7 }}><Trash /></button>}
+                          <button onClick={() => { if (testingId) return; setTestingId(p.id); showToast('Testing connection...', 'info'); testParameterConnection(p.id).finally(() => setTestingId(null)); }} disabled={testingId === p.id} title="Test parameter connection" style={{ background: 'none', border: 'none', color: '#10b981', cursor: testingId === p.id ? 'not-allowed' : 'pointer', padding: '4px', opacity: testingId === p.id ? 0.4 : 1 }}><Bolt /></button>
+                          <button onClick={() => openEdit(i)} title="Edit parameter" style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '4px' }}><Edit /></button>
+                          <button onClick={() => deleteParameter(p.id)} title="Delete parameter" style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}><Trash /></button>
                         </div>
                       </td>
                     </tr>
@@ -402,7 +402,7 @@ export const DevicesScreen = React.memo(() => {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                       <div>
                         <label style={s()}>Channel ID</label>
-                        <input type="number" name="display_order" value={form.display_order} onChange={handleChange} style={ipt} />
+                        <input type="text" inputMode="numeric" name="display_order" value={form.display_order} onChange={handleChange} style={ipt} />
                       </div>
                       <div>
                         <label style={s()}>Status</label>
@@ -596,7 +596,7 @@ export const DevicesScreen = React.memo(() => {
                         <div style={{ display: 'grid', gridTemplateColumns: CUSTOM_PROTOCOLS.includes(form.input_type) ? '1fr 1fr' : '1fr 1fr', gap: '12px' }}>
                           <div>
                             <label style={s()}>{CUSTOM_PROTOCOLS.includes(form.input_type) ? 'Field Index' : 'Start Address'}</label>
-                            <input type="number" name="register_address" value={form.register_address} onChange={handleChange} style={ipt} />
+                            <input type="text" inputMode="numeric" name="register_address" value={form.register_address} onChange={handleChange} style={ipt} />
                             {CUSTOM_PROTOCOLS.includes(form.input_type) && (
                               <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>ASCII field index (0-based space-delimited position)</div>
                             )}
@@ -604,7 +604,7 @@ export const DevicesScreen = React.memo(() => {
                           {!CUSTOM_PROTOCOLS.includes(form.input_type) ? (
                             <div>
                               <label style={s()}>Register Count</label>
-                              <input type="number" name="register_count" value={form.register_count} onChange={handleChange} style={ipt} />
+                              <input type="text" inputMode="numeric" name="register_count" value={form.register_count} onChange={handleChange} style={ipt} />
                             </div>
                           ) : (
                             <div>
@@ -632,11 +632,11 @@ export const DevicesScreen = React.memo(() => {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div>
                         <label style={s()}>Scale / Gain</label>
-                        <input type="number" step="0.001" name="scale_factor" value={form.scale_factor} onChange={handleChange} style={ipt} />
+                        <input type="text" inputMode="decimal" name="scale_factor" value={form.scale_factor} onChange={handleChange} style={ipt} />
                       </div>
                       <div>
                         <label style={s()}>Offset</label>
-                        <input type="number" step="0.001" name="offset" value={form.offset} onChange={handleChange} style={ipt} />
+                        <input type="text" inputMode="decimal" name="offset" value={form.offset} onChange={handleChange} style={ipt} />
                       </div>
                     </div>
 
@@ -678,12 +678,14 @@ export const DevicesScreen = React.memo(() => {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                       <div>
                         <label style={s()}>Station Name</label>
-                        <select name="station_name" value={form.station_name} onChange={handleChange} style={ipt}>
-                          <option value="">-- Select Station --</option>
-                          {stations.map(s => (
-                            <option key={s.id} value={s.name}>{s.name}</option>
-                          ))}
-                        </select>
+                        <input
+                          type="text"
+                          name="station_name"
+                          value={form.station_name || ''}
+                          onChange={handleChange}
+                          style={ipt}
+                          placeholder="e.g. AAQMS 1"
+                        />
                       </div>
                       <div>
                         <label style={s()}>Parameter Name</label>

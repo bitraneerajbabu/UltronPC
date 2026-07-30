@@ -28,13 +28,13 @@ def _reports_dir() -> Path:
 
 @router.get("/chart-data")
 async def get_chart_data(
+    db: AsyncSession = Depends(get_db),
     parameter_ids: str = Query(..., description="Comma-separated parameter IDs"),
-    start: Optional[datetime] = None,
-    end: Optional[datetime] = None,
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
     avg_type: AverageType = AverageType.raw,
     step_minutes: int = Query(0, description="Step interval in minutes (for raw mode, Normal Reports)"),
     limit: int = Query(50000, le=200000),
-    db: AsyncSession = Depends(get_db),
 ):
     """
     Returns time-series data for Chart.js rendering.
@@ -54,15 +54,15 @@ async def get_chart_data(
     if len(ids) > 200:
         raise HTTPException(status_code=400, detail="Maximum 200 parameters allowed per request")
 
-    if not end:
+    if not start or not isinstance(start, datetime):
+        start = datetime.utcnow() - timedelta(hours=24)
+    elif start.tzinfo is not None:
+        start = start.replace(tzinfo=None)
+
+    if not end or not isinstance(end, datetime):
         end = datetime.utcnow()
     elif end.tzinfo is not None:
         end = end.replace(tzinfo=None)
-
-    if not start:
-        start = end - timedelta(hours=24)
-    elif start.tzinfo is not None:
-        start = start.replace(tzinfo=None)
 
     # ── Use the shared data-fetching function ─────────────────────────────
     interval = step_minutes if avg_type == AverageType.raw else 0
@@ -110,18 +110,18 @@ async def get_chart_data(
 @router.get("/statistics")
 async def get_statistics(
     parameter_id: int,
-    start: Optional[datetime] = None,
-    end: Optional[datetime] = None,
-    avg_type: AverageType = AverageType.raw,
     db: AsyncSession = Depends(get_db),
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
+    avg_type: AverageType = AverageType.raw,
 ):
     """Min / Max / Avg / StdDev / Count for a parameter in a time range."""
-    if not end:
+    if not end or not isinstance(end, datetime):
         end = datetime.utcnow()
     elif end.tzinfo is not None:
         end = end.replace(tzinfo=None)
 
-    if not start:
+    if not start or not isinstance(start, datetime):
         start = end - timedelta(hours=24)
     elif start.tzinfo is not None:
         start = start.replace(tzinfo=None)
@@ -165,11 +165,11 @@ async def get_statistics(
 
 @router.get("/export-csv")
 async def export_trend_csv(
-    parameter_ids: str = Query(..., description="Comma-separated parameter IDs"),
-    start: Optional[datetime] = None,
-    end: Optional[datetime] = None,
-    avg_type: AverageType = AverageType.raw,
     db: AsyncSession = Depends(get_db),
+    parameter_ids: str = Query(..., description="Comma-separated parameter IDs"),
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
+    avg_type: AverageType = AverageType.raw,
 ):
     """Export trend data as CSV saved to the Reports directory.
 

@@ -248,7 +248,8 @@ async def _poll_device(device: Device, parameters: list[Parameter]):
                 r["value"] = round(float(val), 2)
 
     # ─── Persist + Alarm Check ────────────────────────────────────────────────
-    now = datetime.utcnow()
+    from app.services.time_sync import get_utc_now
+    now = get_utc_now()
     param_by_id = {p.id: p for p in parameters}
     live_points = []
 
@@ -545,7 +546,8 @@ async def check_heartbeats():
     from app.models.station import Station, StationStatus
     from sqlalchemy import update
     
-    now = datetime.utcnow()
+    from app.services.time_sync import get_utc_now
+    now = get_utc_now()
     cutoff = now - timedelta(seconds=90)
     
     async with AsyncSessionLocal() as db:

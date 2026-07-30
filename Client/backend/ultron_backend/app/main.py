@@ -44,18 +44,18 @@ log = get_logger("ultron.main")
 # ─── Seed Default Admin ───────────────────────────────────────────────────────
 async def _seed_admin():
     """
-    Create the default admin account on first startup if no users exist.
+    Create or unlock the default admin account on startup.
     Credentials are taken from settings: ADMIN_USERNAME / ADMIN_PASSWORD.
     """
     from app.database import AsyncSessionLocal
     from app.models.user import User
-    from app.core.security import hash_password
-    from sqlalchemy import select, func
+    from app.core.security import hash_password, verify_password
+    from sqlalchemy import select
 
     async with AsyncSessionLocal() as db:
-        count_res = await db.execute(select(func.count(User.id)))
-        count = count_res.scalar() or 0
-        if count == 0:
+        res = await db.execute(select(User).where(User.username == settings.ADMIN_USERNAME))
+        admin = res.scalar_one_or_none()
+        if not admin:
             admin = User(
                 username=settings.ADMIN_USERNAME,
                 hashed_password=hash_password(settings.ADMIN_PASSWORD),
@@ -66,25 +66,28 @@ async def _seed_admin():
             )
             db.add(admin)
             await db.commit()
-            log.info(
-                f"Default admin user seeded: username='{settings.ADMIN_USERNAME}' "
-                "Change the default password in production."
-            )
+            log.info(f"Default admin user seeded: username='{settings.ADMIN_USERNAME}'")
+        else:
+            changed = False
+            if not admin.is_active:
+                admin.is_active = True
+                changed = True
+            if admin.failed_login_attempts != 0:
+                admin.failed_login_attempts = 0
+                changed = True
+            if admin.locked_until is not None:
+                admin.locked_until = None
+                changed = True
+            if not verify_password(settings.ADMIN_PASSWORD, admin.hashed_password):
+                admin.hashed_password = hash_password(settings.ADMIN_PASSWORD)
+                changed = True
+            if changed:
+                await db.commit()
+                log.info(f"Admin account '{settings.ADMIN_USERNAME}' state and password synced.")
 
 
 async def _sync_admin_password():
-    from app.database import AsyncSessionLocal
-    from app.models.user import User
-    from app.core.security import verify_password, hash_password
-    from sqlalchemy import select
-
-    async with AsyncSessionLocal() as db:
-        res = await db.execute(select(User).where(User.username == settings.ADMIN_USERNAME))
-        admin = res.scalar_one_or_none()
-        if admin and not verify_password(settings.ADMIN_PASSWORD, admin.hashed_password):
-            admin.hashed_password = hash_password(settings.ADMIN_PASSWORD)
-            await db.commit()
-            log.info(f"Admin password synced from .env for user '{settings.ADMIN_USERNAME}'")
+    await _seed_admin()
 
 
 
@@ -174,6 +177,10 @@ async def lifespan(app: FastAPI):
     from app.services.alarm_engine import alarm_engine
     async with AsyncSessionLocal() as restore_db:
         await alarm_engine.load_active_from_db(restore_db)
+
+    # 2.75 Start Online Time Sync service
+    from app.services.time_sync import start_time_sync_loop
+    asyncio.create_task(start_time_sync_loop(), name="time-sync-loop")
 
     # 3. Start polling engine
     await polling_engine.start_polling()
@@ -393,9 +400,8 @@ async def websocket_live(
         await websocket.close(code=4001, reason="Invalid token")
         return
 
-    sids = [int(x) for x in station_ids.split(",") if x.strip().isdigit()] if station_ids else []
-    await ws_manager.connect(websocket, sids)
-    log.info(f"WS client connected (user={username}). Subscribed stations: {sids or 'all'}")
+    await ws_manager.connect(websocket)
+    log.info(f"WS client connected (user={username}).")
 
     try:
         # Send welcome message

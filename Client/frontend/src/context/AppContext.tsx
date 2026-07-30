@@ -1,7 +1,8 @@
 import React, { createContext, useState, useEffect, useCallback, useRef } from 'react';
 
 export const AppContext = createContext(null);
-export { LiveDataContext } from './LiveDataContext';
+import { LiveDataContext } from './LiveDataContext';
+export { LiveDataContext };
 
 // When running via `npm run dev` (Vite dev server on :5173) or production, proxy/server handles routing.
 // Using relative/same-origin URLs makes it dynamically compatible with any local port (8000, 8765, etc.).
@@ -342,7 +343,7 @@ export const AppProvider = ({ children }) => {
           telemetryData.forEach(p => {
             const param = activeParams.find(paramObj => paramObj.id == p.parameter_id);
             if (param) {
-              const prevPt = prev[param.tag_name];
+              const prevPt = (prev || {})[param.tag_name];
               const isOnline = p.quality === 'good' || p.quality === 'out_of_range' || p.quality === 'uncertain' || p.quality === 'U' || p.quality === 'O' || p.quality === 'N';
               newLiveData[param.tag_name] = {
                 value: p.value,
@@ -404,7 +405,7 @@ export const AppProvider = ({ children }) => {
       if (stationsRes.ok) {
         const stationsData = await stationsRes.json();
         setStations(stationsData || []);
-      } else {
+      } else if (stationsRes.status !== 401) {
         const errText = await extractApiError(stationsRes, 'Failed to load stations.');
         showToast(`Stations: ${errText}`, 'error');
       }
@@ -412,7 +413,7 @@ export const AppProvider = ({ children }) => {
       if (devicesRes.ok) {
         const devicesData = await devicesRes.json();
         setDevices(devicesData || []);
-      } else {
+      } else if (devicesRes.status !== 401) {
         const errText = await extractApiError(devicesRes, 'Failed to load devices.');
         showToast(`Devices: ${errText}`, 'error');
       }
@@ -422,7 +423,7 @@ export const AppProvider = ({ children }) => {
       if (parametersRes.ok) {
         parametersData = await parametersRes.json();
         setParameters(parametersData || []);
-      } else {
+      } else if (parametersRes.status !== 401) {
         const errText = await extractApiError(parametersRes, 'Failed to load parameters.');
         showToast(`Parameters: ${errText}`, 'error');
       }
@@ -439,7 +440,7 @@ export const AppProvider = ({ children }) => {
           status: l.level === 'WARNING' ? 'WARN' : l.level === 'INFO' ? 'INFO' : l.level === 'ERROR' ? 'ERROR' : 'SUCCESS'
         }));
         setLogs(formattedLogs);
-      } else {
+      } else if (logsRes.status !== 401) {
         const errText = await extractApiError(logsRes, 'Failed to load logs.');
         showToast(`Logs: ${errText}`, 'error');
       }
@@ -547,7 +548,7 @@ export const AppProvider = ({ children }) => {
             const next = { ...prev };
           points.forEach(pt => {
               const isOnline = pt.quality === 'good' || pt.quality === 'out_of_range' || pt.quality === 'uncertain' || pt.quality === 'U' || pt.quality === 'O' || pt.quality === 'N';
-              const prevPoint = prev[pt.tag_name];
+              const prevPoint = (prev || {})[pt.tag_name];
               let ts = formatTimestamp(parseUtcDate(pt.timestamp));
               if (!isOnline && prevPoint && prevPoint.timestamp) {
                 ts = prevPoint.timestamp;
@@ -924,7 +925,12 @@ export const AppProvider = ({ children }) => {
       broadcasts, amcExpiry,
       isLicensed, setIsLicensed, lockStatus, setLockStatus, lockReason, setLockReason
     }}>
-      {children}
+      <LiveDataContext.Provider value={{
+        liveData, kpis,
+        fetchLatestTelemetryAndKpis,
+      }}>
+        {children}
+      </LiveDataContext.Provider>
     </AppContext.Provider>
   );
 };

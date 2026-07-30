@@ -32,6 +32,5 @@
   "tests/test_polling_engine.py::TestPerformance::test_process_readings_latency": true,
   "tests/test_polling_engine.py::TestPerformance::test_fast_cycle_latency": true,
   "tests/test_polling_engine.py::TestEdgeCases::test_no_devices_start_polling": true,
-  "tests/test_led_board.py::test_build_led_response_empty_db": true,
   "test_hash.py": true
 }

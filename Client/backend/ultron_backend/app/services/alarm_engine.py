@@ -14,6 +14,7 @@ from sqlalchemy import select, and_
 from app.models.telemetry import Alarm, AlarmState, SystemLog
 from app.models.parameter import Parameter
 from app.websocket_manager import ws_manager
+from app.services.time_sync import get_utc_now
 from app.core.logger import get_logger, get_alarm_logger
 
 log = get_logger("ultron.alarm_engine")
@@ -80,7 +81,7 @@ class AlarmEngine:
                     threshold_value=threshold,
                     actual_value=value,
                     state=AlarmState.active,
-                    triggered_at=datetime.utcnow(),
+                    triggered_at=get_utc_now(),
                 )
                 db.add(alarm)
                 await db.flush()
@@ -99,7 +100,7 @@ class AlarmEngine:
                     "value": value,
                     "threshold": threshold,
                     "threshold_type": thresh_type,
-                    "ts": datetime.utcnow().isoformat(),
+                    "ts": get_utc_now().isoformat(),
                 })
 
             elif cleared and existing_id:
@@ -110,7 +111,7 @@ class AlarmEngine:
                 alarm = result.scalar_one_or_none()
                 if alarm and alarm.state != AlarmState.cleared:
                     alarm.state = AlarmState.cleared
-                    alarm.cleared_at = datetime.utcnow()
+                    alarm.cleared_at = get_utc_now()
                     async with cls._lock:
                         cls._active.pop(key, None)
                     log.info(f"Alarm cleared: {parameter.tag_name} ({thresh_type})")
@@ -124,6 +125,7 @@ class AlarmEngine:
         notes: Optional[str] = None,
     ) -> int:
         """Acknowledge a list of alarms. Returns count updated."""
+        from app.services.time_sync import get_utc_now
         count = 0
         for alarm_id in alarm_ids:
             result = await db.execute(
@@ -132,7 +134,7 @@ class AlarmEngine:
             alarm = result.scalar_one_or_none()
             if alarm:
                 alarm.state = AlarmState.acknowledged
-                alarm.acknowledged_at = datetime.utcnow()
+                alarm.acknowledged_at = get_utc_now()
                 alarm.acknowledged_by = acknowledged_by
                 alarm.notes = notes
                 count += 1

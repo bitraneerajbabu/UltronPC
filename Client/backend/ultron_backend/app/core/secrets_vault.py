@@ -46,7 +46,7 @@ class SecretsVault:
         "SMTP_USER": "SMTP username",
         "SMTP_PASSWORD": "SMTP password",
         "ALERT_RECIPIENTS": "Alert email recipients",
-        "DB_PASSWORD": "Database password",
+        # "DB_PASSWORD": no longer needed — SQLite only,
     }
 
     def __new__(cls):

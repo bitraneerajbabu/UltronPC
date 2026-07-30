@@ -76,6 +76,7 @@ export const SettingsScreen = React.memo(() => {
   const [customUrl, setCustomUrl] = useState('');
   const [licenseStatus, setLicenseStatus] = useState(null);
   const [newLicenseKey, setNewLicenseKey] = useState('');
+  const [newStationId, setNewStationId] = useState('');
   const [activating, setActivating] = useState(false);
   const [activationError, setActivationError] = useState('');
   const [broadcastEnabled, setBroadcastEnabled] = useState(() => localStorage.getItem('ultron_broadcast_enabled') !== 'false');
@@ -361,8 +362,6 @@ export const SettingsScreen = React.memo(() => {
   };
 
   const labelS = { fontSize: '11px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: '4px' };
-  const sectionTitleS = { fontSize: '13px', fontWeight: '700', color: T.primary, marginBottom: '10px', gridColumn: '1 / -1', borderBottom: `1.5px solid ${T.primaryBorder}`, paddingBottom: '6px' };
-
   const handleLicenseReverify = async () => {
     if (!newLicenseKey.trim()) { showToast('Enter a license key.', 'warn'); return; }
     setActivating(true); setActivationError('');
@@ -370,12 +369,13 @@ export const SettingsScreen = React.memo(() => {
       const res = await authFetch(`${API_BASE}/license/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_key: newLicenseKey.trim() }),
+        body: JSON.stringify({ api_key: newLicenseKey.trim(), station_id: newStationId.trim() }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
         showToast('License updated!', 'success');
         setNewLicenseKey('');
+        setNewStationId('');
         const r = await authFetch(`${API_BASE}/license/status`);
         if (r.ok) setLicenseStatus(await r.json());
       } else {
@@ -394,6 +394,10 @@ export const SettingsScreen = React.memo(() => {
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
             <span style={{ color: T.textMuted }}>Status</span>
             <span style={{ color: s.licensed ? '#22c55e' : '#ef4444', fontWeight: '700' }}>{s.licensed ? 'ACTIVE' : 'INACTIVE'}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+            <span style={{ color: T.textMuted }}>Station ID</span>
+            <span style={{ color: T.text, fontFamily: 'monospace' }}>{s.station_id || '—'}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
             <span style={{ color: T.textMuted }}>License Key</span>
@@ -423,11 +427,22 @@ export const SettingsScreen = React.memo(() => {
       </div>
       <div style={{ ...GLASS_CARD, padding: '20px' }}>
         <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>Update License Key</div>
-        <input
-          type="text" placeholder="Enter new license key"
-          value={newLicenseKey} onChange={e => setNewLicenseKey(e.target.value)}
-          style={{ ...INP, width: '100%', boxSizing: 'border-box', marginBottom: '10px' }}
-        />
+        <div style={{ marginBottom: '12px' }}>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: T.textMuted, marginBottom: '4px' }}>Station ID (Gateway ID)</label>
+          <input
+            type="text" placeholder={s.station_id || "Enter Station ID (e.g. ST-001)"}
+            value={newStationId} onChange={e => setNewStationId(e.target.value)}
+            style={{ ...INP, width: '100%', boxSizing: 'border-box' }}
+          />
+        </div>
+        <div style={{ marginBottom: '14px' }}>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: T.textMuted, marginBottom: '4px' }}>License Key (API Key)</label>
+          <input
+            type="text" placeholder="Enter new license key"
+            value={newLicenseKey} onChange={e => setNewLicenseKey(e.target.value)}
+            style={{ ...INP, width: '100%', boxSizing: 'border-box' }}
+          />
+        </div>
         {activationError && <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '8px' }}>{activationError}</div>}
         <button className="btn btn-primary" onClick={handleLicenseReverify} disabled={activating} style={{ padding: '8px 20px' }}>
           {activating ? 'Verifying…' : 'Verify & Save'}
@@ -441,6 +456,16 @@ export const SettingsScreen = React.memo(() => {
     { key: 'license', label: 'License', icon: '#eab308' },
     { key: 'users', label: 'User Management', icon: '#dc2626' },
   ];
+
+  const sectionTitleS: React.CSSProperties = {
+    gridColumn: 'span 3',
+    fontSize: '14px',
+    fontWeight: '700',
+    color: T.text,
+    borderBottom: `1px solid ${T.primaryBorder}`,
+    paddingBottom: '6px',
+    marginTop: '8px',
+  };
 
   const renderSystemTab = () => (
     <>

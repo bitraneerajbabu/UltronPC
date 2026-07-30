@@ -15,7 +15,8 @@ export const AlarmsInspectorModal = ({ isOpen, onClose }) => {
     currentUser,
     showToast
   } = useContext(AppContext);
-  const { liveData } = useContext(LiveDataContext) || {};
+  const liveDataCtx = useContext(LiveDataContext) || {};
+  const liveData = liveDataCtx.liveData || {};
 
   const [activeTab, setActiveTab] = useState('threshold');
   const [activeAlarmsList, setActiveAlarmsList] = useState([]);
@@ -52,7 +53,7 @@ export const AlarmsInspectorModal = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  const offlineParams = parameters.filter(p => liveData[p.tag_name]?.status !== 'online');
+  const offlineParams = parameters.filter(p => (liveData[p.tag_name] || {}).status !== 'online');
 
   const handleAcknowledge = async (e) => {
     e.preventDefault();

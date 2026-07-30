@@ -2,10 +2,10 @@
 
 import asyncio
 import re
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
+from typing import List, Optional
 from app.database import get_db
 from app.models.device import Device, DeviceProtocol
 from app.schemas.device import DeviceCreate, DeviceUpdate, DeviceOut
@@ -32,10 +32,10 @@ def generate_tag_name(name: str) -> str:
 
 
 @router.get("/", response_model=List[DeviceOut])
-async def list_devices(station_id: int = None, db: AsyncSession = Depends(get_db)):
+async def list_devices(db: AsyncSession = Depends(get_db), station_id: Optional[int] = Query(None)):
     from sqlalchemy.orm import selectinload
     query = select(Device).options(selectinload(Device.parameters)).order_by(Device.id)
-    if station_id:
+    if station_id is not None and isinstance(station_id, int):
         query = query.where(Device.station_id == station_id)
     result = await db.execute(query)
     return result.scalars().all()

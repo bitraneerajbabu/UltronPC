@@ -89,6 +89,12 @@ async def fetch_interval_data(
                                    each providing .parameter_id, .timestamp,
                                    .value, .quality.
     """
+    # ── 0. Ensure start and end are naive UTC datetimes for DB comparison ─
+    if start and start.tzinfo is not None:
+        start = start.replace(tzinfo=None)
+    if end and end.tzinfo is not None:
+        end = end.replace(tzinfo=None)
+
     # ── 1. Fetch parameter metadata ────────────────────────────────────────
     param_result = await db.execute(
         select(Parameter).where(Parameter.id.in_(parameter_ids))
@@ -165,6 +171,13 @@ async def _bucket_historical_data(
         Normal Reports / step mode).  If False, keep the **last** reading
         (used by some preview paths — kept for flexibility).
     """
+    from datetime import timezone
+
+    if start and start.tzinfo is not None:
+        start = start.replace(tzinfo=None)
+    if end and end.tzinfo is not None:
+        end = end.replace(tzinfo=None)
+
     query = select(HistoricalData).where(
         and_(
             HistoricalData.parameter_id.in_(parameter_ids),
@@ -180,9 +193,10 @@ async def _bucket_historical_data(
     # Bucket: group by (parameter_id, bucket_start_timestamp)
     bucket_map: dict[tuple[int, datetime], list] = {}
     for r in all_rows:
-        bucket_ts = r.timestamp.replace(second=0, microsecond=0)
-        bucket_key = bucket_ts.minute // interval_minutes
-        bucket_start = bucket_ts.replace(minute=bucket_key * interval_minutes)
+        ts_clean = r.timestamp.replace(second=0, microsecond=0)
+        ts_epoch_min = int(ts_clean.replace(tzinfo=timezone.utc).timestamp()) // 60
+        bucket_idx = (ts_epoch_min // interval_minutes) * interval_minutes
+        bucket_start = datetime.fromtimestamp(bucket_idx * 60, tz=timezone.utc).replace(tzinfo=None)
         key = (r.parameter_id, bucket_start)
         bucket_map.setdefault(key, []).append(r)
 

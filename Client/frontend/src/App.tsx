@@ -161,7 +161,8 @@ function App() {
     lockReason,
     prefetchScreen,
   } = useContext(AppContext);
-  const { fetchLatestTelemetryAndKpis } = useContext(LiveDataContext) || {};
+  const liveDataCtx = useContext(LiveDataContext) || {};
+  const fetchLatestTelemetryAndKpis = liveDataCtx.fetchLatestTelemetryAndKpis;
 
   const [refreshing, setRefreshing] = useState(false);
   const [localVersion, setLocalVersion] = useState('');

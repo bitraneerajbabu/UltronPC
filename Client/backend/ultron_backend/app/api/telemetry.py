@@ -28,12 +28,12 @@ _DASHBOARD_CACHE_TTL = 5.0
 
 @router.get("/", response_model=List[TelemetryPoint])
 async def query_telemetry(
+    db: AsyncSession = Depends(get_db),
     parameter_ids: Optional[str] = Query(None, description="Comma-separated parameter IDs"),
-    start: Optional[datetime] = None,
-    end: Optional[datetime] = None,
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
     avg_type: AverageType = AverageType.raw,
     limit: int = Query(1000, le=50000),
-    db: AsyncSession = Depends(get_db),
 ):
     model = HistoricalData if avg_type == AverageType.raw else Averages
     query = select(model)
@@ -41,30 +41,33 @@ async def query_telemetry(
     if avg_type != AverageType.raw:
         query = query.where(model.avg_type == avg_type)
 
-    if parameter_ids:
+    if parameter_ids and isinstance(parameter_ids, str):
         ids = [int(x) for x in parameter_ids.split(",") if x.strip().isdigit()]
-        query = query.where(model.parameter_id.in_(ids))
+        if ids:
+            query = query.where(model.parameter_id.in_(ids))
 
-    if start:
+    if start and isinstance(start, datetime):
         query = query.where(model.timestamp >= start)
-    if end:
+    if end and isinstance(end, datetime):
         query = query.where(model.timestamp <= end)
 
-    query = query.order_by(model.timestamp.desc()).limit(limit)
+    lim_val = limit if isinstance(limit, int) else 1000
+    query = query.order_by(model.timestamp.desc()).limit(lim_val)
     result = await db.execute(query)
     return result.scalars().all()
 
 
 @router.get("/latest", response_model=List[TelemetryPoint])
 async def latest_values(
-    parameter_ids: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
+    parameter_ids: Optional[str] = Query(None),
 ):
     """Return the most recent raw reading per parameter."""
     query = select(LiveData)
-    if parameter_ids:
+    if parameter_ids is not None and isinstance(parameter_ids, str):
         ids = [int(x) for x in parameter_ids.split(",") if x.strip().isdigit()]
-        query = query.where(LiveData.parameter_id.in_(ids))
+        if ids:
+            query = query.where(LiveData.parameter_id.in_(ids))
 
     result = await db.execute(query)
     points = result.scalars().all()
