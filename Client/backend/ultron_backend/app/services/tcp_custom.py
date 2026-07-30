@@ -16,14 +16,11 @@ log = get_logger("ultron.tcp_custom")
 
 
 def _hex_to_bytes(hex_str: Optional[str]) -> Optional[bytes]:
-    if not hex_str:
-        return None
-    clean = hex_str.strip()
-    if not clean:
+    if not hex_str or not hex_str.strip():
         return None
     try:
-        parts = clean.replace(",", " ").split()
-        return bytes(int(b, 16) for b in parts if b)
+        clean = hex_str.replace(",", " ").replace("0x", "")
+        return bytes.fromhex("".join(clean.split()))
     except Exception as e:
         log.error(f"Failed to parse hex string '{hex_str}': {e}")
         return None

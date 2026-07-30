@@ -26,12 +26,11 @@ _cache = {
 
 
 def _read_sync() -> dict:
-    if LOCK_FILE.is_file():
-        try:
-            return json.loads(LOCK_FILE.read_text(encoding="utf-8"))
-        except Exception as e:
-            log.warning(f"Failed to read lock file: {e}")
-    return dict(_cache)
+    try:
+        return json.loads(LOCK_FILE.read_text(encoding="utf-8")) if LOCK_FILE.is_file() else dict(_cache)
+    except Exception as e:
+        log.warning(f"Failed to read lock file: {e}")
+        return dict(_cache)
 
 
 def _write_sync(data: dict):
