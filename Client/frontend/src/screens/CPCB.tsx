@@ -58,6 +58,7 @@ const formatError = (detail: unknown, fallback: string): string => {
 
 const SUB_TABS = [
   { key: 'spcb', label: 'SPCB server', icon: '#0f766e' },
+  { key: 'tnpcb', label: 'TNPCB Server (Tamil Nadu)', icon: '#2563eb' },
   { key: 'cpcb', label: 'CPCB TXT File Generation', icon: '#ca8a04' },
   { key: 'led', label: 'LED Board (LAN)', icon: '#ea580c' },
 ];
@@ -77,6 +78,7 @@ export const CPCB = React.memo(() => {
 
   const [testingPush, setTestingPush] = useState<Record<number, boolean>>({});
   const [testingDelayPush, setTestingDelayPush] = useState<Record<number, boolean>>({});
+  const [testingUrlCheck, setTestingUrlCheck] = useState<Record<number, boolean>>({});
   const [testResultModal, setTestResultModal] = useState<TestResult | null>(null);
   const [pendingCounts, setPendingCounts] = useState<Record<number, number>>({});
   const [historicalDates, setHistoricalDates] = useState<Record<number, string>>({});
@@ -148,10 +150,11 @@ export const CPCB = React.memo(() => {
 
   const SECTION_FILTERS: Record<string, (s: PushServer) => boolean> = {
     spcb: (s) => s.protocol === 'tspcb' || s.protocol === 'both',
+    tnpcb: (s) => s.protocol === 'tnpcb',
     cpcb: (s) => s.protocol === 'cpcb' || s.protocol === 'both',
     led: (s) => s.protocol === 'led',
   };
-  const SECTION_LABELS: Record<string, string> = { spcb: 'SPCB', cpcb: 'CPCB', led: 'LED' };
+  const SECTION_LABELS: Record<string, string> = { spcb: 'SPCB', tnpcb: 'TNPCB', cpcb: 'CPCB', led: 'LED' };
 
   const handleSave = async (section?: string) => {
     setSaving(true);
@@ -226,6 +229,23 @@ export const CPCB = React.memo(() => {
       setTestResultModal({ ...data, title: 'Delay Push Test', success: true });
     } catch (err: unknown) { setTestResultModal({ title: 'Delay Push Test', response: (err as Error).message, status: 0, success: false }); }
     finally { setTestingDelayPush((prev) => ({ ...prev, [serverId]: false })); }
+  };
+
+  const handleTestUrlCheck = async (serverId: number) => {
+    const conf = servers.find((s) => s.id === serverId);
+    setTestingUrlCheck((prev) => ({ ...prev, [serverId]: true }));
+    try {
+      const res = await authFetch(`${API_BASE}/server-config/${serverId}/test-url`, { method: 'POST', body: JSON.stringify({ live_url: conf?.live_url || '', delay_url: conf?.delay_url || '' }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Check failed (${res.status})`);
+      const data: any = await res.json();
+      const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const parts = (data.results || []).map((r: any) => {
+        const head = `<div style="font:600 13px/1.5 system-ui;padding:8px 12px;background:#f1f5f9;border-bottom:1px solid #e2e8f0">${esc(r.label)}: ${r.reachable ? `OK (HTTP ${r.status_code}, ${r.latency_ms}ms)` : `FAILED — ${esc(r.error || 'unreachable')}`}<div style="font-weight:400;color:#64748b;font-size:12px">${esc(r.url || '')}</div></div>`;
+        return `<div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:10px;font-family:system-ui">${head}${r.body ? `<div style="padding:12px">${r.body}</div>` : ''}</div>`;
+      }).join('');
+      setTestResultModal({ title: 'URL Check', response: parts || 'No URLs to check.', status: 0, success: (data.results || []).every((r: any) => r.reachable) });
+    } catch (err: unknown) { setTestResultModal({ title: 'URL Check', response: (err as Error).message, status: 0, success: false }); }
+    finally { setTestingUrlCheck((prev) => ({ ...prev, [serverId]: false })); }
   };
 
   const handleClearPending = async (serverId: number) => {
@@ -403,11 +423,11 @@ export const CPCB = React.memo(() => {
     if (pushLoading) return <p style={{ color: T.textFaint }}>Loading...</p>;
     return (
       <div className="card" style={{ padding: '20px' }}>
-        {sectionHeader(1, 'SPCB server', 'JSON HTTP push to State Pollution Control Board — live (1 min) and delay (15 min) URLs', '#0f766e', () => handleSave('spcb'))}
+        {sectionHeader(1, 'SPCB server', '', '#0f766e', () => handleSave('spcb'))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {servers.map((conf, idx) => (conf.protocol === 'tspcb' || conf.protocol === 'both') ? renderServerCard(conf, idx, 'tspcb',
             <><div style={{ flex: '1 1 200px' }}><label style={s()}>Live URL</label><input type="text" name="live_url" value={conf.live_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://.../live" style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Delay URL</label><input type="text" name="delay_url" value={conf.delay_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://.../delay" style={ipt} /></div></>,
-            <><label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: '#475569' }}><Toggle checked={!!conf.is_active} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_active', type: 'checkbox', checked: !conf.is_active } })} />{conf.is_active ? 'Enabled' : 'Disabled'}</label>{conf.protocol === 'both' && <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: '#475569' }}><Toggle checked={conf.is_cpcb_active ?? true} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_cpcb_active', type: 'checkbox', checked: !(conf.is_cpcb_active ?? true) } })} />CPCB Push</label>}{conf.id && <div style={{ display: 'flex', gap: '6px' }}><button onClick={() => handleTestPush(conf.id)} disabled={testingPush[conf.id]} style={{ background: '#0f766e', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingPush[conf.id] ? '...' : 'Test Live'}</button><button onClick={() => handleTestDelayPush(conf.id)} disabled={testingDelayPush[conf.id]} style={{ background: '#7c3aed', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingDelayPush[conf.id] ? '...' : 'Test Delay'}</button></div>}</>
+            <><label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: '#475569' }}><Toggle checked={!!conf.is_active} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_active', type: 'checkbox', checked: !conf.is_active } })} />{conf.is_active ? 'Enabled' : 'Disabled'}</label>{conf.protocol === 'both' && <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: '#475569' }}><Toggle checked={conf.is_cpcb_active ?? true} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_cpcb_active', type: 'checkbox', checked: !(conf.is_cpcb_active ?? true) } })} />CPCB Push</label>}{conf.id && <div style={{ display: 'flex', gap: '6px' }}><button onClick={() => handleTestUrlCheck(conf.id)} disabled={testingUrlCheck[conf.id]} style={{ background: '#f59e0b', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingUrlCheck[conf.id] ? '...' : '⚡ Url Check'}</button><button onClick={() => handleTestPush(conf.id)} disabled={testingPush[conf.id]} style={{ background: '#0f766e', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingPush[conf.id] ? '...' : 'Test Live'}</button><button onClick={() => handleTestDelayPush(conf.id)} disabled={testingDelayPush[conf.id]} style={{ background: '#7c3aed', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingDelayPush[conf.id] ? '...' : 'Test Delay'}</button></div>}</>
           ) : null)}
           {servers.filter((s) => s.protocol === 'tspcb' || s.protocol === 'both').length === 0 && (
             <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px', border: '1.5px dashed #e2e8f0', borderRadius: '10px' }}>No SPCB server configured. <button onClick={() => addServer('tspcb')} style={{ background: 'none', border: 'none', color: '#0f766e', fontWeight: '700', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}>Add SPCB Server</button></div>
@@ -416,7 +436,28 @@ export const CPCB = React.memo(() => {
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
           <button onClick={() => addServer('tspcb')} style={{ background: 'transparent', border: '1.5px solid #0f766e', borderRadius: '8px', color: '#0f766e', padding: '6px 14px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Plus /> Add SPCB Server</button>
         </div>
-        {renderMappingTable((s) => s.protocol === 'tspcb' || s.protocol === 'both', 'Sunshine')}
+      </div>
+    );
+  };
+
+  const renderTnpcbSection = () => {
+    if (pushLoading) return <p style={{ color: T.textFaint }}>Loading...</p>;
+    return (
+      <div className="card" style={{ padding: '20px' }}>
+        {sectionHeader(2, 'TNPCB Server (Tamil Nadu PCB - OCEMS REST API)', 'Pushes JSON payload arrays grouped by TNPCB Device ID to tnpcb.gov.in endpoint with Base64 Authorization Token', '#2563eb', () => handleSave('tnpcb'))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {servers.map((conf, idx) => conf.protocol === 'tnpcb' ? renderServerCard(conf, idx, 'tnpcb',
+            <><div style={{ flex: '1 1 300px' }}><label style={s()}>TNPCB Endpoint URL</label><input type="text" name="live_url" value={conf.live_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://tnpcb.gov.in/ocems/tnpcb-api/api/industry/<indId>/station/<stId>/data" style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Authorization Base64 Token</label><input type="text" name="cpcb_file_path" value={conf.cpcb_file_path || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="Base64 encoded authentication token" style={ipt} /></div></>,
+            <><label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: '#475569' }}><Toggle checked={!!conf.is_active} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_active', type: 'checkbox', checked: !conf.is_active } })} />{conf.is_active ? 'Enabled' : 'Disabled'}</label>{conf.id && <div style={{ display: 'flex', gap: '6px' }}><button onClick={() => handleTestUrlCheck(conf.id)} disabled={testingUrlCheck[conf.id]} style={{ background: '#f59e0b', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingUrlCheck[conf.id] ? '...' : '⚡ Url Check'}</button><button onClick={() => handleTestPush(conf.id)} disabled={testingPush[conf.id]} style={{ background: '#2563eb', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingPush[conf.id] ? '...' : 'Test TNPCB Push'}</button></div>}</>
+          ) : null)}
+          {servers.filter((s) => s.protocol === 'tnpcb').length === 0 && (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '13px', border: '1.5px dashed #e2e8f0', borderRadius: '10px' }}>No TNPCB server configured. <button onClick={() => addServer('tnpcb')} style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: '700', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}>Add TNPCB Server</button></div>
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+          <button onClick={() => addServer('tnpcb')} style={{ background: 'transparent', border: '1.5px solid #2563eb', borderRadius: '8px', color: '#2563eb', padding: '6px 14px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Plus /> Add TNPCB Server</button>
+        </div>
+        {renderMappingTable((s) => s.protocol === 'tnpcb')}
       </div>
     );
   };
@@ -425,7 +466,7 @@ export const CPCB = React.memo(() => {
     if (pushLoading) return <p style={{ color: T.textFaint }}>Loading...</p>;
     return (
       <div className="card" style={{ padding: '20px' }}>
-        {sectionHeader(2, 'CPCB TXT File Generation', 'Annexure-I format CSV/TXT file with 15-min averaged data', '#ca8a04', () => handleSave('cpcb'))}
+        {sectionHeader(2, 'CPCB TXT File Generation', '', '#ca8a04', () => handleSave('cpcb'))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {servers.map((conf, idx) => (conf.protocol === 'cpcb' || conf.protocol === 'both') ? renderServerCard(conf, idx, 'cpcb',
             <><div style={{ flex: '1 1 300px' }}><label style={s()}>Output File Path</label><input type="text" name="cpcb_file_path" value={conf.cpcb_file_path || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="C:\Data\readings.txt" style={ipt} /></div></>,
@@ -449,7 +490,7 @@ export const CPCB = React.memo(() => {
     if (pushLoading) return <p style={{ color: T.textFaint }}>Loading...</p>;
     return (
       <div className="card" style={{ padding: '20px' }}>
-        {sectionHeader(4, 'LED Board (LAN)', 'Generates JSON endpoint for networked LED display cards — polled via GET', '#ea580c', () => handleSave('led'))}
+        {sectionHeader(4, 'LED Board (LAN)', '', '#ea580c', () => handleSave('led'))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {servers.map((conf, idx) => conf.protocol === 'led' ? renderServerCard(conf, idx, 'led',
             null,
@@ -514,12 +555,10 @@ export const CPCB = React.memo(() => {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8fafc', fontFamily: T.fontBase }}>
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '16px 28px 0', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.02em' }}>Server Management</h1>
-        <p style={{ margin: '2px 0 12px', fontSize: '11px', color: '#94a3b8', fontWeight: '600' }}>SPCB push, CPCB export, LED boards & Central Sync</p>
+
         <div style={{ display: 'flex', gap: '4px' }}>
           {SUB_TABS.map(t => (
-            <button key={t.key} onClick={() => setSubTab(t.key)}
-              onMouseEnter={() => loadPushData()}
-              onFocus={() => loadPushData()}
+            <button key={t.key} onClick={() => { setSubTab(t.key); loadPushData(); }}
               style={{
               padding: '8px 16px', fontSize: '12px', fontWeight: '700', cursor: 'pointer',
               border: 'none', borderBottom: `3px solid ${subTab === t.key ? t.icon : 'transparent'}`,
@@ -532,6 +571,7 @@ export const CPCB = React.memo(() => {
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
         {subTab === 'spcb' && renderSpcbSection()}
+        {subTab === 'tnpcb' && renderTnpcbSection()}
         {subTab === 'cpcb' && renderCpcbSection()}
         {subTab === 'led' && renderLedSection()}
       </div>
@@ -545,13 +585,15 @@ export const CPCB = React.memo(() => {
                 {testResultModal.status === 0 ? 'HTTP 0 (No Response)' : `HTTP ${testResultModal.status}`}
               </span>
             </div>
-            <pre style={{ margin: 0, padding: '14px', background: '#0d4f49', color: '#ccfbf1', borderRadius: '8px', fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'Consolas, monospace' }}>
-              {testResultModal.response && testResultModal.response.trim() !== ''
-                ? testResultModal.response
-                : (testResultModal.status === 0
-                    ? "Connection Failed (HTTP 0): Unable to connect to the target SPCB server.\n\nPlease check:\n1. Target Server IP and Port URL configuration\n2. SPCB server host is running and online\n3. Local network / firewall connectivity"
-                    : '<No Response Body>')}
-            </pre>
+            {testResultModal.title === 'URL Check'
+              ? <iframe key={Date.now()} sandbox="" title="URL Check" srcDoc={testResultModal.response} style={{ width: '100%', height: '280px', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#fff' }} />
+              : <pre style={{ margin: 0, padding: '14px', background: '#0d4f49', color: '#ccfbf1', borderRadius: '8px', fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontFamily: 'Consolas, monospace' }}>
+                  {testResultModal.response && testResultModal.response.trim() !== ''
+                    ? testResultModal.response
+                    : (testResultModal.status === 0
+                        ? "Connection Failed (HTTP 0): Unable to connect to the target SPCB server.\n\nPlease check:\n1. Target Server IP and Port URL configuration\n2. SPCB server host is running and online\n3. Local network / firewall connectivity"
+                        : '<No Response Body>')}
+                </pre>}
           </div>
         )}
       </Modal>

@@ -124,6 +124,8 @@ async def init_db():
                     ("csv_timestamp_col", "INTEGER"),
                     ("request_hex", "VARCHAR(500)"),
                     ("response_delimiter", "VARCHAR(20) DEFAULT 'newline'"),
+                    ("command_format", "VARCHAR(10)"),
+                    ("request_command", "TEXT"),
                 ],
                 "parameters": [
                     ("parse_method", "VARCHAR(30) DEFAULT 'csv_col'"),
@@ -193,6 +195,31 @@ async def init_db():
 
         await conn.run_sync(_ensure_security_columns)
 
+        # 2.12 Always-checked: Serial ASCII columns (added v1.0.70+)
+        def _ensure_serial_ascii_columns(sync_conn):
+            from sqlalchemy import inspect
+            inspector = inspect(sync_conn)
+            try:
+                cols = {col["name"] for col in inspector.get_columns("devices")}
+            except Exception:
+                return
+            new_cols = {
+                "command_format":  "VARCHAR(10)",
+                "request_command": "TEXT",
+            }
+            for col_name, col_type in new_cols.items():
+                if col_name not in cols:
+                    sync_conn.execute(text(f"ALTER TABLE devices ADD COLUMN {col_name} {col_type}"))
+                    log.info(f"Serial ASCII migration: added '{col_name}' to devices")
+
+        await conn.run_sync(_ensure_serial_ascii_columns)
+
+        # 2.13 Centralized ORM-driven database defaults initializer
+        from app.database_initializer import initialize_defaults
+        await initialize_defaults()
+
         # 2.11 Data migrations are no-ops for current deployments.
 
     log.info("Database ready [OK]")
+
+

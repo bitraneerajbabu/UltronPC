@@ -16,7 +16,7 @@ class ServerConfigBase(BaseModel):
     @field_validator("protocol")
     @classmethod
     def validate_protocol(cls, v):
-        allowed = {"tspcb", "cpcb", "both", "led"}
+        allowed = {"tspcb", "cpcb", "tnpcb", "both", "led"}
         if v not in allowed:
             raise ValueError(f"protocol must be one of {allowed}")
         return v

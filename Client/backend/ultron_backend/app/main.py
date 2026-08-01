@@ -409,7 +409,7 @@ async def websocket_live(
             "type": "connected",
             "message": f"Connected to {settings.APP_NAME} live stream",
             "ts": datetime.now(timezone.utc).isoformat(),
-            "subscribed_stations": sids,
+            "subscribed_stations": [],
         })
         # Keep connection open — just drain incoming (clients can send ping)
         while True:

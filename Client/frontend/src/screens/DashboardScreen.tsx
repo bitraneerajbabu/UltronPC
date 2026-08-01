@@ -51,6 +51,20 @@ const NetworkIcon = () => (
   </svg>
 );
 
+const formatValPrecision = (val: any): string => {
+  if (val === null || val === undefined || val === '') return '0.00';
+  const num = typeof val === 'number' ? val : parseFloat(val);
+  if (isNaN(num)) return '0.00';
+  const str = num.toString();
+  if (str.includes('.')) {
+    const decimals = str.split('.')[1].length;
+    if (decimals > 2) {
+      return num.toFixed(Math.min(decimals, 4));
+    }
+  }
+  return num.toFixed(2);
+};
+
 // Isolated and optimized Parameter Card component
 interface ParameterCardProps {
   p: any;
@@ -69,7 +83,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
   const formattedVal = isOffline
     ? 'Offline'
     : (!isNaN(valFloat)
-        ? valFloat.toFixed(2)
+        ? formatValPrecision(valFloat)
         : '0.00');
   const displayTimestamp = isOffline ? (data?.timestamp && data?.timestamp !== '—' ? data.timestamp : '—') : currentTime;
   const state = getParamState(p, data);
@@ -77,10 +91,10 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
   const avgFloat = parseFloat(avgVal);
   const formattedAvgVal = isOffline
     ? (avgVal != null && avgVal !== '' && !isNaN(parseFloat(avgVal))
-        ? parseFloat(avgVal).toFixed(2)
+        ? formatValPrecision(avgVal)
         : 'N/A')
     : (!isNaN(avgFloat)
-        ? avgFloat.toFixed(2)
+        ? formatValPrecision(avgFloat)
         : '0.00');
 
   let formattedTimestamp = '—';
@@ -214,7 +228,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
 
       {/* Footer */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', flexWrap: 'wrap', gap: '4px' }}>
-        <span style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Raw Feed: {data?.raw_value != null ? parseFloat(data.raw_value).toFixed(2) : formattedVal} {unit}</span>
+        <span style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Raw Feed: {data?.raw_value != null ? formatValPrecision(data.raw_value) : formattedVal} {unit}</span>
         <span style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Received: <span style={{ color: '#475569', fontWeight: '700' }}>{formattedTimestamp}</span></span>
       </div>
     </div>

@@ -93,6 +93,8 @@ class DeviceBase(BaseModel):
     csv_timestamp_col: Optional[int] = None
     request_hex: Optional[str] = None
     response_delimiter: Optional[str] = "newline"
+    command_format: Optional[str] = None
+    request_command: Optional[str] = None
     poll_interval: int = 5
     timeout: int = 5
     retry_count: int = 3
@@ -104,7 +106,8 @@ class DeviceBase(BaseModel):
         if isinstance(data, dict):
             nullable_fields = [
                 "station_id", "host", "port", "serial_port", "csv_path",
-                "csv_folder", "csv_filename_pattern", "csv_timestamp_col"
+                "csv_folder", "csv_filename_pattern", "csv_timestamp_col",
+                "command_format", "request_command",
             ]
             for f in nullable_fields:
                 if data.get(f) == "":
@@ -154,6 +157,8 @@ class DeviceUpdate(BaseModel):
     csv_timestamp_col: Optional[int] = None
     request_hex: Optional[str] = None
     response_delimiter: Optional[str] = None
+    command_format: Optional[str] = None
+    request_command: Optional[str] = None
     parameters: Optional[List[ParameterCreateNested]] = None
 
     @model_validator(mode="before")
@@ -164,7 +169,8 @@ class DeviceUpdate(BaseModel):
                 "station_id", "host", "port", "slave_id", "serial_port",
                 "baud_rate", "data_bits", "stop_bits", "csv_path", "csv_folder",
                 "csv_filename_pattern", "csv_delimiter", "csv_timestamp_col",
-                "poll_interval", "timeout", "retry_count", "request_hex"
+                "poll_interval", "timeout", "retry_count", "request_hex",
+                "command_format", "request_command",
             ]
             for f in fields:
                 if data.get(f) == "":

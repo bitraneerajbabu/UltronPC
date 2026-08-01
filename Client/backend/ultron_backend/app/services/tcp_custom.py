@@ -199,4 +199,57 @@ class TCPCustomReader:
                 await self.close()
                 return None
 
+    async def poll_parameters(self, parameters: list[dict]) -> list[dict]:
+        """
+        Send request (if configured), read response, extract each parameter
+        value using its parse method, apply scale/offset.
+        """
+        import json
+        groups = {}
+        for p in parameters:
+            thost = p.get("host")
+            if thost is None: thost = self.host
+            tport = p.get("port")
+            if tport is None: tport = self.port
+            key = (thost, tport)
+            if key not in groups:
+                groups[key] = []
+            groups[key].append(p)
+
+        results = []
+        for (thost, tport), params in groups.items():
+            raw_response = await self.send_request(target_host=thost, target_port=tport)
+
+            for p in params:
+                parse_method = p.get("parse_method", "csv_col")
+                parse_config_raw = p.get("parse_config")
+                parse_config = {}
+                if parse_config_raw:
+                    try:
+                        parse_config = json.loads(parse_config_raw) if isinstance(parse_config_raw, str) else (parse_config_raw or {})
+                    except (json.JSONDecodeError, TypeError):
+                        parse_config = {}
+
+                raw_val = None
+                if raw_response:
+                    raw_val = _extract_value(raw_response, parse_method, parse_config, p)
+
+                quality = "U" if raw_val is not None else "E"
+                value = None
+                if raw_val is not None:
+                    if p.get("data_type") in ("bool", "uint16"):
+                        value = raw_val
+                    else:
+                        sf = p.get("scale_factor", 1.0) or 1.0
+                        off = p.get("offset", 0.0) or 0.0
+                        value = (raw_val * sf) + off
+
+                results.append({
+                    "parameter_id": p["id"],
+                    "value": value,
+                    "raw_value": raw_val,
+                    "quality": quality,
+                })
+        return results
+
 

@@ -215,12 +215,21 @@ def _load_or_create_secret_key() -> str:
         return secrets.token_urlsafe(32)
 
 
+# ─── Canonical Default Admin Credentials ──────────────────────────
+# Single source of truth for the initial admin account.
+# These constants MUST match the values in .env.template.
+# Customers can override via ADMIN_USERNAME / ADMIN_PASSWORD in .env.
+DEFAULT_ADMIN_USERNAME = "Master"
+DEFAULT_ADMIN_PASSWORD = "Ultronpoiu"
+
+
 class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.71.4"
+    APP_VERSION: str = "1.1"
     DEBUG: bool = False
+    DB_TYPE: str = "sqlite"
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     CORS_ALLOW_ORIGINS: str = (
@@ -245,8 +254,13 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(default_factory=lambda: _load_or_create_secret_key())
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
-    ADMIN_USERNAME: str = Field(default="Master")
-    ADMIN_PASSWORD: str = Field(default="Ultron123.0")
+    ADMIN_USERNAME: str = Field(default=DEFAULT_ADMIN_USERNAME)
+    ADMIN_PASSWORD: str = Field(default=DEFAULT_ADMIN_PASSWORD)
+
+    @field_validator("ADMIN_PASSWORD", mode="before")
+    @classmethod
+    def validate_admin_password(cls, v):
+        return v if v else DEFAULT_ADMIN_PASSWORD
 
     @field_validator("SECRET_KEY", mode="before")
     @classmethod

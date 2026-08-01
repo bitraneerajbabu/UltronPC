@@ -96,63 +96,68 @@ async def generate_excel(
     # Remove default sheet — we'll add per-day sheets
     wb.remove(wb.active)
 
-    # Group readings by date
-    daily_data: dict[str, list] = {}
-    for r in readings:
-        day_key = r.timestamp.strftime("%Y-%m-%d")
-        daily_data.setdefault(day_key, []).append(r)
-
-    header_fill = PatternFill(start_color="006666", end_color="006666", fill_type="solid")
-    header_font = Font(color="FFFFFF", bold=True, size=11)
-
-    for day_key in sorted(daily_data.keys()):
-        day_readings = daily_data[day_key]
-        ws = wb.create_sheet(title=day_key)
-
-        # Summary header
+    if not readings:
+        ws = wb.create_sheet(title="No Data")
         ws.append(["UltrON Industrial Monitoring Report"])
         ws.append([f"Station: {station_name}"])
-        ws.append([f"Date: {day_key}"])
+        ws.append([f"No data available (NA) for the selected range."])
         if step_minutes > 0 and avg_type == AverageType.raw:
-            report_type_label = f"Normal (Step: {step_minutes}min)"
+            ws.append([f"Report Type: Normal (Step: {step_minutes}min)"])
         else:
-            report_type_label = f"Average ({str(avg_type)})"
-        ws.append([f"Report Type: {report_type_label}"])
+            ws.append([f"Report Type: Average ({str(avg_type)})"])
         ws.append([f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"])
-        ws.append([])
+    else:
+        daily_data: dict[str, list] = {}
+        for r in readings:
+            day_key = r.timestamp.strftime("%Y-%m-%d")
+            daily_data.setdefault(day_key, []).append(r)
 
-        # Pivot: rows = timestamps, cols = parameters
-        timestamps = sorted(set(r.timestamp for r in day_readings))
-        data_by_ts: dict = {ts: {} for ts in timestamps}
-        for r in day_readings:
-            data_by_ts[r.timestamp][r.parameter_id] = r.value
+        header_fill = PatternFill(start_color="006666", end_color="006666", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=11)
 
-        # Column headers
-        header_row = ["Date & Time"] + [
-            f"{param_map[pid].tag_name}"
-            for pid in ids if pid in param_map
-        ]
-        ws.append(header_row)
-        header_row_idx = ws.max_row
-        for col_idx in range(1, len(header_row) + 1):
-            cell = ws.cell(row=header_row_idx, column=col_idx)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal="center")
+        for day_key in sorted(daily_data.keys()):
+            day_readings = daily_data[day_key]
+            ws = wb.create_sheet(title=day_key)
 
-        # Data rows
-        for ts in timestamps:
-            row_data = [ts.strftime("%Y/%m/%d %H:%M")]
-            for pid in ids:
-                if pid in param_map:
-                    val = data_by_ts[ts].get(pid)
-                    row_data.append(val if val is not None else "NA")
-            ws.append(row_data)
+            ws.append(["UltrON Industrial Monitoring Report"])
+            ws.append([f"Station: {station_name}"])
+            ws.append([f"Date: {day_key}"])
+            if step_minutes > 0 and avg_type == AverageType.raw:
+                report_type_label = f"Normal (Step: {step_minutes}min)"
+            else:
+                report_type_label = f"Average ({str(avg_type)})"
+            ws.append([f"Report Type: {report_type_label}"])
+            ws.append([f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"])
+            ws.append([])
 
-        # Auto-fit columns
-        for col in ws.columns:
-            max_len = max(len(str(cell.value or "")) for cell in col)
-            ws.column_dimensions[get_column_letter(col[0].column)].width = min(max_len + 4, 40)
+            timestamps = sorted(set(r.timestamp for r in day_readings))
+            data_by_ts: dict = {ts: {} for ts in timestamps}
+            for r in day_readings:
+                data_by_ts[r.timestamp][r.parameter_id] = r.value
+
+            header_row = ["Date & Time"] + [
+                f"{param_map[pid].tag_name}"
+                for pid in ids if pid in param_map
+            ]
+            ws.append(header_row)
+            header_row_idx = ws.max_row
+            for col_idx in range(1, len(header_row) + 1):
+                cell = ws.cell(row=header_row_idx, column=col_idx)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center")
+
+            for ts in timestamps:
+                row_data = [ts.strftime("%Y/%m/%d %H:%M")]
+                for pid in ids:
+                    if pid in param_map:
+                        val = data_by_ts[ts].get(pid)
+                        row_data.append(val if val is not None else "NA")
+                ws.append(row_data)
+
+            for col in ws.columns:
+                max_len = max(len(str(cell.value or "")) for cell in col)
+                ws.column_dimensions[get_column_letter(col[0].column)].width = min(max_len + 4, 40)
 
     # Stream to client
     buf = io.BytesIO()
@@ -167,6 +172,18 @@ async def generate_excel(
     )
 
 
+def _format_pdf_val(val: Optional[float]) -> str:
+    if val is None:
+        return "NA"
+    s = f"{val:.4f}".rstrip('0').rstrip('.')
+    if '.' in s:
+        parts = s.split('.')
+        if len(parts[1]) < 2:
+            return f"{val:.2f}"
+        return s
+    return f"{val:.2f}"
+
+
 @router.get("/pdf")
 async def generate_pdf(
     parameter_ids: str = Query(..., description="Comma-separated parameter IDs"),
@@ -174,10 +191,10 @@ async def generate_pdf(
     end: Optional[datetime] = None,
     avg_type: AverageType = AverageType.avg_1hr,
     step_minutes: int = Query(0, description="Step interval in minutes for normal (raw) reports"),
-    station_name: str = Query("UltrON Station"),
+    station_name: str = Query("AAQMS 1"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Generate a PDF report."""
+    """Generate a PDF report strictly matching the Sunshine Real-Time Monitoring Report layout (Image 2 reference)."""
     try:
         from fpdf import FPDF
     except ImportError:
@@ -191,64 +208,187 @@ async def generate_pdf(
     ids = [int(x) for x in parameter_ids.split(",") if x.strip().isdigit()]
     params, readings = await _fetch_report_data(db, ids, start, end, avg_type, step_minutes)
     param_map = {p.id: p for p in params}
+    valid_ids = [pid for pid in ids if pid in param_map]
 
-    pdf = FPDF()
+    # Always PORTRAIT as per Image 2 reference
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-    # Sunshine logo top-right
-    logo_path = os.path.join(os.path.dirname(__file__), "..", "..", "ui_dist", "assets", "sunshine_logo.png")
-    logo_path = os.path.normpath(logo_path)
-    if os.path.exists(logo_path):
-        pdf.image(logo_path, x=155, y=6, w=40)
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.set_fill_color(0, 102, 102)
-    pdf.set_text_color(255, 255, 255)
-    pdf.cell(0, 12, "Sunshine Industrial Monitoring Report", fill=True, ln=True, align="C")
-    pdf.ln(4)
 
-    pdf.set_font("Helvetica", "", 10)
-    pdf.set_text_color(0, 0, 0)
-    pdf.cell(0, 7, f"Station: {station_name}  |  Period: {start.strftime('%Y-%m-%d %H:%M')} to {end.strftime('%Y-%m-%d %H:%M')}", ln=True)
+    page_w = 210.0
+    margin = 10.0
+    printable_w = page_w - (margin * 2.0)  # 190.0 mm
+
+    # Top-Right Sunshine Technologies Logo (Uncovered)
+    possible_logos = [
+        os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "assets", "sunshine_logo.png")),
+        os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "ui_dist", "assets", "sunshine_logo.png")),
+        os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "frontend", "public", "assets", "sunshine_logo.png")),
+    ]
+    logo_found = False
+    for lp in possible_logos:
+        if os.path.exists(lp):
+            pdf.image(lp, x=page_w - margin - 48, y=8, w=48)
+            logo_found = True
+            break
+
+    # Centered Header Titles (Image 2 Reference Style)
+    pdf.set_y(14)
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_text_color(15, 23, 42)
+    pdf.cell(0, 8, "Real-Time Monitoring Report", ln=True, align="C")
+    pdf.ln(2)
+
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(30, 41, 59)
+    pdf.cell(0, 6, f"Site Name: {station_name}", ln=True, align="C")
+
     if step_minutes > 0 and avg_type == AverageType.raw:
-        report_type_label = f"Normal (Step: {step_minutes}min)"
+        report_type_label = f"Normal Report (Step: {step_minutes}min)"
     else:
-        report_type_label = f"Average ({str(avg_type)})"
-    pdf.cell(0, 7, f"Type: {report_type_label}  |  Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC", ln=True)
+        report_type_label = f"Average Report ({str(avg_type.value if hasattr(avg_type, 'value') else avg_type)})"
+
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(51, 65, 85)
+    pdf.cell(0, 6, f"Report: {report_type_label}", ln=True, align="C")
+
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(71, 85, 105)
+    pdf.cell(0, 6, f"From Date: {start.strftime('%Y/%m/%d %H:%M:%S')} To Date : {end.strftime('%Y/%m/%d %H:%M:%S')}", ln=True, align="C")
     pdf.ln(6)
 
-    # Table header — centered
-    col_w = 38
+    num_params = max(1, len(valid_ids))
+
+    # Data grouping by parameter
+    timestamps = sorted(set(r.timestamp for r in readings))
+    data_by_ts: dict = {ts: {} for ts in timestamps}
+    values_by_param: dict[int, list[float]] = {pid: [] for pid in valid_ids}
+
+    for r in readings:
+        data_by_ts[r.timestamp][r.parameter_id] = r.value
+        if r.value is not None:
+            values_by_param[r.parameter_id].append(r.value)
+
+    # ── Summary Statistics Table (Image 2 Reference Style) ──
+    desc_w = 48.0
+    summary_param_w = (printable_w - desc_w) / num_params
+
+    pdf.set_fill_color(0, 102, 102)  # Teal #006666
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 8)
+    pdf.cell(desc_w, 7, "Description", border=1, fill=True, align="C")
+    for pid in valid_ids:
+        p = param_map[pid]
+        unit_str = f" - ({p.unit})" if p.unit else ""
+        hdr = f"{p.name or p.tag_name}{unit_str}"
+        if len(hdr) > 18:
+            hdr = hdr[:16] + ".."
+        pdf.cell(summary_param_w, 7, hdr, border=1, fill=True, align="C")
+    pdf.ln()
+
+    # Calculate summary metrics per parameter
+    summary_data = {
+        "Prescribed Standards": {},
+        "Maximum Data": {},
+        "Minimum Data": {},
+        "Standard Deviation": {},
+        "Maximum Value At Time": {},
+        "Minimum Value At Time": {},
+        "Data Availability %": {},
+    }
+
+    for pid in valid_ids:
+        p = param_map[pid]
+        p_vals = values_by_param[pid]
+        # Prescribed standard string
+        min_std = getattr(p, 'alarm_low', None)
+        max_std = getattr(p, 'alarm_high', None)
+        if min_std is not None or max_std is not None:
+            summary_data["Prescribed Standards"][pid] = f"{min_std or 0.0} - {max_std or 100.0}"
+        else:
+            summary_data["Prescribed Standards"][pid] = "0.0 - 100.0"
+
+        if p_vals:
+            max_v = max(p_vals)
+            min_v = min(p_vals)
+            max_ts_str = "NA"
+            min_ts_str = "NA"
+            for ts in timestamps:
+                if data_by_ts[ts].get(pid) == max_v and max_ts_str == "NA":
+                    max_ts_str = ts.strftime("%Y-%m-%d %H:%M:%S")
+                if data_by_ts[ts].get(pid) == min_v and min_ts_str == "NA":
+                    min_ts_str = ts.strftime("%Y-%m-%d %H:%M:%S")
+
+            # Standard Deviation
+            if len(p_vals) > 1:
+                mean_v = sum(p_vals) / len(p_vals)
+                variance = sum((x - mean_v) ** 2 for x in p_vals) / (len(p_vals) - 1)
+                std_v = math.sqrt(variance)
+            else:
+                std_v = 0.0
+
+            avail_pct = min(100.0, (len(p_vals) / max(1, len(timestamps))) * 100.0)
+
+            summary_data["Maximum Data"][pid] = _format_pdf_val(max_v)
+            summary_data["Minimum Data"][pid] = _format_pdf_val(min_v)
+            summary_data["Standard Deviation"][pid] = f"{std_v:.2f}"
+            summary_data["Maximum Value At Time"][pid] = max_ts_str
+            summary_data["Minimum Value At Time"][pid] = min_ts_str
+            summary_data["Data Availability %"][pid] = f"{avail_pct:.1f}%"
+        else:
+            summary_data["Maximum Data"][pid] = "NA"
+            summary_data["Minimum Data"][pid] = "NA"
+            summary_data["Standard Deviation"][pid] = "0.00"
+            summary_data["Maximum Value At Time"][pid] = "NA"
+            summary_data["Minimum Value At Time"][pid] = "NA"
+            summary_data["Data Availability %"][pid] = "0.0%"
+
+    pdf.set_text_color(15, 23, 42)
+    pdf.set_font("Helvetica", "", 7.5)
+    for row_name, val_map in summary_data.items():
+        pdf.cell(desc_w, 6, row_name, border=1, align="C")
+        for pid in valid_ids:
+            pdf.cell(summary_param_w, 6, str(val_map[pid]), border=1, align="C")
+        pdf.ln()
+
+    pdf.ln(6)
+
+    # ── Main Telemetry Table (Image 2 Reference Style) ──
+    sl_w = 14.0
+    time_w = 38.0
+    main_param_w = (printable_w - sl_w - time_w) / num_params
+
+    # Header Row
     pdf.set_fill_color(0, 102, 102)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font("Helvetica", "B", 8)
-    pdf.cell(48, 8, "Date & Time", border=1, fill=True, align="C")
-    for pid in ids:
-        if pid in param_map:
-            p = param_map[pid]
-            unit_label = f" ({p.unit})" if p.unit else ""
-            pdf.cell(col_w, 8, f"{p.tag_name}{unit_label}", border=1, fill=True, align="C")
+    pdf.cell(sl_w, 7, "Sl No", border=1, fill=True, align="C")
+    pdf.cell(time_w, 7, "Time", border=1, fill=True, align="C")
+    for pid in valid_ids:
+        p = param_map[pid]
+        unit_str = f" - ({p.unit})" if p.unit else ""
+        hdr = f"{p.name or p.tag_name}{unit_str}"
+        if len(hdr) > 18:
+            hdr = hdr[:16] + ".."
+        pdf.cell(main_param_w, 7, hdr, border=1, fill=True, align="C")
     pdf.ln()
 
-    # Data rows — centered
-    pdf.set_text_color(0, 0, 0)
+    # Data Rows
+    pdf.set_text_color(15, 23, 42)
     pdf.set_font("Helvetica", "", 8)
-    timestamps = sorted(set(r.timestamp for r in readings))
-    data_by_ts: dict = {ts: {} for ts in timestamps}
-    for r in readings:
-        data_by_ts[r.timestamp][r.parameter_id] = r.value
-
     fill = False
-    for ts in timestamps[:21600]:   # cap at 15 days (21600 rows)
-        pdf.set_fill_color(240, 248, 248) if fill else pdf.set_fill_color(255, 255, 255)
-        pdf.cell(48, 7, ts.strftime("%Y/%m/%d %H:%M"), border=1, fill=True, align="C")
-        for pid in ids:
+    for idx, ts in enumerate(timestamps[:21600], start=1):
+        pdf.set_fill_color(244, 248, 248) if fill else pdf.set_fill_color(255, 255, 255)
+        pdf.cell(sl_w, 6, str(idx), border=1, fill=True, align="C")
+        pdf.cell(time_w, 6, ts.strftime("%Y-%m-%d %H:%M"), border=1, fill=True, align="C")
+        for pid in valid_ids:
             val = data_by_ts[ts].get(pid)
-            pdf.cell(col_w, 7, f"{val:.3f}" if val is not None else "NA", border=1, fill=True, align="C")
+            pdf.cell(main_param_w, 6, _format_pdf_val(val), border=1, fill=True, align="C")
         pdf.ln()
         fill = not fill
 
     buf = io.BytesIO(pdf.output())
     fname = f"Sunshine_Report_{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}.pdf"
-    # Save to Reports dir
     try:
         report_path = _reports_dir() / fname
         with open(report_path, "wb") as f:

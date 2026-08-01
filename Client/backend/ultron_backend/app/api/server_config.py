@@ -282,6 +282,47 @@ async def test_server_delay_push(server_id: int, db: AsyncSession = Depends(get_
     return {"results": results, "url_used": server.delay_url}
 
 
+@router.post("/{server_id}/test-url", dependencies=[Depends(require_admin)])
+async def test_server_urls(server_id: int, payload: dict | None = None, db: AsyncSession = Depends(get_db)):
+    """Check reachability of Live and Delay URLs without sending data.
+    Accepts optional {'live_url': ..., 'delay_url': ...} to test URLs not yet saved."""
+    res = await db.execute(select(ServerConfig).filter(ServerConfig.id == server_id))
+    server = res.scalars().first()
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    live_url = (payload or {}).get("live_url") or server.live_url
+    delay_url = (payload or {}).get("delay_url") or server.delay_url
+
+    import httpx
+    from datetime import datetime
+
+    async def _check(label: str, url: str | None) -> dict:
+        if not url:
+            return {"label": label, "url": "", "reachable": False, "status_code": 0, "latency_ms": 0, "error": "URL not configured", "body": ""}
+        try:
+            start = datetime.utcnow()
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                resp = await client.get(url)
+            latency_ms = int((datetime.utcnow() - start).total_seconds() * 1000)
+            body = resp.text.strip()[:500] if resp.text else ""
+            return {
+                "label": label, "url": url, "reachable": resp.status_code < 500,
+                "status_code": resp.status_code, "latency_ms": latency_ms,
+                "error": None if resp.status_code < 500 else f"Server responded with HTTP {resp.status_code}",
+                "body": body,
+            }
+        except Exception as e:
+            return {"label": label, "url": url, "reachable": False, "status_code": 0, "latency_ms": 0, "error": str(e).strip() or repr(e), "body": ""}
+
+    results = []
+    if (server.protocol or "tspcb").lower() != "cpcb":
+        results.append(await _check("Live URL", live_url))
+        results.append(await _check("Delay URL", delay_url))
+
+    return {"results": results}
+
+
 # ─── Pending Uploads ──────────────────────────────────────────────────────────
 
 @router.get("/{server_id}/pending-count", dependencies=[Depends(require_admin)])

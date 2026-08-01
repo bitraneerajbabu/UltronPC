@@ -171,3 +171,10 @@ async def dashboard_summary(db: AsyncSession = Depends(get_db)):
     return result
 
 
+@router.get("/diagnostics")
+async def get_system_diagnostics():
+    """Return comprehensive system health report, SCADA device states, and metrics."""
+    from app.services.watchdog import watchdog_service
+    return watchdog_service.get_diagnostics()
+
+

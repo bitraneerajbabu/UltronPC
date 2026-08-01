@@ -474,7 +474,7 @@ export const SettingsScreen = React.memo(() => {
         <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>System Information</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '14px' }}>
           {[
-            { label: 'Application', value: `${appInfo?.app_name || 'UltrON'} v${appInfo?.version || '1.0.0'}` },
+            { label: 'Application', value: `${appInfo?.app_name || 'UltrON'} v${appInfo?.version || '1.1'}` },
             { label: 'Database', value: healthStatus?.status?.toUpperCase() || '…', ok: healthStatus?.database === 'ok' },
             { label: 'Polling Engine', value: pollingStatus?.running ? `RUNNING — ${pollingStatus?.active_poll_loops} loop(s)` : 'STOPPED', ok: pollingStatus?.running },
             { label: 'Internet', value: pushStatus?.internet_ok ? 'Connected' : 'Disconnected', ok: pushStatus?.internet_ok },

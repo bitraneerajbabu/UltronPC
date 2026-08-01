@@ -228,6 +228,8 @@ export const AppProvider = ({ children }) => {
         setPendingStatus(prev => ({ ...prev, [resourceKey]: '' }));
         return true;
       }
+      const errDetailEdit = await extractApiError(res, 'Failed to update item.');
+      showToast(errDetailEdit, 'error');
       setter(snapshot);
       setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
       return false;
@@ -241,7 +243,7 @@ export const AppProvider = ({ children }) => {
         delete pendingRequestsRef.current[resourceKey];
       }
     }
-  }, []);
+  }, [extractApiError, showToast]);
 
   const optimisticAdd = useCallback(async <T,>(
     resourceKey: string,
@@ -260,6 +262,8 @@ export const AppProvider = ({ children }) => {
         setPendingStatus(prev => ({ ...prev, [resourceKey]: '' }));
         return serverItem;
       }
+      const errDetailAdd = await extractApiError(res, 'Failed to save item.');
+      showToast(errDetailAdd, 'error');
       setter(prev => prev.filter(item => item !== newItem));
       setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
       return false;
@@ -268,7 +272,7 @@ export const AppProvider = ({ children }) => {
       setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
       return false;
     }
-  }, []);
+  }, [extractApiError, showToast]);
 
   const optimisticRemove = useCallback(async <T,>(
     resourceKey: string,
@@ -909,9 +913,22 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const refreshStations = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/stations/`);
+      if (res.ok) {
+        const data = await res.json();
+        setStations(data || []);
+        return data;
+      }
+    } catch (e) {
+      console.error('[AppContext] Failed to refresh stations:', e);
+    }
+  }, [authFetch]);
+
   return (
     <AppContext.Provider value={{
-      stations, devices, parameters, logs, liveData, kpis,
+      stations, refreshStations, devices, parameters, logs, liveData, kpis,
       activeScreen, setActiveScreen,
       currentUser, currentUserRole, authToken, login, logout,
       usersList, loadUsers, addUser, editUser, deleteUser,

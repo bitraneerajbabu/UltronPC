@@ -254,6 +254,167 @@ async def _push_spcb(config: ServerConfig, db, mode: str):
         log.error(f"[SPCB/{mode.upper()}] Build/push failed for '{config.name}': {e}")
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TNPCB — OCEMS REST API Push (Tamil Nadu Pollution Control Board)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _build_tnpcb_payloads(db, server_id: int, mode: str = "live") -> list:
+    """
+    Build TNPCB-style JSON payload array grouped by deviceId.
+    Specification:
+    [
+      {
+        "deviceId": "1202",
+        "params": [
+          {
+            "parameter": "so2",
+            "value": "0.0268",
+            "unit": "ppm",
+            "timestamp": "1490985300000",
+            "flag": "U"
+          }
+        ]
+      }
+    ]
+    """
+    stmt = (
+        select(ServerParameterMapping)
+        .options(selectinload(ServerParameterMapping.parameter))
+        .filter(ServerParameterMapping.server_id == server_id)
+        .filter(ServerParameterMapping.is_active == True)
+    )
+    res = await db.execute(stmt)
+    mappings = res.scalars().all()
+
+    if not mappings:
+        return []
+
+    grouped = defaultdict(list)
+    for m in mappings:
+        device_id = m.api_id or "1001"
+        grouped[device_id].append(m)
+
+    tnpcb_devices = []
+    for device_id, maps in grouped.items():
+        params_list = []
+        for m in maps:
+            param = m.parameter
+            if not param:
+                continue
+
+            val_str = "0.00"
+            quality_flag = "U"
+            ts_obj = datetime.utcnow()
+
+            if mode == "delay":
+                avg_res = await db.execute(
+                    select(Averages)
+                    .where(Averages.parameter_id == m.parameter_id, Averages.avg_type == AverageType.avg_15min)
+                    .order_by(Averages.timestamp.desc())
+                    .limit(1)
+                )
+                avg = avg_res.scalars().first()
+                if avg and avg.value is not None:
+                    try:
+                        f_val = float(avg.value)
+                        val_str = f"{f_val:.4f}".rstrip('0').rstrip('.') if '.' in f"{f_val:.4f}" else f"{f_val:.2f}"
+                        if val_str.endswith('.'):
+                            val_str = f"{f_val:.2f}"
+                    except (ValueError, TypeError):
+                        val_str = str(avg.value)
+                    quality_flag = _quality_str(avg) or "U"
+                    if avg.timestamp:
+                        ts_obj = avg.timestamp
+            else:
+                ld_res = await db.execute(
+                    select(LiveData).where(LiveData.parameter_id == m.parameter_id)
+                )
+                ld = ld_res.scalars().first()
+                if ld and ld.value is not None:
+                    try:
+                        f_val = float(ld.value)
+                        val_str = f"{f_val:.4f}".rstrip('0').rstrip('.') if '.' in f"{f_val:.4f}" else f"{f_val:.2f}"
+                        if val_str.endswith('.'):
+                            val_str = f"{f_val:.2f}"
+                    except (ValueError, TypeError):
+                        val_str = str(ld.value)
+                    quality_flag = str(ld.quality.value if hasattr(ld.quality, 'value') else ld.quality) if ld.quality else "U"
+                    if ld.timestamp and isinstance(ld.timestamp, datetime):
+                        ts_obj = ld.timestamp
+
+            epoch_ms_str = str(int(ts_obj.timestamp() * 1000))
+            param_code = m.api_vname or param.tag_name.lower()
+            unit_code = m.api_unit or param.unit or ""
+
+            params_list.append({
+                "parameter": param_code.lower(),
+                "value": val_str,
+                "unit": unit_code,
+                "timestamp": epoch_ms_str,
+                "flag": quality_flag.upper() if quality_flag else "U"
+            })
+
+        if params_list:
+            tnpcb_devices.append({
+                "deviceId": str(device_id),
+                "params": params_list
+            })
+
+    return tnpcb_devices
+
+
+async def _push_tnpcb(config: ServerConfig, db, mode: str):
+    """HTTP POST TNPCB payload array to configured TNPCB endpoint URL."""
+    if not await is_cpcb_upload_allowed(db):
+        log.warning(f"[TNPCB/{mode.upper()}] Push blocked by license — queueing to PendingUpload")
+        payloads = await _build_tnpcb_payloads(db, config.id, mode)
+        target = config.live_url or config.delay_url
+        if payloads and target:
+            db.add(PendingUpload(
+                server_config_id=config.id,
+                url=target,
+                payload=payloads,
+                mode=mode,
+                last_error="Queued (license blocked)",
+            ))
+            await db.commit()
+        return
+
+    target_url = config.live_url or config.delay_url
+    if not target_url:
+        log.warning(f"[TNPCB/{mode.upper()}] Server '{config.name}' has no endpoint URL configured.")
+        return
+
+    payloads = await _build_tnpcb_payloads(db, config.id, mode)
+    if not payloads:
+        log.debug(f"[TNPCB/{mode.upper()}] No active mappings for TNPCB '{config.name}' — skipping.")
+        return
+
+    token = (config.cpcb_file_path or "").strip()
+    headers = {
+        "Content-Type": "application/json",
+    }
+    if token:
+        if not token.lower().startswith("basic "):
+            token = f"Basic {token}"
+        headers["Authorization"] = token
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            res = await client.post(target_url, json=payloads, headers=headers)
+            try:
+                res_json = res.json()
+                status_code = res_json.get("status")
+                msg = res_json.get("msg")
+                if res.status_code == 200 and status_code == 1:
+                    log.info(f"[TNPCB/{mode.upper()}] [SUCCESS] Pushed {len(payloads)} device(s) to TNPCB at {target_url} — status: 1 ({msg})")
+                else:
+                    log.warning(f"[TNPCB/{mode.upper()}] [RESPONSE] HTTP {res.status_code} | Code {status_code} | Msg: {msg}")
+            except Exception:
+                log.info(f"[TNPCB/{mode.upper()}] Pushed to TNPCB at {target_url} — HTTP {res.status_code}")
+    except Exception as e:
+        log.error(f"[TNPCB/{mode.upper()}] Failed to push to TNPCB: {e}")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CPCB — CSV Flat-File (Annexure-I format, CPCB IT Division)
@@ -1088,6 +1249,9 @@ async def run_server_push(mode: str = "live"):
 
                 if proto == "cpcb":
                     await _push_cpcb(config, db)
+
+                elif proto == "tnpcb":
+                    await _push_tnpcb(config, db, mode)
 
                 elif proto == "both":
                     if mode == "live":

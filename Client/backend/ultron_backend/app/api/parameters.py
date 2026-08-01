@@ -306,6 +306,53 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
             else:
                 value, quality = None, "E"
                 
+        elif protocol == "serial_ascii":
+            # RS232/ASCII: reuse the polling engine's shared reader for this device.
+            # Windows serial ports are exclusive — opening a second connection
+            # causes PermissionError (Access Denied) → quality 'E'.
+            from app.services import polling_engine as _pe
+            shared_reader = _pe._serial_ascii.get(device.id)
+            if shared_reader is None:
+                # Port not yet opened by the polling engine — create a temporary one
+                from app.services.serial_ascii import SerialASCIIReader
+                shared_reader = SerialASCIIReader(
+                    port=target_serial_port or device.serial_port or "COM1",
+                    baudrate=target_baud_rate or 9600,
+                    data_bits=target_data_bits or 8,
+                    parity=target_parity or "N",
+                    stop_bits=target_stop_bits or 1,
+                    timeout=min(device.timeout or 3, 5),
+                    command_format=device.command_format or "ascii",
+                    request_command=device.request_command or "",
+                    response_delimiter=device.response_delimiter or "newline",
+                )
+                _owned_reader = True
+            else:
+                _owned_reader = False
+            param_dict = {
+                "id": param.id,
+                "tag_name": param.tag_name,
+                "register_address": param.register_address,
+                "data_type": param.data_type.value if hasattr(param.data_type, "value") else str(param.data_type),
+                "scale_factor": param.scale_factor,
+                "offset": param.offset,
+                "parse_method": param.parse_method or "csv_col",
+                "parse_config": param.parse_config,
+                "serial_port": target_serial_port or device.serial_port,
+                "baud_rate": target_baud_rate or device.baud_rate,
+                "data_bits": target_data_bits or device.data_bits,
+                "parity": target_parity or device.parity,
+                "stop_bits": target_stop_bits or device.stop_bits,
+            }
+            res = await shared_reader.poll_parameters([param_dict])
+            if _owned_reader:
+                await shared_reader.close()
+            if res and len(res) > 0:
+                value = res[0]["value"]
+                quality = res[0]["quality"]
+            else:
+                value, quality = None, "E"
+
         else:
             return {
                 "success": False,

@@ -107,6 +107,7 @@ export const ReportsScreen = React.memo(() => {
   const [trendSeries, setTrendSeries] = useState<any>(null);
   const [trendRows, setTrendRows] = useState<any[]>([]);
   const [trendLoading, setTrendLoading] = useState(false);
+  const [trendGenerated, setTrendGenerated] = useState(false);
 
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstanceRef = useRef<ChartJS | null>(null);
@@ -176,6 +177,7 @@ export const ReportsScreen = React.memo(() => {
     const ac = new AbortController();
     abortRef.current = ac;
     setTrendLoading(true);
+    setTrendGenerated(true);
     const startIso = `${trendFromDate}T${trendFromTime}:00Z`;
     const endIso = `${trendToDate}T${trendToTime}:59Z`;
 
@@ -186,8 +188,8 @@ export const ReportsScreen = React.memo(() => {
       const resData = await res.json();
       const series = resData.series && resData.series[0];
       if (!series || !series.labels.length) {
-        showToast('No telemetry data found.', 'warn');
-        setTrendSeries(null); setTrendRows([]);
+        showToast('No telemetry data in this range.', 'warn');
+        setTrendSeries({ empty: true }); setTrendRows([]);
         if (chartInstanceRef.current) { chartInstanceRef.current.destroy(); chartInstanceRef.current = null; }
         return;
       }
@@ -296,12 +298,14 @@ export const ReportsScreen = React.memo(() => {
     setTrendFromDate(dlDate(-1)); setTrendFromTime('00:00');
     setTrendToDate(dlDate(0)); setTrendToTime('23:59');
     setTrendResolution('raw');
+    setTrendSeries(null); setTrendRows([]); setTrendGenerated(false);
+    if (chartInstanceRef.current) { chartInstanceRef.current.destroy(); chartInstanceRef.current = null; }
     showToast('Filters reset.');
   };
 
   const downloadTrendPNG = async () => {
     const canvas = chartRef.current;
-    if (!canvas) return showToast('Generate a trend first.', 'warn');
+    if (!canvas || !chartInstanceRef.current) return showToast('No chart data to export.', 'warn');
     const dataUrl = canvas.toDataURL('image/png');
     const bin = atob(dataUrl.split(',')[1]);
     const buf = new Uint8Array(bin.length);
@@ -313,7 +317,7 @@ export const ReportsScreen = React.memo(() => {
   };
 
   const downloadTrendPDF = async () => {
-    if (!chartInstanceRef.current) return showToast('Generate a trend first.', 'warn');
+    if (!chartInstanceRef.current) return showToast('No chart data to export.', 'warn');
     setTrendLoading(true);
     try {
       const { jsPDF } = await import('jspdf');
@@ -358,7 +362,7 @@ export const ReportsScreen = React.memo(() => {
   };
 
   const downloadTrendCSV = async () => {
-    if (!trendRows.length) return showToast('Generate a trend first.', 'warn');
+    if (!trendRows.length) return showToast('No trend data to export.', 'warn');
     const cols = ['Timestamp', 'Parameter', 'Value', 'Unit', 'Quality', 'Source'];
     const rows = trendRows.map(r => [r.timestamp, r.parameter, r.value, r.unit, r.quality, r.source]);
     const csv = [cols.join(','), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))].join('\n');
@@ -392,8 +396,14 @@ export const ReportsScreen = React.memo(() => {
       const resData: any = await res.json();
       const seriesList: any[] = resData.series || [];
       if (!seriesList.length || !seriesList[0].labels.length) {
+        const naHeaders = ['Date & Time', ...selectedParamIds.map(id => {
+          const p = parameters.find(p => String(p.id) === id);
+          return p ? `${p.name} (${p.tag_name})` : `Param ${id}`;
+        })];
+        const naRow: Record<string, any> = { 'Date & Time': fromDate + ' ' + fromTime + ' — ' + toDate + ' ' + toTime };
+        naHeaders.slice(1).forEach(h => { naRow[h] = 'NA'; });
         showToast('No telemetry data for selected range.', 'warn');
-        return null;
+        return { headers: naHeaders, rows: [naRow] };
       }
 
       const headers = ['Date & Time', ...seriesList.map(s => s.name)];
@@ -404,11 +414,25 @@ export const ReportsScreen = React.memo(() => {
         s.labels.forEach((lbl: string, idx: number) => { if (dataByTs[lbl]) dataByTs[lbl][s.name] = s.values[idx]; });
       });
 
+const formatValPrecision = (val: any): string => {
+  if (val === null || val === undefined || val === '' || val === 'NA') return 'NA';
+  const num = typeof val === 'number' ? val : parseFloat(String(val));
+  if (isNaN(num)) return 'NA';
+  const str = String(val);
+  if (str.includes('.')) {
+    const dec = str.split('.')[1];
+    if (dec.length > 2) {
+      return num.toFixed(Math.min(dec.length, 4));
+    }
+  }
+  return num.toFixed(2);
+};
+
       const rows = timestamps.map(ts => {
         const row: Record<string, any> = { 'Date & Time': fmtTs(parseUtcDate(ts)) };
         seriesList.forEach((s, idx) => {
           const val = dataByTs[ts][s.name];
-          row[headers[idx + 1]] = val !== null && val !== undefined ? Number(val).toFixed(2) : 'NA';
+          row[headers[idx + 1]] = val !== null && val !== undefined ? formatValPrecision(val) : 'NA';
         });
         return row;
       });
@@ -450,6 +474,12 @@ export const ReportsScreen = React.memo(() => {
       : Math.ceil(numMinutes / ({ avg_1min: 1, avg_5min: 5, avg_15min: 15, avg_30min: 30, avg_1hr: 60, avg_3hr: 180, avg_6hr: 360, avg_12hr: 720, avg_24hr: 1440 } as Record<string, number>)[interval] || 60);
     if (numDays > 15 || estRows > 21600) {
       if (!window.confirm(`This export covers ${numDays.toFixed(1)} days (~${estRows.toLocaleString()} rows). Continue?`)) return;
+    }
+
+    const check = await fetchData();
+    if (!check || check.rows.every(r => Object.values(r).slice(1).every(v => v === 'NA'))) {
+      showToast('No data to export for this range.', 'warn');
+      setReportLoading(false); return;
     }
 
     setReportLoading(true);
@@ -566,9 +596,17 @@ export const ReportsScreen = React.memo(() => {
           <button className="btn" onClick={handlePreview} disabled={reportLoading}>Refresh Preview</button>
         </div>
 
-        {/* Preview Data Table */}
+        {/* Preview Data Table — Showing latest 30 rows (current 30 minutes) */}
         {(previewHeaders.length > 0 && previewRows.length > 0) && (
           <div className="table-wrapper" style={{ marginTop: '16px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: '#166534' }}>
+                📊 Showing Latest 30 Records (Current 30 Minutes) — True Precision
+              </span>
+              <span style={{ fontSize: '12px', fontWeight: '600', color: '#15803d' }}>
+                Total Range Records: {previewRows.length}
+              </span>
+            </div>
             <table className="table">
               <thead>
                 <tr>
@@ -576,12 +614,12 @@ export const ReportsScreen = React.memo(() => {
                 </tr>
               </thead>
               <tbody>
-                {previewRows.slice(0, 50).map((row, idx) => (
+                {previewRows.slice(-30).reverse().map((row, idx) => (
                   <tr key={idx}>
-                    <td>{row['Date & Time']}</td>
+                    <td style={{ fontWeight: '700', color: '#0f172a' }}>{row['Date & Time']}</td>
                     {previewHeaders.slice(1).map(h => {
                       const val = row[h];
-                      return <td key={h} style={{ fontWeight: val !== 'NA' ? '600' : '400' }}>{val}</td>;
+                      return <td key={h} style={{ fontWeight: val !== 'NA' ? '600' : '400', color: val !== 'NA' ? '#0f766e' : '#94a3b8' }}>{val}</td>;
                     })}
                   </tr>
                 ))}
@@ -652,8 +690,9 @@ export const ReportsScreen = React.memo(() => {
 
       <div className="card">
         <div className="section-title">Trend Graph</div>
-        {!trendSeries && !trendLoading && <div className="table-empty" style={{ padding: '40px', textAlign: 'center' }}>Set filters and click "Generate Trend".</div>}
-        <canvas ref={chartRef} id="trendChart" height="100" style={{ display: trendSeries ? 'block' : 'none' }}></canvas>
+        {!trendGenerated && !trendLoading && <div className="table-empty" style={{ padding: '40px', textAlign: 'center' }}>Set filters and click "Generate Trend".</div>}
+        {trendGenerated && !trendLoading && trendSeries && (trendSeries as any).empty && <div className="table-empty" style={{ padding: '40px', textAlign: 'center' }}>No data (NA) in this range</div>}
+        <canvas ref={chartRef} id="trendChart" height="100" style={{ display: trendSeries && !(trendSeries as any).empty ? 'block' : 'none' }}></canvas>
       </div>
 
     </div>
