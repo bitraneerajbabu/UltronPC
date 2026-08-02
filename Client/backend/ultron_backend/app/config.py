@@ -216,11 +216,10 @@ def _load_or_create_secret_key() -> str:
 
 
 # ─── Canonical Default Admin Credentials ──────────────────────────
-# Single source of truth for the initial admin account.
-# These constants MUST match the values in .env.template.
-# Customers can override via ADMIN_USERNAME / ADMIN_PASSWORD in .env.
+# ADMIN_USERNAME has a fixed default, but ADMIN_PASSWORD MUST be set
+# explicitly via .env / environment — there is no built-in default.
+# model_post_init (below) refuses to start the server without it.
 DEFAULT_ADMIN_USERNAME = "Master"
-DEFAULT_ADMIN_PASSWORD = "Ultronpoiu"
 
 
 class Settings(BaseSettings):
@@ -255,12 +254,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
     ADMIN_USERNAME: str = Field(default=DEFAULT_ADMIN_USERNAME)
-    ADMIN_PASSWORD: str = Field(default=DEFAULT_ADMIN_PASSWORD)
-
-    @field_validator("ADMIN_PASSWORD", mode="before")
-    @classmethod
-    def validate_admin_password(cls, v):
-        return v if v else DEFAULT_ADMIN_PASSWORD
+    ADMIN_PASSWORD: str = ""
 
     @field_validator("SECRET_KEY", mode="before")
     @classmethod
