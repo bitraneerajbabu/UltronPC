@@ -97,7 +97,7 @@ export const ReportsScreen = React.memo(() => {
 
   const [selectedParamIds, setSelectedParamIds] = useState<string[]>([]);
 
-  // ─── Trend Chart state ──────────────────────────────────────
+  // â”€â”€â”€ Trend Chart state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [trendParamId, setTrendParamId] = useState('');
   const [trendResolution, setTrendResolution] = useState('raw');
   const [trendFromDate, setTrendFromDate] = useState(dlDate(-1));
@@ -216,10 +216,10 @@ export const ReportsScreen = React.memo(() => {
         const shortLabels = series.labels.map((lbl: string) => fmtShortDate(lbl));
         const paramObj = parameters.find(p => String(p.id) === String(trendParamId)) || {};
         const limitLines: { value: number; color: string; label: string }[] = [
-          ['alarm_high_high', '#ef4444', 'H/H'],
-          ['alarm_high', '#f59e0b', 'High'],
-          ['alarm_low', '#f59e0b', 'Low'],
-          ['alarm_low_low', '#ef4444', 'L/L'],
+          ['alarm_high_high', 'var(--danger)', 'H/H'],
+          ['alarm_high', 'var(--warning)', 'High'],
+          ['alarm_low', 'var(--warning)', 'Low'],
+          ['alarm_low_low', 'var(--danger)', 'L/L'],
         ].filter(([k]) => (paramObj as any)[k] != null && !isNaN(Number((paramObj as any)[k])))
          .map(([k, c, l]) => ({ value: Number((paramObj as any)[k]), color: c as string, label: l as string }));
         const maxLimit = limitLines.length > 0 ? Math.max(...limitLines.map(ll => ll.value)) : undefined;
@@ -232,11 +232,11 @@ export const ReportsScreen = React.memo(() => {
             datasets: [{
               label: `${series.name} (${series.unit})`,
               data: series.values,
-              borderColor: '#0d4f49',
+              borderColor: 'var(--primary-600)',
               backgroundColor: 'rgba(13,79,73,0.07)',
               fill: true,
               tension: trendResolution === 'raw' ? 0 : 0.3,
-              pointBackgroundColor: '#0d4f49',
+              pointBackgroundColor: 'var(--primary-600)',
               pointBorderColor: '#fff',
               pointRadius: 2,
               pointHoverRadius: 5
@@ -246,13 +246,13 @@ export const ReportsScreen = React.memo(() => {
             responsive: true,
             animation: false,
             plugins: {
-              legend: { labels: { color: '#475569', font: { weight: 600, family: 'Inter, sans-serif' } } }
+              legend: { labels: { color: 'var(--text-secondary)', font: { weight: 600, family: 'Inter, sans-serif' } } }
             },
             scales: {
-              x: { ticks: { color: '#94a3b8', font: { size: 10 }, maxTicksLimit: 15 }, grid: { color: '#f1f5f9' } },
+              x: { ticks: { color: 'var(--text-secondary)', font: { size: 10 }, maxTicksLimit: 15 }, grid: { color: 'var(--surface-muted)' } },
               y: {
-                ticks: { color: '#94a3b8', font: { size: 11 } },
-                grid: { color: '#f1f5f9' },
+                ticks: { color: 'var(--text-secondary)', font: { size: 11 } },
+                grid: { color: 'var(--surface-muted)' },
                 suggestedMax: maxLimit !== undefined ? maxLimit * 1.1 : undefined,
                 suggestedMin: minLimit !== undefined ? Math.min(0, minLimit * 0.9) : 0
               }
@@ -285,7 +285,7 @@ export const ReportsScreen = React.memo(() => {
           }]
         });
       }
-      showToast(`Trend loaded — ${series.labels.length} points.`);
+      showToast(`Trend loaded â€” ${series.labels.length} points.`);
     } catch (e: any) {
       if (e.name === 'AbortError') return;
       showToast('Failed to fetch trend.', 'error');
@@ -400,7 +400,7 @@ export const ReportsScreen = React.memo(() => {
           const p = parameters.find(p => String(p.id) === id);
           return p ? `${p.name} (${p.tag_name})` : `Param ${id}`;
         })];
-        const naRow: Record<string, any> = { 'Date & Time': fromDate + ' ' + fromTime + ' — ' + toDate + ' ' + toTime };
+        const naRow: Record<string, any> = { 'Date & Time': fromDate + ' ' + fromTime + ' â€” ' + toDate + ' ' + toTime };
         naHeaders.slice(1).forEach(h => { naRow[h] = 'NA'; });
         showToast('No telemetry data for selected range.', 'warn');
         return { headers: naHeaders, rows: [naRow] };
@@ -512,7 +512,7 @@ const formatValPrecision = (val: any): string => {
 
   return (
     <div className="screen active" id="reportsScreen">
-      {/* ─── Merged Single Reports Card ─── */}
+      {/* â”€â”€â”€ Merged Single Reports Card â”€â”€â”€ */}
       <div className="card" style={{ marginBottom: '18px' }}>
         <div className="section-title">Reports & Data Export</div>
         {reportLoading && <div className="loader" style={{ margin: '12px 0' }}></div>}
@@ -596,14 +596,14 @@ const formatValPrecision = (val: any): string => {
           <button className="btn" onClick={handlePreview} disabled={reportLoading}>Refresh Preview</button>
         </div>
 
-        {/* Preview Data Table — Showing latest 30 rows (current 30 minutes) */}
+        {/* Preview Data Table â€” Showing latest 30 rows (current 30 minutes) */}
         {(previewHeaders.length > 0 && previewRows.length > 0) && (
           <div className="table-wrapper" style={{ marginTop: '16px' }}>
-            <div style={{ padding: '10px 14px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-              <span style={{ fontSize: '13px', fontWeight: '700', color: '#166534' }}>
-                📊 Showing Latest 30 Records (Current 30 Minutes) — True Precision
+            <div style={{ padding: '10px 14px', backgroundColor: 'var(--success-bg)', border: '1px solid var(--success-bg)', borderRadius: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--success-text)' }}>
+                ðŸ“Š Showing Latest 30 Records (Current 30 Minutes) â€” True Precision
               </span>
-              <span style={{ fontSize: '12px', fontWeight: '600', color: '#15803d' }}>
+              <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--success-text)' }}>
                 Total Range Records: {previewRows.length}
               </span>
             </div>
@@ -616,10 +616,10 @@ const formatValPrecision = (val: any): string => {
               <tbody>
                 {previewRows.slice(-30).reverse().map((row, idx) => (
                   <tr key={idx}>
-                    <td style={{ fontWeight: '700', color: '#0f172a' }}>{row['Date & Time']}</td>
+                    <td style={{ fontWeight: '700', color: 'var(--text-primary)' }}>{row['Date & Time']}</td>
                     {previewHeaders.slice(1).map(h => {
                       const val = row[h];
-                      return <td key={h} style={{ fontWeight: val !== 'NA' ? '600' : '400', color: val !== 'NA' ? '#0f766e' : '#94a3b8' }}>{val}</td>;
+                      return <td key={h} style={{ fontWeight: val !== 'NA' ? '600' : '400', color: val !== 'NA' ? 'var(--primary-600)' : 'var(--text-secondary)' }}>{val}</td>;
                     })}
                   </tr>
                 ))}
@@ -629,7 +629,7 @@ const formatValPrecision = (val: any): string => {
         )}
       </div>
 
-      {/* ─── Trend Chart Section ──────────────────────────── */}
+      {/* â”€â”€â”€ Trend Chart Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="card" style={{ marginTop: '18px' }}>
         <div className="section-title">Trend Chart</div>
         <div className="filter-grid">

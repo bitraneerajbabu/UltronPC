@@ -31,6 +31,7 @@ from app.services.parser_engine.position import PositionParser
 from app.services.parser_engine.delimiter_split import DelimiterSplitParser
 from app.services.parser_engine.regex_ import RegexParser
 from app.services.parser_engine.key_value import KeyValueParser
+from app.services.parser_engine.binary_float import BinaryFloatParser
 
 
 class UnknownParserError(ValueError):
@@ -47,9 +48,7 @@ _REGISTRY: dict[str, type[BaseParser]] = {
     "delimiter_split": DelimiterSplitParser,
     "regex":           RegexParser,
     "key_value":       KeyValueParser,
-    # Future parsers registered here — no other files need to change:
-    # "fixed_frame":     FixedFrameParser,
-    # "checksum_ascii":  ChecksumAsciiParser,
+    "binary_float":    BinaryFloatParser,
 }
 
 

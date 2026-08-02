@@ -3,16 +3,16 @@ import { T, PARAM_STATE, getParamState, PROTO, BTN } from '../theme';
 
 describe('theme', () => {
   it('exports core design tokens', () => {
-    expect(T.primary).toBe('#0f766e');
-    expect(T.danger).toBe('#ef4444');
-    expect(T.success).toBe('#10b981');
+    expect(T.primary).toBe('#0F6E56');
+    expect(T.danger).toBe('#E24B4A');
+    expect(T.success).toBe('#639922');
     expect(T.fontBase).toContain('Inter');
   });
 
   it('PARAM_STATE has expected shapes', () => {
     expect(PARAM_STATE.good.cls).toBe('sensor-card-good');
     expect(PARAM_STATE.offline.badge).toBe('OFFLINE');
-    expect(PARAM_STATE.critical.dot).toBe('#ea580c');
+    expect(PARAM_STATE.critical.dot).toBe('#E24B4A');
   });
 
   it('getParamState returns good for null livePoint', () => {

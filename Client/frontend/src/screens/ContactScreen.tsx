@@ -1,5 +1,6 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
+import { IconPhone, IconMail, IconGlobe, IconMapPin } from '@tabler/icons-react';
 
 const s: Record<string, React.CSSProperties> = {
   grid: {
@@ -12,7 +13,7 @@ const s: Record<string, React.CSSProperties> = {
     background: '#fff',
     borderRadius: '10px',
     padding: '18px 20px',
-    border: '1px solid #e2e8f0',
+    border: '1px solid var(--border)',
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
@@ -20,7 +21,7 @@ const s: Record<string, React.CSSProperties> = {
   heading: {
     fontSize: '13px',
     fontWeight: '700',
-    color: '#0f766e',
+    color: 'var(--primary-600)',
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
     display: 'flex',
@@ -30,7 +31,7 @@ const s: Record<string, React.CSSProperties> = {
   label: {
     fontSize: '11px',
     fontWeight: '700',
-    color: '#64748b',
+    color: 'var(--text-secondary)',
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
     marginBottom: '1px',
@@ -38,7 +39,7 @@ const s: Record<string, React.CSSProperties> = {
   value: {
     fontSize: '13px',
     fontWeight: '600',
-    color: '#0f172a',
+    color: 'var(--text-primary)',
     lineHeight: 1.5,
   },
   offices: {
@@ -57,31 +58,19 @@ const IconWrapper = ({ children }: { children: React.ReactNode }) => (
 );
 
 const PhoneIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0f766e" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-  </svg>
+  <IconPhone size={15} stroke={2.2} color="var(--primary-600)" />
 );
 
 const MailIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0f766e" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-    <polyline points="22,6 12,13 2,6" />
-  </svg>
+  <IconMail size={15} stroke={2.2} color="var(--primary-600)" />
 );
 
 const GlobeIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0f766e" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="2" y1="12" x2="22" y2="12" />
-    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-  </svg>
+  <IconGlobe size={15} stroke={2.2} color="var(--primary-600)" />
 );
 
 const MapPinIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0f766e" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-    <circle cx="12" cy="10" r="3" />
-  </svg>
+  <IconMapPin size={15} stroke={2.2} color="var(--primary-600)" />
 );
 
 export const ContactScreen = React.memo(() => {
@@ -93,8 +82,8 @@ export const ContactScreen = React.memo(() => {
     <div className="screen active" id="contactScreen">
       <div className="card">
         <div className="section-title">Contact Us</div>
-        <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 18px', lineHeight: 1.6 }}>
-          Welcome, <strong style={{ color: '#0f172a' }}>{currentUser}</strong>. For any assistance, please reach out to our support team.
+        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 18px', lineHeight: 1.6 }}>
+          Welcome, <strong style={{ color: 'var(--text-primary)' }}>{currentUser}</strong>. For any assistance, please reach out to our support team.
         </p>
 
         <div style={s.grid}>
@@ -140,13 +129,13 @@ export const ContactScreen = React.memo(() => {
         </div>
 
         <div style={{ marginTop: '14px', padding: '16px 20px', background: 'linear-gradient(135deg, rgba(15,118,110,0.05) 0%, rgba(13,148,136,0.08) 100%)', borderRadius: '10px', border: '1px solid rgba(15,118,110,0.12)' }}>
-          <div style={{ fontSize: '12px', fontWeight: '700', color: '#0f766e', textAlign: 'center', marginBottom: '4px' }}>
+          <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--primary-600)', textAlign: 'center', marginBottom: '4px' }}>
             UltrON Industrial Monitoring Platform
           </div>
-          <div style={{ fontSize: '11px', color: '#64748b', textAlign: 'center', lineHeight: 1.6 }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.6 }}>
             Real-time telemetry, CPCB compliance, and alarm management system.
             <br />Developed by{' '}
-            <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#0f766e', fontWeight: '600', textDecoration: 'none' }}>
+            <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-600)', fontWeight: '600', textDecoration: 'none' }}>
               Neeraj
             </a>
             {localVersion && <> &mdash; v{localVersion}</>}

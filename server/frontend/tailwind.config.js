@@ -8,14 +8,14 @@ export default {
     extend: {
       colors: {
         brand: {
-          bg: '#b5cad0',
-          card: '#c4d6db',
-          border: '#9db7c0',
-          'border-light': '#b5cad0',
-          btn: '#5397ad',
-          'btn-hover': '#468697',
-          accent: '#3a7a8e',
-          muted: '#4a6a78',
+          bg: '#FAF8F2',
+          card: '#FFFFFF',
+          border: 'rgba(0, 0, 0, 0.08)',
+          'border-light': '#F4F0E6',
+          btn: '#0F6E56',
+          'btn-hover': '#085041',
+          accent: '#1D9E75',
+          muted: '#6B6E6C',
         },
       },
     },

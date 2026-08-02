@@ -45,13 +45,13 @@ function parseUTCDate(ts?: string | null): Date | null {
 }
 
 function getConnectionStatus(last_sync?: string): { label: string; color: string; statusKey: string } {
-  if (!last_sync) return { label: 'NC', color: '#9CA3AF', statusKey: 'nc' };
+  if (!last_sync) return { label: 'NC', color: '#6B6E6C', statusKey: 'nc' };
   const d = parseUTCDate(last_sync);
-  if (!d) return { label: 'NC', color: '#9CA3AF', statusKey: 'nc' };
+  if (!d) return { label: 'NC', color: '#6B6E6C', statusKey: 'nc' };
   const diffMs = Math.abs(Date.now() - d.getTime());
   const diffMins = diffMs / 60000;
-  if (diffMins < 5) return { label: 'online', color: '#16A34A', statusKey: 'online' };
-  return { label: 'offline', color: '#DC2626', statusKey: 'offline' };
+  if (diffMins < 5) return { label: 'online', color: '#639922', statusKey: 'online' };
+  return { label: 'offline', color: '#E24B4A', statusKey: 'offline' };
 }
 
 function formatIST(ts?: string | null): string {
@@ -365,10 +365,10 @@ function App() {
     const values = pts.map(p => p.value);
     const ctx = historyChartRef.current.getContext('2d');
     if (!ctx) return;
-    const lineColor = darkMode ? '#60A5FA' : '#2563eb';
-    const fillColor = darkMode ? 'rgba(96,165,250,0.1)' : 'rgba(37,99,235,0.1)';
+    const lineColor = darkMode ? '#378ADD' : '#378ADD';
+    const fillColor = darkMode ? 'rgba(55,138,221,0.1)' : 'rgba(55,138,221,0.1)';
     const gridColor = darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
-    const tickColor = darkMode ? '#94A3B8' : '#64748B';
+    const tickColor = darkMode ? '#8AA79E' : '#6B6E6C';
     historyChartInstance.current = new Chart(ctx, {
       type: 'line',
       data: {
@@ -460,12 +460,12 @@ function App() {
   });
 
   const kpiData = [
-    { id: 'total', icon: <Icon name="Factory" size={26} />, label: 'Total Plants', value: sites.length, color: '#2563EB', trend: { value: `${sites.length} registered`, positive: true } },
-    { id: 'online', icon: <Icon name="Wifi" size={26} />, label: 'Online', value: sites.filter(s => s.is_active && getConnectionStatus(s.last_sync).statusKey === 'online').length, color: '#16A34A', trend: { value: `${Math.round(sites.filter(s => s.is_active).length / Math.max(sites.length, 1) * 100)}% uptime`, positive: true } },
-    { id: 'offline', icon: <Icon name="WifiOff" size={26} />, label: 'Offline', value: sites.filter(s => !s.is_active).length, color: '#DC2626', trend: { value: `${sites.filter(s => !s.is_active && s.last_error).length} with errors`, positive: false } },
-    { id: 'alarms', icon: <Icon name="AlertTriangle" size={26} />, label: 'Critical Alerts', value: alarmStats?.total_active || 0, color: '#F59E0B', subtitle: `${alarmStats?.total_today || 0} triggered today` },
-    { id: 'notif', icon: <Icon name="BellRing" size={26} />, label: 'Notifications', value: alarms.filter((a: any) => a.status === 'active').length, color: '#8B5CF6' },
-    { id: 'amc', icon: <Icon name="CalendarRange" size={26} />, label: 'AMC Expiring', value: sites.filter(s => s.amc_expiry && new Date(s.amc_expiry) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)).length, color: '#EC4899' },
+    { id: 'total', icon: <Icon name="Factory" size={26} />, label: 'Total Plants', value: sites.length, color: '#0F6E56', trend: { value: `${sites.length} registered`, positive: true } },
+    { id: 'online', icon: <Icon name="Wifi" size={26} />, label: 'Online', value: sites.filter(s => s.is_active && getConnectionStatus(s.last_sync).statusKey === 'online').length, color: '#639922', trend: { value: `${Math.round(sites.filter(s => s.is_active).length / Math.max(sites.length, 1) * 100)}% uptime`, positive: true } },
+    { id: 'offline', icon: <Icon name="WifiOff" size={26} />, label: 'Offline', value: sites.filter(s => !s.is_active).length, color: '#E24B4A', trend: { value: `${sites.filter(s => !s.is_active && s.last_error).length} with errors`, positive: false } },
+    { id: 'alarms', icon: <Icon name="AlertTriangle" size={26} />, label: 'Critical Alerts', value: alarmStats?.total_active || 0, color: '#EF9F27', subtitle: `${alarmStats?.total_today || 0} triggered today` },
+    { id: 'notif', icon: <Icon name="BellRing" size={26} />, label: 'Notifications', value: alarms.filter((a: any) => a.status === 'active').length, color: '#378ADD' },
+    { id: 'amc', icon: <Icon name="CalendarRange" size={26} />, label: 'AMC Expiring', value: sites.filter(s => s.amc_expiry && new Date(s.amc_expiry) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)).length, color: '#C07E12' },
   ];
 
 
@@ -574,7 +574,7 @@ function App() {
                             <StatusBadge status={conn.statusKey} />
                           </TableCell>
                           <TableCell>
-                            {site.last_error && <Tooltip title={site.last_error}><Icon name="AlertTriangle" size={18} color="#DC2626" /></Tooltip>}
+                            {site.last_error && <Tooltip title={site.last_error}><Icon name="AlertTriangle" size={18} color="#E24B4A" /></Tooltip>}
                           </TableCell>
                           <TableCell>
                             {editingExpiry === site.id ? (
@@ -643,7 +643,7 @@ function App() {
                 return <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: c.color }} />
                   <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>{c.label}</Typography>
-                  {c.statusKey === 'online' && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#16A34A', animation: 'pulse 2s infinite', ml: 1 }} />}
+                  {c.statusKey === 'online' && <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#639922', animation: 'pulse 2s infinite', ml: 1 }} />}
                   {activeSite.last_sync && <Typography variant="caption" sx={{ color: 'text.disabled', ml: 1 }}>
                     Last sync: {formatIST(activeSite.last_sync)}
                   </Typography>}
@@ -701,12 +701,12 @@ function App() {
                           ) : liveData.map((pt) => {
                             const q = pt.quality?.toUpperCase();
                             const qualityMap: Record<string, { label: string; color: string }> = {
-                              U: { label: 'Valid',   color: '#16A34A' },
-                              O: { label: 'Invalid', color: '#D97706' },
-                              E: { label: 'Error',   color: '#DC2626' },
-                              N: { label: 'No Data', color: '#6B7280' },
+                              U: { label: 'Valid',   color: '#639922' },
+                              O: { label: 'Invalid', color: '#EF9F27' },
+                              E: { label: 'Error',   color: '#E24B4A' },
+                              N: { label: 'No Data', color: '#6B6E6C' },
                             };
-                            const qInfo = qualityMap[q] ?? { label: q || '?', color: '#6B7280' };
+                            const qInfo = qualityMap[q] ?? { label: q || '?', color: '#6B6E6C' };
                             const ago = formatIST(pt.timestamp);
                             return (
                               <TableRow key={pt.tag_name} hover>
@@ -769,7 +769,7 @@ function App() {
                             '&:hover': { bgcolor: 'action.focus' }
                           }} onClick={() => setExpandedStationId(isExpanded ? -1 : s.id)}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                              <Icon name={isExpanded ? "ChevronDown" : "ChevronRight"} size={18} color="#64748B" />
+                              <Icon name={isExpanded ? "ChevronDown" : "ChevronRight"} size={18} color="#6B6E6C" />
                               <Box>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{s.station_name}</Typography>
                                 <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -804,7 +804,7 @@ function App() {
                                   </IconButton>
                                 </>
                               ) : (
-                                <Typography variant="caption" sx={{ fontFamily: 'mono', color: '#DC2626', fontSize: 10, fontStyle: 'italic' }}>
+                                <Typography variant="caption" sx={{ fontFamily: 'mono', color: '#E24B4A', fontSize: 10, fontStyle: 'italic' }}>
                                   Not Generated
                                 </Typography>
                               )}
@@ -843,12 +843,12 @@ function App() {
                                     ) : stationParams.map((pt) => {
                                       const q = pt.quality?.toUpperCase();
                                       const qualityMap: Record<string, { label: string; color: string }> = {
-                                        U: { label: 'Valid',   color: '#16A34A' },
-                                        O: { label: 'Invalid', color: '#D97706' },
-                                        E: { label: 'Error',   color: '#DC2626' },
-                                        N: { label: 'No Data', color: '#6B7280' },
+                                        U: { label: 'Valid',   color: '#639922' },
+                                        O: { label: 'Invalid', color: '#EF9F27' },
+                                        E: { label: 'Error',   color: '#E24B4A' },
+                                        N: { label: 'No Data', color: '#6B6E6C' },
                                       };
-                                      const qInfo = qualityMap[q] ?? { label: q || '?', color: '#6B7280' };
+                                      const qInfo = qualityMap[q] ?? { label: q || '?', color: '#6B6E6C' };
                                       const ago = formatIST(pt.timestamp);
                                       return (
                                         <TableRow key={pt.tag_name} hover>
@@ -1192,7 +1192,7 @@ function App() {
                   <SectionCard title={site.site_name}
                     action={<Chip label={site.last_error ? 'Error' : 'OK'} color={site.last_error ? 'error' : 'success'} size="small" variant="outlined" />}
                   >
-                    <Typography variant="h3" sx={{ fontSize: '32px', fontWeight: 700, color: '#2563EB', mb: 0.5 }}>
+                    <Typography variant="h3" sx={{ fontSize: '32px', fontWeight: 700, color: '#0F6E56', mb: 0.5 }}>
                       {site.total_records_synced_today?.toLocaleString() || 0}
                     </Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>records synced today</Typography>
@@ -1283,7 +1283,7 @@ function App() {
           ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               {qualitySummary.map(site => (
-                <SectionCard key={site.site_id} sx={{ cursor: 'pointer', '&:hover': { borderColor: '#2563EB' } }}
+                <SectionCard key={site.site_id} sx={{ cursor: 'pointer', '&:hover': { borderColor: '#0F6E56' } }}
                   onClick={() => {
                     setSelectedQualitySite(site.site_id);
                     adminFetch(`/api/v1/quality/${site.site_id}`).then(r => r.ok ? r.json() : []).then(d => Array.isArray(d) && setQualityDetail(d)).catch(() => {});

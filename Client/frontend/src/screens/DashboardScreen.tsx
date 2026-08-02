@@ -4,6 +4,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 import { T, GLASS_CARD, getParamState, getParamTheme } from '../theme';
 import { Sparkline } from '../components/Sparkline';
 import { AlarmsInspectorModal } from '../components/AlarmsInspectorModal';
+import { IconBuildingFactory, IconShieldCheck, IconShieldX, IconBell, IconDeviceDesktop, IconTemperature, IconDroplet, IconWind, IconCloudFog, IconActivity, IconX } from '@tabler/icons-react';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, LineController, Filler);
 
@@ -13,43 +14,15 @@ const formatCurrentTime = () => {
   return `${p(date.getDate())}-${p(date.getMonth()+1)}-${date.getFullYear()} ${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
 };
 
-const StationIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
-    <path d="M22 22H2" />
-    <path d="M17 22V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v17" />
-  </svg>
-);
+const StationIcon = () => <IconBuildingFactory size={22} stroke={2.5} style={{ color: 'rgba(255,255,255,0.85)' }} />;
 
-const OnlineIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    <path d="m9 11 2 2 4-4" />
-  </svg>
-);
+const OnlineIcon = () => <IconShieldCheck size={22} stroke={2.5} style={{ color: 'rgba(255,255,255,0.85)' }} />;
 
-const OfflineIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
-    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-);
+const OfflineIcon = () => <IconShieldX size={22} stroke={2.5} style={{ color: 'rgba(255,255,255,0.85)' }} />;
 
-const AlarmIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9z" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-  </svg>
-);
+const AlarmIcon = () => <IconBell size={22} stroke={2.5} style={{ color: 'rgba(255,255,255,0.85)' }} />;
 
-const NetworkIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
-    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-    <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-    <line x1="6" y1="6" x2="6.01" y2="6" />
-    <line x1="6" y1="18" x2="6.01" y2="18" />
-  </svg>
-);
+const NetworkIcon = () => <IconDeviceDesktop size={22} stroke={2.5} style={{ color: 'rgba(255,255,255,0.85)' }} />;
 
 const formatValPrecision = (val: any): string => {
   if (val === null || val === undefined || val === '') return '0.00';
@@ -85,7 +58,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
     : (!isNaN(valFloat)
         ? formatValPrecision(valFloat)
         : '0.00');
-  const displayTimestamp = isOffline ? (data?.timestamp && data?.timestamp !== '—' ? data.timestamp : '—') : currentTime;
+  const displayTimestamp = isOffline ? (data?.timestamp && data?.timestamp !== 'â€”' ? data.timestamp : 'â€”') : currentTime;
   const state = getParamState(p, data);
 
   const avgFloat = parseFloat(avgVal);
@@ -97,8 +70,8 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
         ? formatValPrecision(avgFloat)
         : '0.00');
 
-  let formattedTimestamp = '—';
-  if (displayTimestamp !== '—') {
+  let formattedTimestamp = 'â€”';
+  if (displayTimestamp !== 'â€”') {
     const parts = displayTimestamp.split(' ');
     if (parts.length === 2) {
       const dateParts = parts[0].split('-');
@@ -112,7 +85,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
     }
   }
   const unit = p.unit || '';
-  const limit = p.alarm_high !== null ? `>${p.alarm_high}` : '—';
+  const limit = p.alarm_high !== null ? `>${p.alarm_high}` : 'â€”';
   const range = `${p.min_valid !== null ? p.min_valid : '0'} - ${p.max_valid !== null ? p.max_valid : '1000'}`;
 
   // Get parameter-specific styling theme
@@ -129,38 +102,18 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
     const strokeColor = paramTheme.color;
     
     if (name.includes('temp')) {
-      return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
-        </svg>
-      );
+      return <IconTemperature size={20} stroke={2.5} color={strokeColor} />;
     }
     if (name.includes('hum')) {
-      return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
-        </svg>
-      );
+      return <IconDroplet size={20} stroke={2.5} color={strokeColor} />;
     }
     if (name.includes('wind') || name.includes('ws') || name.includes('wd') || name.includes('speed') || name.includes('dir')) {
-      return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/>
-        </svg>
-      );
+      return <IconWind size={20} stroke={2.5} color={strokeColor} />;
     }
     if (name.includes('pm') || name.includes('co') || name.includes('so2') || name.includes('no') || name.includes('o3') || name.includes('dust') || name.includes('ozone')) {
-      return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M17.5 19A3.5 3.5 0 0 0 21 15.5c0-2.79-2.54-4.5-5-4.5-.42-1.89-1.78-3.5-3.5-3.5a4.34 4.34 0 0 0-4 3c-2.42.36-4.5 2.21-4.5 4.5A3.5 3.5 0 0 0 7.5 19z"/>
-        </svg>
-      );
+      return <IconCloudFog size={20} stroke={2.5} color={strokeColor} />;
     }
-    return (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-      </svg>
-    );
+    return <IconActivity size={20} stroke={2.5} color={strokeColor} />;
   };
 
   return (
@@ -183,44 +136,44 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
             {renderIcon()}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>{p.name || p.tag_name}</span>
+            <span style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text-primary)' }}>{p.name || p.tag_name}</span>
             {deviceName && deviceName.trim().toLowerCase() !== 'global gateway' && (
-              <span style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>{deviceName}</span>
+              <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>{deviceName}</span>
             )}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ width: '8px', height: '8px', backgroundColor: state.dot, borderRadius: '50%', boxShadow: `0 0 8px ${state.dot}` }}></span>
-          <span style={{ fontSize: '10px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{state.cls === 'alarm' ? 'ALARM' : (isOffline ? 'OFFLINE' : 'NOMINAL')}</span>
+          <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{state.cls === 'alarm' ? 'ALARM' : (isOffline ? 'OFFLINE' : 'NOMINAL')}</span>
         </div>
       </div>
 
       {/* Main Value Block */}
       <div style={{ backgroundColor: 'rgba(245, 238, 224, 0.5)', borderRadius: '8px', padding: '16px', marginBottom: '16px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-        <span style={{ fontSize: '32px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1' }}>{formattedVal}</span>
-        <span style={{ fontSize: '14px', fontWeight: '700', color: '#64748b' }}>{unit}</span>
+        <span style={{ fontSize: '32px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1' }}>{formattedVal}</span>
+        <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-secondary)' }}>{unit}</span>
       </div>
 
       {/* Details List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>Average (15m):</span>
-          <span style={{ fontSize: '12px', fontWeight: '800', color: '#10b981' }}>{formattedAvgVal} {unit}</span>
+          <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Average (15m):</span>
+          <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--success)' }}>{formattedAvgVal} {unit}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>Warning Limit:</span>
-          <span style={{ fontSize: '12px', fontWeight: '800', color: '#ef4444' }}>{limit} {unit}</span>
+          <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Warning Limit:</span>
+          <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--danger)' }}>{limit} {unit}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>Parameter Range:</span>
-          <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>{range} {unit}</span>
+          <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Parameter Range:</span>
+          <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)' }}>{range} {unit}</span>
         </div>
       </div>
 
       {/* Sparkline Block */}
       <div style={{ backgroundColor: 'rgba(245, 238, 224, 0.5)', borderRadius: '8px', padding: '12px', marginBottom: '16px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
-         <div style={{ position: 'absolute', top: '10px', left: '10%', right: '10%', borderTop: '1px dotted #ef4444', opacity: 0.4 }}></div>
-         <div style={{ position: 'absolute', top: '20px', left: '10%', right: '10%', borderTop: '1px dotted #f97316', opacity: 0.4 }}></div>
+         <div style={{ position: 'absolute', top: '10px', left: '10%', right: '10%', borderTop: '1px dotted var(--danger)', opacity: 0.4 }}></div>
+         <div style={{ position: 'absolute', top: '20px', left: '10%', right: '10%', borderTop: '1px dotted var(--warning)', opacity: 0.4 }}></div>
          <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '10px' }}>
            <Sparkline data={history} color={sparklineColor} width={180} height={20} />
          </div>
@@ -228,8 +181,8 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
 
       {/* Footer */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', flexWrap: 'wrap', gap: '4px' }}>
-        <span style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Raw Feed: {data?.raw_value != null ? formatValPrecision(data.raw_value) : formattedVal} {unit}</span>
-        <span style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Received: <span style={{ color: '#475569', fontWeight: '700' }}>{formattedTimestamp}</span></span>
+        <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Raw Feed: {data?.raw_value != null ? formatValPrecision(data.raw_value) : formattedVal} {unit}</span>
+        <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Received: <span style={{ color: 'var(--text-secondary)', fontWeight: '700' }}>{formattedTimestamp}</span></span>
       </div>
     </div>
   );
@@ -252,7 +205,7 @@ export const DashboardScreen = React.memo(() => {
     return new Set<number>(stored ? JSON.parse(stored) : []);
   });
 
-  // KPIs pushed via WebSocket — no HTTP poll needed
+  // KPIs pushed via WebSocket â€” no HTTP poll needed
 
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
@@ -335,7 +288,7 @@ export const DashboardScreen = React.memo(() => {
   // The canvas element (chartRef) is conditionally rendered inside the modal,
   // so this effect must guard on isTrendsModalOpen to ensure chartRef.current exists.
   useEffect(() => {
-    if (!isTrendsModalOpen) return;           // canvas not in DOM yet — skip
+    if (!isTrendsModalOpen) return;           // canvas not in DOM yet â€” skip
     if (!parameters || parameters.length === 0) return;
 
     let isMounted = true;
@@ -390,7 +343,7 @@ export const DashboardScreen = React.memo(() => {
         } else {
           lastTimestampRef.current = '';
         }
-        // Render Chart — canvas is guaranteed to be mounted because isTrendsModalOpen is true
+        // Render Chart â€” canvas is guaranteed to be mounted because isTrendsModalOpen is true
         if (chartRef.current && activeParam) {
           if (chartInstanceRef.current) {
             chartInstanceRef.current.destroy();
@@ -405,16 +358,16 @@ export const DashboardScreen = React.memo(() => {
           
           const limitLines: { value: number; color: string; label: string }[] = [];
           if (paramObj.alarm_high_high != null && !isNaN(Number(paramObj.alarm_high_high))) {
-            limitLines.push({ value: Number(paramObj.alarm_high_high), color: '#ef4444', label: 'H/H' });
+            limitLines.push({ value: Number(paramObj.alarm_high_high), color: 'var(--danger)', label: 'H/H' });
           }
           if (paramObj.alarm_high != null && !isNaN(Number(paramObj.alarm_high))) {
-            limitLines.push({ value: Number(paramObj.alarm_high), color: '#f59e0b', label: 'High' });
+            limitLines.push({ value: Number(paramObj.alarm_high), color: 'var(--warning)', label: 'High' });
           }
           if (paramObj.alarm_low != null && !isNaN(Number(paramObj.alarm_low))) {
-            limitLines.push({ value: Number(paramObj.alarm_low), color: '#f59e0b', label: 'Low' });
+            limitLines.push({ value: Number(paramObj.alarm_low), color: 'var(--warning)', label: 'Low' });
           }
           if (paramObj.alarm_low_low != null && !isNaN(Number(paramObj.alarm_low_low))) {
-            limitLines.push({ value: Number(paramObj.alarm_low_low), color: '#ef4444', label: 'L/L' });
+            limitLines.push({ value: Number(paramObj.alarm_low_low), color: 'var(--danger)', label: 'L/L' });
           }
 
           const maxLimit = limitLines.length > 0 ? Math.max(...limitLines.map(ll => ll.value)) : undefined;
@@ -449,10 +402,10 @@ export const DashboardScreen = React.memo(() => {
                 }
               },
               scales: {
-                x: { ticks: { color: T.textFaint, font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+                x: { ticks: { color: T.textFaint, font: { size: 11 } }, grid: { color: 'var(--surface-muted)' } },
                 y: { 
                   ticks: { color: T.textFaint, font: { size: 11 } }, 
-                  grid: { color: '#f1f5f9' },
+                  grid: { color: 'var(--surface-muted)' },
                   suggestedMax: maxLimit !== undefined ? maxLimit * 1.1 : undefined,
                   suggestedMin: minLimit !== undefined ? Math.min(0, minLimit * 0.9) : undefined
                 }
@@ -509,7 +462,7 @@ export const DashboardScreen = React.memo(() => {
     if (!chartInstanceRef.current || !parameters || parameters.length === 0 || !selectedParam) return;
 
     const currentData = liveData[selectedParam];
-    if (!currentData || !currentData.timestamp || currentData.timestamp === '—') return;
+    if (!currentData || !currentData.timestamp || currentData.timestamp === 'â€”') return;
 
     const currentVal = parseFloat(currentData.value);
     if (isNaN(currentVal)) return;
@@ -590,8 +543,8 @@ export const DashboardScreen = React.memo(() => {
     if (!chartInstanceRef.current) return;
     const img = chartInstanceRef.current.toBase64Image();
     const html = [
-      '<html><head><style>body{margin:20px;font-family:sans-serif}img{width:100%;border:1px solid #cbd5e1;border-radius:8px}</style></head>',
-      `<body><h2>Live Trend — ${selectedParam}</h2><img src="${img}" />`,
+      '<html><head><style>body{margin:20px;font-family:sans-serif}img{width:100%;border:1px solid var(--border);border-radius:8px}</style></head>',
+      `<body><h2>Live Trend â€” ${selectedParam}</h2><img src="${img}" />`,
       '<script>window.onload=function(){window.print();setTimeout(function(){window.close()},800)};<\/script>',
       '</body></html>'
     ].join('');
@@ -635,7 +588,7 @@ export const DashboardScreen = React.memo(() => {
     assignedParams.forEach(p => {
       const device = devices.find(d => d.id == p.device_id);
       const station = stations.find(s => s.id == device?.station_id);
-      const key = station?.name || p.description || '—';
+      const key = station?.name || p.description || 'â€”';
       if (!grouped[key]) {
         grouped[key] = [];
       }
@@ -668,9 +621,9 @@ export const DashboardScreen = React.memo(() => {
       
       {/* AMC Warning Banner */}
       {amcWarning && (
-        <div style={{ padding: '12px 20px', marginBottom: '16px', background: amcWarning.severity === 'critical' ? '#fef2f2' : '#fffbeb', border: `1px solid ${amcWarning.severity === 'critical' ? '#fecaca' : '#fde68a'}`, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? '🚨' : '⚠️'}</span>
-          <span style={{ fontSize: '13px', fontWeight: '600', color: amcWarning.severity === 'critical' ? '#991b1b' : '#92400e', flex: 1 }}>{amcWarning.msg}</span>
+        <div style={{ padding: '12px 20px', marginBottom: '16px', background: amcWarning.severity === 'critical' ? 'var(--danger-bg)' : 'var(--warning-bg)', border: `1px solid ${amcWarning.severity === 'critical' ? 'var(--danger-bg)' : 'var(--warning-bg)'}`, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? 'ðŸš¨' : 'âš ï¸'}</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: amcWarning.severity === 'critical' ? 'var(--danger-text)' : 'var(--warning-text)', flex: 1 }}>{amcWarning.msg}</span>
         </div>
       )}
 
@@ -680,68 +633,68 @@ export const DashboardScreen = React.memo(() => {
         <div className="grid-5">
           <div className="kpi-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Total Stations</span>
-              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f766e, #14b8a6)' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Total Stations</span>
+              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--primary-600), var(--primary-400))' }}>
                 <StationIcon />
               </div>
             </div>
-            <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+            <div style={{ fontSize: '30px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
               {String(kpis?.totalStations || 0).padStart(2, '0')}
             </div>
           </div>
 
           <div className="kpi-card kpi-green">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Online Parameters</span>
-              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #059669, #10b981)' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Online Parameters</span>
+              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--success), var(--success))' }}>
                 <OnlineIcon />
               </div>
             </div>
-            <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+            <div style={{ fontSize: '30px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
               {String(kpis?.onlineDevices || 0).padStart(2, '0')}
             </div>
           </div>
 
           <div className="kpi-card kpi-red">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Offline Parameters</span>
-              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #dc2626, #ef4444)' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Offline Parameters</span>
+              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--danger), var(--danger))' }}>
                 <OfflineIcon />
               </div>
             </div>
-            <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+            <div style={{ fontSize: '30px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
               {String(kpis?.offlineDevices || 0).padStart(2, '0')}
             </div>
           </div>
 
           <div className="kpi-card kpi-amber" onClick={() => setShowAlarmsModal(true)} style={{ cursor: 'pointer' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Active Alarms</span>
-              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #b45309, #f59e0b)' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Active Alarms</span>
+              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--warning-text), var(--warning))' }}>
                 <AlarmIcon />
               </div>
             </div>
-            <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ fontSize: '30px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
               {String(kpis?.activeAlarms || 0).padStart(2, '0')}
               {(kpis?.activeAlarms || 0) > 0 && (
-                <span style={{ width: '7px', height: '7px', background: '#ef4444', borderRadius: '50%', display: 'inline-block', boxShadow: '0 0 8px #ef4444' }}></span>
+                <span style={{ width: '7px', height: '7px', background: 'var(--danger)', borderRadius: '50%', display: 'inline-block', boxShadow: '0 0 8px var(--danger)' }}></span>
               )}
             </div>
           </div>
 
           <div className="kpi-card kpi-blue">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>PC Network</span>
-              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0369a1, #38bdf8)' }}>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>PC Network</span>
+              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--info), var(--info))' }}>
                 <NetworkIcon />
               </div>
             </div>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', marginBottom: '4px' }}>
+            <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', marginBottom: '4px' }}>
               {networkInfo?.lan_ip || '---'}
             </div>
-            <div style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block', backgroundColor: networkInfo?.internet_connected ? '#10b981' : '#ef4444', boxShadow: networkInfo?.internet_connected ? '0 0 6px #10b981' : '0 0 6px #ef4444' }}></span>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block', backgroundColor: networkInfo?.internet_connected ? 'var(--success)' : 'var(--danger)', boxShadow: networkInfo?.internet_connected ? '0 0 6px var(--success)' : '0 0 6px var(--danger)' }}></span>
                 {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
               </span>
               {networkInfo?.hostname && <span>{networkInfo.hostname}</span>}
@@ -750,7 +703,7 @@ export const DashboardScreen = React.memo(() => {
         </div>
       </div>
 
-      {/* Body — conditional: empty state vs live telemetry */}
+      {/* Body â€” conditional: empty state vs live telemetry */}
       {isEmpty ? (
         <div className="card" style={{ padding: '40px 20px', textAlign: 'center', ...GLASS_CARD, boxShadow: T.shadowSm }}>
           <div style={{ fontSize: '18px', fontWeight: '600', color: T.textLabel, marginBottom: '10px' }}>
@@ -766,7 +719,7 @@ export const DashboardScreen = React.memo(() => {
           {isTrendsModalOpen && (
             <div style={{
               position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(13, 79, 73, 0.6)', backdropFilter: 'blur(4px)',
+              backgroundColor: 'rgba(15, 110, 86, 0.6)', backdropFilter: 'blur(4px)',
               zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
             }} onClick={() => setIsTrendsModalOpen(false)}>
               <div style={{
@@ -776,7 +729,7 @@ export const DashboardScreen = React.memo(() => {
                 padding: '24px', boxShadow: T.shadowLg, position: 'relative'
               }} onClick={e => e.stopPropagation()}>
                 <button onClick={() => setIsTrendsModalOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: T.textFaint }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  <IconX size={24} stroke={2} />
                 </button>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
                   <div>
@@ -786,20 +739,20 @@ export const DashboardScreen = React.memo(() => {
                       const device = param ? devices.find(d => d.id == param.device_id) : null;
                       const station = device ? stations.find(s => s.id == device.station_id) : null;
                       return station ? (
-                        <div style={{ fontSize: '12px', fontWeight: '600', color: '#64748b', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           {station.name}
                         </div>
                       ) : null;
                     })()}
                   </div>
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <select value={selectedParam} onChange={handleParamChange} style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${T.borderSoft}`, fontSize: '14px', fontWeight: '700', color: T.text, backgroundColor: '#f8fafc', outline: 'none', cursor: 'pointer' }}>
+                    <select value={selectedParam} onChange={handleParamChange} style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${T.borderSoft}`, fontSize: '14px', fontWeight: '700', color: T.text, backgroundColor: 'var(--surface-muted)', outline: 'none', cursor: 'pointer' }}>
                       {parameters.map(p => <option key={p.id} value={p.tag_name}>{p.name || p.tag_name}</option>)}
                     </select>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      <button onClick={downloadPNG} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PNG</button>
-                      <button onClick={downloadPDF} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PDF</button>
-                      <button onClick={exportTrendCSV} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>CSV</button>
+                      <button onClick={downloadPNG} style={{ background: 'var(--surface-muted)', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PNG</button>
+                      <button onClick={downloadPDF} style={{ background: 'var(--surface-muted)', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PDF</button>
+                      <button onClick={exportTrendCSV} style={{ background: 'var(--surface-muted)', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>CSV</button>
                     </div>
                   </div>
                 </div>
@@ -829,7 +782,7 @@ export const DashboardScreen = React.memo(() => {
             ))}
             {unassignedParameters.length > 0 && (
               <div style={{ marginBottom: '24px' }}>
-                <div style={{ fontSize: '14px', fontWeight: '700', color: T.textLabel, marginBottom: '12px', borderBottom: '1px solid rgba(100, 116, 139, 0.15)', paddingBottom: '6px' }}>
+                <div style={{ fontSize: '14px', fontWeight: '700', color: T.textLabel, marginBottom: '12px', borderBottom: '1px solid rgba(107, 110, 108, 0.15)', paddingBottom: '6px' }}>
                   Unassigned Parameters
                 </div>
                 <div className="grid-4">
@@ -850,9 +803,9 @@ export const DashboardScreen = React.memo(() => {
         if (!visible) return null;
         const sev = visible.severity || 'info';
         const colors: Record<string,any> = {
-          critical: { bg: '#fef2f2', border: '#fecaca', icon: '🚨', title: '#991b1b', text: '#7f1d1d', label: 'Critical Broadcast' },
-          warn:     { bg: '#fffbeb', border: '#fde68a', icon: '⚠️',  title: '#92400e', text: '#78350f', label: 'Warning Broadcast' },
-          info:     { bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ️',  title: '#1e40af', text: '#1e3a5f', label: 'Broadcast Message' },
+          critical: { bg: 'var(--danger-bg)', border: 'var(--danger-bg)', icon: 'ðŸš¨', title: 'var(--danger-text)', text: 'var(--danger-text)', label: 'Critical Broadcast' },
+          warn:     { bg: 'var(--warning-bg)', border: 'var(--warning-bg)', icon: 'âš ï¸',  title: 'var(--warning-text)', text: 'var(--warning-text)', label: 'Warning Broadcast' },
+          info:     { bg: 'var(--info-bg)', border: 'var(--info-bg)', icon: 'â„¹ï¸',  title: 'var(--info-text)', text: 'var(--info-text)', label: 'Broadcast Message' },
         };
         const c = colors[sev] || colors.info;
         const dismiss = () => {
@@ -868,7 +821,7 @@ export const DashboardScreen = React.memo(() => {
               <div style={{ fontSize: '13px', fontWeight: '700', color: c.title, marginBottom: '4px' }}>{c.label}</div>
               <div style={{ fontSize: '12px', color: c.text }}>{visible.message}</div>
             </div>
-            <button onClick={dismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: c.title, padding: '0 0 0 8px', lineHeight: 1 }}>×</button>
+            <button onClick={dismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: c.title, padding: '0 0 0 8px', lineHeight: 1 }}>Ã—</button>
           </div>
         );
       })()}

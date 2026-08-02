@@ -6,42 +6,42 @@
 
 // ─── Core Palette ─────────────────────────────────────────────────────────────
 export const T = {
-  // Brand / Primary — dark teal matching UltrON logo
-  primary:       '#0d4f49',
-  primaryLight:  '#14b8a6',
-  primaryGlow:   'rgba(13,79,73,0.25)',
-  primaryBg:     'rgba(13,79,73,0.06)',
-  primaryBorder: 'rgba(13,79,73,0.12)',
+  // Brand / Primary — dark teal industrial
+  primary:       '#0F6E56',
+  primaryLight:  '#1D9E75',
+  primaryGlow:   'rgba(15,110,86,0.25)',
+  primaryBg:     'rgba(15,110,86,0.06)',
+  primaryBorder: 'rgba(15,110,86,0.12)',
 
   // Semantic
-  success:    '#10b981',
-  successBg:  'rgba(16,185,129,0.12)',
-  warning:    '#f59e0b',
-  warningBg:  'rgba(245,158,11,0.12)',
-  danger:     '#ef4444',
-  dangerBg:   'rgba(239,68,68,0.1)',
-  dangerGlow: 'rgba(239,68,68,0.35)',
-  info:       '#38bdf8',
-  infoBg:     'rgba(56,189,248,0.12)',
+  success:    '#639922',
+  successBg:  'rgba(99,145,34,0.12)',
+  warning:    '#EF9F27',
+  warningBg:  'rgba(239,159,39,0.12)',
+  danger:     '#E24B4A',
+  dangerBg:   'rgba(226,75,74,0.1)',
+  dangerGlow: 'rgba(226,75,74,0.35)',
+  info:       '#378ADD',
+  infoBg:     'rgba(55,138,221,0.12)',
 
-  // Neutrals — light mode, warm crema
-  text:        '#0f172a',
-  textMuted:   '#475569',
-  textFaint:   '#7b6e5e',
-  textLabel:   '#475569',
-  border:      '#e2d8c8',
-  borderSoft:  'rgba(13,79,73,0.06)',
+  // Neutrals — light mode, warm off-white
+  text:        '#1A1D1C',
+  textMuted:   '#6B6E6C',
+  textFaint:   '#6B6E6C',
+  textLabel:   '#6B6E6C',
+  border:      'rgba(0,0,0,0.08)',
+  borderSoft:  'rgba(15,110,86,0.06)',
 
-  // Surfaces — warm off-white crema
-  glass:       '#fefcf5',
-  glassHover:  '#fdf9ef',
-  glassDark:   '#f7f0e0',
+  // Surfaces
+  glass:       '#FFFFFF',
+  glassHover:  '#F4F0E6',
+  glassDark:   '#F4F0E6',
 
-  // Shadows — neutral grey
-  shadowSm:    '0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)',
-  shadowMd:    '0 4px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)',
-  shadowLg:    '0 8px 24px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.04)',
-  shadowGlow:  '0 0 16px rgba(13,79,73,0.12)',
+  // Shadows — minimal, hairline only
+  shadowSm:    'none',
+  shadowMd:    'none',
+  shadowLg:    'none',
+  shadowGlow:  '0 0 16px rgba(15,110,86,0.12)',
 
   // Radii
   r:           '10px',
@@ -59,8 +59,8 @@ export const INP = {
   width: '100%',
   padding: '7px 10px',
   borderRadius: T.r,
-  border: `1.5px solid ${T.primaryBorder}`,
-  background: 'rgba(253, 250, 242, 0.8)',
+  border: `1px solid ${T.primaryBorder}`,
+  background: 'rgba(250, 248, 242, 0.8)',
   fontSize: '12px',
   fontFamily: T.fontBase,
   color: T.text,
@@ -86,8 +86,8 @@ export const PROTO = {
 // ─── Sensor card state ────────────────────────────────────────────────────────
 export const PARAM_STATE = {
   offline:  { cls: 'sensor-card-offline',  badge: 'OFFLINE',  text: 'OFFLINE',  dot: T.danger   },
-  critical: { cls: 'sensor-card-exceeded', badge: 'CRITICAL', text: 'CRITICAL', dot: '#ea580c'  },
-  warning:  { cls: 'sensor-card-exceeded', badge: 'WARNING',  text: 'EXCEEDED', dot: '#f59e0b'  },
+  critical: { cls: 'sensor-card-exceeded', badge: 'CRITICAL', text: 'CRITICAL', dot: '#E24B4A'  },
+  warning:  { cls: 'sensor-card-exceeded', badge: 'WARNING',  text: 'EXCEEDED', dot: '#EF9F27'  },
   good:     { cls: 'sensor-card-good',     badge: 'VALID',    text: 'VALID',    dot: T.primary  },
 };
 
@@ -123,7 +123,7 @@ export const BTN = {
   ghost: {
     background: 'transparent',
     color: T.textLabel,
-    border: `1.5px solid ${T.primaryBorder}`,
+    border: `1px solid ${T.primaryBorder}`,
     borderRadius: T.r,
     padding: '7px 14px',
     fontSize: '12px',
@@ -153,14 +153,14 @@ export const GLASS_CARD = {
 
 // ─── Parameter category theme colors ──────────────────────────────────────────
 export const PARAM_THEMES = {
-  pm:      { color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.07)', border: 'rgba(139, 92, 246, 0.25)', glow: 'rgba(139, 92, 246, 0.2)' },
-  co:      { color: '#f97316', bg: 'rgba(249, 115, 22, 0.07)',  border: 'rgba(249, 115, 22, 0.25)',  glow: 'rgba(249, 115, 22, 0.2)'  },
-  nox:     { color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.07)',  border: 'rgba(59, 130, 246, 0.25)',  glow: 'rgba(59, 130, 246, 0.2)'  },
-  so2:     { color: '#eab308', bg: 'rgba(234, 179, 8, 0.07)',   border: 'rgba(234, 179, 8, 0.25)',   glow: 'rgba(234, 179, 8, 0.2)'   },
-  o3:      { color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.07)',   border: 'rgba(6, 182, 212, 0.25)',   glow: 'rgba(6, 182, 212, 0.2)'   },
-  ambient: { color: '#10b981', bg: 'rgba(16, 185, 129, 0.07)',  border: 'rgba(16, 185, 129, 0.25)',  glow: 'rgba(16, 185, 129, 0.2)'  },
-  wind:    { color: '#6366f1', bg: 'rgba(99, 102, 241, 0.07)',  border: 'rgba(99, 102, 241, 0.25)',  glow: 'rgba(99, 102, 241, 0.2)'  },
-  default: { color: '#0f766e', bg: 'rgba(15, 118, 110, 0.07)',  border: 'rgba(15, 118, 110, 0.18)',  glow: 'rgba(15, 118, 110, 0.2)'  },
+  pm:      { color: '#0F6E56', bg: 'rgba(15, 110, 86, 0.07)',   border: 'rgba(15, 110, 86, 0.25)',   glow: 'rgba(15, 110, 86, 0.2)'   },
+  co:      { color: '#EF9F27', bg: 'rgba(239, 159, 39, 0.07)',  border: 'rgba(239, 159, 39, 0.25)',  glow: 'rgba(239, 159, 39, 0.2)'  },
+  nox:     { color: '#378ADD', bg: 'rgba(55, 138, 221, 0.07)',  border: 'rgba(55, 138, 221, 0.25)',  glow: 'rgba(55, 138, 221, 0.2)'  },
+  so2:     { color: '#C07E12', bg: 'rgba(192, 126, 18, 0.07)', border: 'rgba(192, 126, 18, 0.25)', glow: 'rgba(192, 126, 18, 0.2)' },
+  o3:      { color: '#378ADD', bg: 'rgba(55, 138, 221, 0.07)',  border: 'rgba(55, 138, 221, 0.25)',  glow: 'rgba(55, 138, 221, 0.2)'  },
+  ambient: { color: '#639922', bg: 'rgba(99, 145, 34, 0.07)',  border: 'rgba(99, 145, 34, 0.25)',  glow: 'rgba(99, 145, 34, 0.2)'  },
+  wind:    { color: '#1D9E75', bg: 'rgba(29, 158, 117, 0.07)',  border: 'rgba(29, 158, 117, 0.25)',  glow: 'rgba(29, 158, 117, 0.2)'  },
+  default: { color: '#0F6E56', bg: 'rgba(15, 110, 86, 0.07)',  border: 'rgba(15, 110, 86, 0.18)',  glow: 'rgba(15, 110, 86, 0.2)'  },
 };
 
 export const getParamTheme = (tagName?: string) => {

@@ -1,6 +1,6 @@
 import { Box, Typography, Button } from '@mui/material';
 import type { ReactNode } from 'react';
-import { Inbox } from 'lucide-react';
+import { IconInbox } from '@tabler/icons-react';
 
 interface EmptyStateProps {
   icon?: ReactNode;
@@ -18,7 +18,7 @@ export default function EmptyState({ icon, title, description, action }: EmptySt
       }}
     >
       <Box sx={{ color: 'text.secondary', opacity: 0.4, mb: 3, '& svg': { width: 56, height: 56 } }}>
-        {icon || <Inbox size={56} />}
+        {icon || <IconInbox size={56} />}
       </Box>
       <Typography variant="h4" sx={{ color: 'text.primary', mb: 0.5 }}>{title}</Typography>
       {description && <Typography variant="body2" sx={{ color: 'text.secondary', maxWidth: 400, mb: action ? 3 : 0 }}>{description}</Typography>}

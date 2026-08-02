@@ -1,5 +1,5 @@
 import { TextField, InputAdornment } from '@mui/material';
-import { Search } from 'lucide-react';
+import { IconSearch } from '@tabler/icons-react';
 
 interface SearchBarProps {
   value: string;
@@ -23,7 +23,7 @@ export default function SearchBar({ value, onChange, placeholder = 'Search...' }
         input: {
           startAdornment: (
             <InputAdornment position="start">
-              <Search size={18} color="currentColor" style={{ opacity: 0.5 }} />
+              <IconSearch size={18} color="currentColor" style={{ opacity: 0.5 }} />
             </InputAdornment>
           ),
         },

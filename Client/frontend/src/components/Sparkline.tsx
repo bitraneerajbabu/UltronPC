@@ -8,12 +8,12 @@ interface SparklineProps {
   strokeWidth?: number;
 }
 
-export const Sparkline = React.memo(({ data = [], width = 120, height = 30, color = '#0f766e', strokeWidth = 1.5 }: SparklineProps) => {
+export const Sparkline = React.memo(({ data = [], width = 120, height = 30, color = 'var(--primary-600)', strokeWidth = 1.5 }: SparklineProps) => {
   const clean = data.filter(v => v != null);
   if (!data || data.length === 0 || clean.length === 0) {
     return (
       <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ opacity: 0.3 }}>
-        <line x1="0" y1={height / 2} x2={width} y2={height / 2} stroke="#cbd5e1" strokeWidth={strokeWidth} strokeDasharray="3,3" />
+        <line x1="0" y1={height / 2} x2={width} y2={height / 2} stroke="var(--border)" strokeWidth={strokeWidth} strokeDasharray="3,3" />
       </svg>
     );
   }

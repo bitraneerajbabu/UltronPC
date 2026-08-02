@@ -11,7 +11,7 @@ interface KpiCardProps {
   onClick?: () => void;
 }
 
-export default function KpiCard({ icon, label, value, subtitle, trend, color = '#2563EB', onClick }: KpiCardProps) {
+export default function KpiCard({ icon, label, value, subtitle, trend, color = '#378ADD', onClick }: KpiCardProps) {
   return (
     <Card
       onClick={onClick}
@@ -36,7 +36,7 @@ export default function KpiCard({ icon, label, value, subtitle, trend, color = '
           {trend && (
             <Typography
               variant="caption"
-              sx={{ color: trend.positive ? '#16A34A' : '#DC2626', fontWeight: 600 }}
+              sx={{ color: trend.positive ? '#639922' : '#E24B4A', fontWeight: 600 }}
             >
               {trend.value}
             </Typography>

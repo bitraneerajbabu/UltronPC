@@ -21,7 +21,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return (
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        minHeight: '100vh', background: '#faf6ee', padding: '24px',
+        minHeight: '100vh', background: 'var(--bg)', padding: '24px',
       }}>
         <div style={{
           background: 'rgba(253,250,242,0.75)', backdropFilter: 'blur(24px)',
@@ -29,7 +29,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
           padding: '48px 44px', maxWidth: '480px', textAlign: 'center',
           boxShadow: '0 20px 50px rgba(15,118,110,0.08)',
         }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠</div>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>âš </div>
           <h2 style={{ fontSize: '20px', fontWeight: 700, color: T.text, marginBottom: '8px' }}>
             Something went wrong
           </h2>

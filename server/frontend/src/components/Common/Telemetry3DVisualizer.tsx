@@ -38,18 +38,18 @@ function parseISTDate(ts?: string | null): Date | null {
 }
 
 function getSiteStatus(site: Site): { label: string; color: string; type: 'live' | 'recent' | 'offline' | 'never' } {
-  if (!site.is_active) return { label: 'Deactivated', color: '#EF4444', type: 'offline' };
-  if (!site.last_sync) return { label: 'Never Connected', color: '#9CA3AF', type: 'never' };
+  if (!site.is_active) return { label: 'Deactivated', color: '#E24B4A', type: 'offline' };
+  if (!site.last_sync) return { label: 'Never Connected', color: '#6B6E6C', type: 'never' };
   
   const d = parseISTDate(site.last_sync);
-  if (!d) return { label: 'Never Connected', color: '#9CA3AF', type: 'never' };
+  if (!d) return { label: 'Never Connected', color: '#6B6E6C', type: 'never' };
   
   const diffMs = Math.abs(Date.now() - d.getTime());
   const diffMins = diffMs / 60000;
   
-  if (diffMins < 5) return { label: 'Live', color: '#16A34A', type: 'live' };
-  if (diffMins < 60) return { label: 'Recent', color: '#F59E0B', type: 'recent' };
-  return { label: 'Offline', color: '#DC2626', type: 'offline' };
+  if (diffMins < 5) return { label: 'Live', color: '#639922', type: 'live' };
+  if (diffMins < 60) return { label: 'Recent', color: '#EF9F27', type: 'recent' };
+  return { label: 'Offline', color: '#E24B4A', type: 'offline' };
 }
 
 export default function Telemetry3DVisualizer({ sites, activeSite, onSelectSite }: Telemetry3DVisualizerProps) {
@@ -264,14 +264,14 @@ export default function Telemetry3DVisualizer({ sites, activeSite, onSelectSite 
       const serverSx = cx;
       const serverSy = cy;
       const glowGrad = ctx.createRadialGradient(serverSx, serverSy, 0, serverSx, serverSy, 18);
-      glowGrad.addColorStop(0, 'rgba(59, 130, 246, 0.4)');
-      glowGrad.addColorStop(1, 'rgba(59, 130, 246, 0)');
+      glowGrad.addColorStop(0, 'rgba(29, 158, 117, 0.4)');
+      glowGrad.addColorStop(1, 'rgba(29, 158, 117, 0)');
       ctx.fillStyle = glowGrad;
       ctx.beginPath();
       ctx.arc(serverSx, serverSy, 18, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = '#2563EB';
+      ctx.fillStyle = '#1D9E75';
       ctx.beginPath();
       ctx.arc(serverSx, serverSy, 5, 0, Math.PI * 2);
       ctx.fill();
@@ -372,7 +372,7 @@ export default function Telemetry3DVisualizer({ sites, activeSite, onSelectSite 
         // Active node highlight
         const isActive = activeSite && node.site.id === activeSite.id;
         if (isActive) {
-          ctx.strokeStyle = '#2563EB';
+          ctx.strokeStyle = '#1D9E75';
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.arc(node.sx, node.sy, node.size + 4, 0, Math.PI * 2);

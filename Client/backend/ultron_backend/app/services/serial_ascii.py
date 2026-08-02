@@ -242,7 +242,7 @@ class SerialASCIIReader:
                 if cmd_bytes:
                     ser.write(cmd_bytes)
                 raw = _read_response_sync(ser, self.response_delimiter, self.timeout)
-                decoded = raw.decode("utf-8", errors="ignore").strip()
+                decoded = raw.decode("latin1", errors="replace").strip()
                 return decoded if decoded else None
             except SerialException as e:
                 log.error(f"Serial I/O error ({self.port}): {e}")

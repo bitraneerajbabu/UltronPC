@@ -158,7 +158,7 @@ export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, o
                   variant="overline"
                   sx={{
                     display: 'block', px: 2, py: 0.75,
-                    color: '#9CA3AF', fontSize: '10px', fontWeight: 700,
+                    color: '#6B6E6C', fontSize: '10px', fontWeight: 700,
                     letterSpacing: '0.08em',
                   }}
                 >
@@ -180,18 +180,18 @@ export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, o
                       cursor: 'pointer',
                       justifyContent: collapsed ? 'center' : 'flex-start',
                       backgroundColor: selected ? alpha(theme.palette.primary.main, isDark ? 0.15 : 0.08) : 'transparent',
-                      color: selected ? theme.palette.primary.main : (isDark ? '#8899B4' : '#4B5563'),
+                      color: selected ? theme.palette.primary.main : (isDark ? '#8AA79E' : '#6B6E6C'),
                       transition: 'all 0.2s ease',
                       '&:hover': {
-                        backgroundColor: selected ? alpha(theme.palette.primary.main, isDark ? 0.2 : 0.12) : (isDark ? 'rgba(255,255,255,0.04)' : '#F5F7FA'),
-                        color: selected ? theme.palette.primary.main : (isDark ? '#F0F4FF' : '#111827'),
+                        backgroundColor: selected ? alpha(theme.palette.primary.main, isDark ? 0.2 : 0.12) : (isDark ? 'rgba(255,255,255,0.04)' : '#F4F0E6'),
+                        color: selected ? theme.palette.primary.main : (isDark ? '#E9F5F0' : '#1A1D1C'),
                       },
                       boxShadow: selected && isDark ? `inset 0 0 0 1px ${alpha(theme.palette.primary.main, 0.15)}` : 'none',
                     }}
                   >
                     <Box sx={{
                       display: 'flex',
-                      color: selected ? theme.palette.primary.main : (isDark ? '#64748B' : '#9CA3AF'),
+                      color: selected ? theme.palette.primary.main : (isDark ? '#6B6E6C' : '#6B6E6C'),
                       transition: 'color 0.2s ease',
                       flexShrink: 0,
                     }}>
@@ -216,7 +216,7 @@ export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, o
                 );
               })}
               {gi < navGroups.length - 1 && !collapsed && (
-                <Divider sx={{ my: 1.5, mx: 2, borderColor: '#F3F4F6' }} />
+                <Divider sx={{ my: 1.5, mx: 2, borderColor: 'rgba(0, 0, 0, 0.08)' }} />
               )}
             </Box>
           ))}
@@ -235,7 +235,7 @@ export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, o
               justifyContent: collapsed ? 'center' : 'flex-start',
               transition: 'all 0.2s ease',
               mb: 0.5,
-              '&:hover': { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F5F7FA', color: isDark ? '#F0F4FF' : '#111827' },
+              '&:hover': { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#F4F0E6', color: isDark ? '#E9F5F0' : '#1A1D1C' },
               }}
             >
               <Icon name={collapsed ? 'ChevronRight' : 'ChevronLeft'} size={22} />
@@ -253,10 +253,10 @@ export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, o
             sx={{
               display: 'flex', alignItems: 'center', gap: 2,
               px: collapsed ? 1.5 : 2, py: 1.25, borderRadius: '8px',
-              cursor: 'pointer', color: isDark ? '#EF4444' : '#EF4444',
+              cursor: 'pointer', color: '#E24B4A',
               justifyContent: collapsed ? 'center' : 'flex-start',
               transition: 'all 0.2s ease',
-              '&:hover': { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2' },
+              '&:hover': { backgroundColor: isDark ? 'rgba(226, 75, 74, 0.1)' : '#FCEBEB' },
             }}
           >
             <Icon name="LogOut" size={22} />
@@ -267,7 +267,7 @@ export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, o
             )}
           </Box>
           {!collapsed && !isTemp && (
-            <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#9CA3AF', mt: 1.5, fontSize: '10px' }}>
+            <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#6B6E6C', mt: 1.5, fontSize: '10px' }}>
               All Rights Reserved to Neeraj
             </Typography>
           )}

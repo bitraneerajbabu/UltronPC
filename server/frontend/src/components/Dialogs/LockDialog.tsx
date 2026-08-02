@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, Typography, Box, Alert,
 } from '@mui/material';
-import { Lock, Unlock } from 'lucide-react';
+import { IconLock, IconLockOpen } from '@tabler/icons-react';
 
 interface LockDialogProps {
   open: boolean;
@@ -40,7 +40,7 @@ export default function LockDialog({ open, site, onClose, onSave }: LockDialogPr
           backgroundColor: isUnlocking ? 'success.light' : 'error.light',
           color: isUnlocking ? 'success.main' : 'error.main',
         }}>
-          {isUnlocking ? <Unlock size={20} /> : <Lock size={20} />}
+          {isUnlocking ? <IconLockOpen size={20} /> : <IconLock size={20} />}
         </Box>
         {isUnlocking ? 'Unlock Plant' : 'Lock Plant'}
       </DialogTitle>
@@ -48,12 +48,12 @@ export default function LockDialog({ open, site, onClose, onSave }: LockDialogPr
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>{site.name}</Typography>
           {isUnlocking ? (
-            <Alert severity="success" icon={<Unlock size={18} />}>
+            <Alert severity="success" icon={<IconLockOpen size={18} />}>
               Unlock this plant? It will resume normal operation.
             </Alert>
           ) : (
             <>
-              <Alert severity="warning" icon={<Lock size={18} />}>
+              <Alert severity="warning" icon={<IconLock size={18} />}>
                 Lock this plant? It will stop sending CPCB data until unlocked.
               </Alert>
               <TextField label="Lock Reason" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. AMC not renewed" fullWidth />

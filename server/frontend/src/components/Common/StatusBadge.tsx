@@ -1,5 +1,5 @@
 import { Chip } from '@mui/material';
-import { Circle } from 'lucide-react';
+import { IconCircleFilled } from '@tabler/icons-react';
 
 interface StatusBadgeProps {
   status: string;
@@ -29,7 +29,7 @@ export default function StatusBadge({ status, size = 'small' }: StatusBadgeProps
   const config = statusConfig[status.toLowerCase()] || { color: 'default' as const, label: status };
   return (
     <Chip
-      icon={<Circle size={size === 'small' ? 8 : 10} fill="currentColor" />}
+      icon={<IconCircleFilled size={size === 'small' ? 8 : 10} />}
       label={config.label}
       color={config.color === 'default' ? undefined : config.color}
       variant="outlined"

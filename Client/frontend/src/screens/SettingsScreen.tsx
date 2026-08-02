@@ -1,18 +1,19 @@
 import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
+import { IconShieldCheck, IconKey, IconUser, IconPlus, IconPencil, IconTrash } from '@tabler/icons-react';
 import { T, GLASS_CARD, BTN, INP } from '../theme';
 
 interface UserData { id?: number; username: string; full_name?: string; role: string; is_active: boolean; created_at?: string; created_by?: string; last_login?: string; }
 interface UserPayload { username?: string; password?: string; full_name?: string | null; role?: string; is_active?: boolean; }
 
-const ShieldIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>);
-const KeyIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>);
-const UserIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>);
-const PlusIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>);
-const EditIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>);
-const TrashIcon = () => (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>);
+const ShieldIcon = () => <IconShieldCheck size={14} stroke={2} />;
+const KeyIcon = () => <IconKey size={14} stroke={2} />;
+const UserIcon = () => <IconUser size={14} stroke={2} />;
+const PlusIcon = () => <IconPlus size={14} stroke={2.5} />;
+const EditIcon = () => <IconPencil size={14} stroke={2} />;
+const TrashIcon = () => <IconTrash size={14} stroke={2} />;
 
-// ─── User Modal ───
+// â”€â”€â”€ User Modal â”€â”€â”€
 function UserModal({ mode, user, onClose, onSave }: { mode: 'add' | 'edit'; user?: UserData; onClose: () => void; onSave: (p: UserPayload) => void }) {
   const [form, setForm] = useState({ username: user?.username || '', password: '', confirmPassword: '', full_name: user?.full_name || '', role: user?.role || 'client', is_active: user?.is_active !== undefined ? user.is_active : true });
   const [showPwd, setShowPwd] = useState(false);
@@ -35,20 +36,20 @@ function UserModal({ mode, user, onClose, onSave }: { mode: 'add' | 'edit'; user
     onSave(p);
   };
   const ms = { position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(13,79,73,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' } as const;
-  const mc: React.CSSProperties = { background: '#0d4f49', border: '1px solid #1a7a6e', borderRadius: '16px', width: '460px', maxWidth: '95vw', padding: '28px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)' };
+  const mc: React.CSSProperties = { background: 'var(--primary-600)', border: '1px solid var(--primary-600)', borderRadius: '16px', width: '460px', maxWidth: '95vw', padding: '28px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)' };
   return (<div style={ms}>
     <div style={mc}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#f1f5f9' }}>{mode === 'add' ? 'Create User' : 'Edit User'}</h3>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px', fontSize: '18px' }}>×</button>
+        <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: 'var(--surface-muted)' }}>{mode === 'add' ? 'Create User' : 'Edit User'}</h3>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '4px', fontSize: '18px' }}>Ã—</button>
       </div>
       <form onSubmit={handleSubmit}>
-        {mode === 'add' && (<div className="form-group"><label className="form-label">Username *</label><input autoFocus type="text" className={`form-input ${errors.username ? 'error' : ''}`} value={form.username} onChange={e => set('username', e.target.value)} placeholder="e.g. operator1" autoComplete="off" />{errors.username && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.username}</div>}</div>)}
+        {mode === 'add' && (<div className="form-group"><label className="form-label">Username *</label><input autoFocus type="text" className={`form-input ${errors.username ? 'error' : ''}`} value={form.username} onChange={e => set('username', e.target.value)} placeholder="e.g. operator1" autoComplete="off" />{errors.username && <div style={{ color: 'var(--danger)', fontSize: '11px', marginTop: '4px' }}>{errors.username}</div>}</div>)}
         <div className="form-group"><label className="form-label">Full Name</label><input type="text" className="form-input" value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Optional display name" /></div>
-        <div className="form-group"><label className="form-label">Role</label><select className="form-input form-select" value={form.role} onChange={e => set('role', e.target.value)}><option value="client">Client — Dashboard, Trends, Reports only</option><option value="admin">Admin — Full Access</option></select></div>
-        <div className="form-group"><label className="form-label">{mode === 'add' ? 'Password *' : 'New Password'}</label><div style={{ position: 'relative' }}><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.password ? 'error' : ''}`} value={form.password} onChange={e => set('password', e.target.value)} placeholder={mode === 'add' ? 'Min 4 chars' : 'Leave blank to keep'} style={{ paddingRight: '44px' }} autoComplete="new-password" /><button type="button" onClick={() => setShowPwd(v => !v)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>{showPwd ? '🙈' : '👁'}</button></div>{errors.password && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.password}</div>}</div>)
-        {form.password && (<div className="form-group"><label className="form-label">Confirm Password</label><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.confirmPassword ? 'error' : ''}`} value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} placeholder="Re-enter" />{errors.confirmPassword && <div style={{ color: '#ef4444', fontSize: '11px', marginTop: '4px' }}>{errors.confirmPassword}</div>}</div>)}
-        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><label className="form-label" style={{ margin: 0 }}>Active</label><label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}><input type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)} style={{ width: '16px', height: '16px' }} /><span style={{ fontSize: '13px', color: form.is_active ? '#10b981' : '#64748b' }}>{form.is_active ? 'Active' : 'Disabled'}</span></label></div>
+        <div className="form-group"><label className="form-label">Role</label><select className="form-input form-select" value={form.role} onChange={e => set('role', e.target.value)}><option value="client">Client â€” Dashboard, Trends, Reports only</option><option value="admin">Admin â€” Full Access</option></select></div>
+        <div className="form-group"><label className="form-label">{mode === 'add' ? 'Password *' : 'New Password'}</label><div style={{ position: 'relative' }}><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.password ? 'error' : ''}`} value={form.password} onChange={e => set('password', e.target.value)} placeholder={mode === 'add' ? 'Min 4 chars' : 'Leave blank to keep'} style={{ paddingRight: '44px' }} autoComplete="new-password" /><button type="button" onClick={() => setShowPwd(v => !v)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>{showPwd ? 'ðŸ™ˆ' : 'ðŸ‘'}</button></div>{errors.password && <div style={{ color: 'var(--danger)', fontSize: '11px', marginTop: '4px' }}>{errors.password}</div>}</div>)
+        {form.password && (<div className="form-group"><label className="form-label">Confirm Password</label><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.confirmPassword ? 'error' : ''}`} value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} placeholder="Re-enter" />{errors.confirmPassword && <div style={{ color: 'var(--danger)', fontSize: '11px', marginTop: '4px' }}>{errors.confirmPassword}</div>}</div>)}
+        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><label className="form-label" style={{ margin: 0 }}>Active</label><label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}><input type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)} style={{ width: '16px', height: '16px' }} /><span style={{ fontSize: '13px', color: form.is_active ? 'var(--success)' : 'var(--text-secondary)' }}>{form.is_active ? 'Active' : 'Disabled'}</span></label></div>
         <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}><button type="button" className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</button><button type="submit" className="btn btn-primary" style={{ flex: 2 }}>{mode === 'add' ? 'Create User' : 'Save Changes'}</button></div>
       </form>
     </div>
@@ -59,7 +60,7 @@ export const SettingsScreen = React.memo(() => {
   const { API_BASE, showToast, loadAllData, authFetch, pendingStatus, usersList, loadUsers, addUser, editUser, deleteUser, currentUser, parseUtcDate } = useContext(AppContext);
   const [settingsTab, setSettingsTab] = useState('system');
 
-  // ─── User Management state ───
+  // â”€â”€â”€ User Management state â”€â”€â”€
   const [userModal, setUserModal] = useState<{ mode: 'add' | 'edit'; user?: UserData } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserData | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -133,8 +134,8 @@ export const SettingsScreen = React.memo(() => {
     try {
       const res = await authFetch(`${API_BASE}/settings/firmware/download`, { method: 'POST' });
       if (!res.ok) throw new Error();
-      showToast('Download started…');
-      setFwProgress({ state: 'downloading', percent: 0, message: 'Starting download…' });
+      showToast('Download startedâ€¦');
+      setFwProgress({ state: 'downloading', percent: 0, message: 'Starting downloadâ€¦' });
     } catch { showToast('Failed to start download.', 'error'); }
   };
 
@@ -151,8 +152,8 @@ export const SettingsScreen = React.memo(() => {
     try {
       const res = await authFetch(`${API_BASE}/settings/firmware/download-url`, { method: 'POST', body: JSON.stringify({ url: customUrl.trim() }) });
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Failed'); }
-      showToast('Download started…');
-      setFwProgress({ state: 'downloading', percent: 0, message: 'Starting download…' });
+      showToast('Download startedâ€¦');
+      setFwProgress({ state: 'downloading', percent: 0, message: 'Starting downloadâ€¦' });
     } catch (e) { showToast(`Download failed: ${e.message}`, 'error'); }
   };
 
@@ -242,7 +243,7 @@ export const SettingsScreen = React.memo(() => {
       const res = await authFetch(`${API_BASE}/settings/reload-polling`, { method: 'POST' });
       if (!res.ok) throw new Error();
       const data = await res.json();
-      showToast(`Polling engine reloaded — ${data.active_poll_loops} loop(s) running.`);
+      showToast(`Polling engine reloaded â€” ${data.active_poll_loops} loop(s) running.`);
       loadInfo();
     } catch { showToast('Failed to reload polling.', 'error'); }
     finally { setActionLoading(''); }
@@ -254,7 +255,7 @@ export const SettingsScreen = React.memo(() => {
     try {
       const res = await authFetch(`${API_BASE}/settings/restart-app`, { method: 'POST' });
       if (!res.ok) throw new Error();
-      showToast('Restarting UltrON…', 'info');
+      showToast('Restarting UltrONâ€¦', 'info');
       // Poll health endpoint until server comes back
       for (let i = 0; i < 30; i++) {
         await new Promise(r => setTimeout(r, 2000));
@@ -293,7 +294,7 @@ export const SettingsScreen = React.memo(() => {
     } catch {
       showToast('Factory reset triggered. Waiting for server...', 'error');
     }
-    // Server is restarting — poll health endpoint until it comes back
+    // Server is restarting â€” poll health endpoint until it comes back
     for (let i = 0; i < 30; i++) {
       await new Promise(r => setTimeout(r, 2000));
       try {
@@ -301,7 +302,7 @@ export const SettingsScreen = React.memo(() => {
           headers: { 'Authorization': localStorage.getItem('ultron_token') ? `Bearer ${localStorage.getItem('ultron_token')}` : '' }
         });
         if (h.ok) {
-          showToast('Server restarted — reloading data.');
+          showToast('Server restarted â€” reloading data.');
           loadAllData(); loadInfo();
           setActionLoading('');
           return;
@@ -318,7 +319,7 @@ export const SettingsScreen = React.memo(() => {
     window.location.reload();
   };
 
-  // ─── User Management handlers ───
+  // â”€â”€â”€ User Management handlers â”€â”€â”€
   useEffect(() => { if (settingsTab === 'users') loadUsers(); }, [settingsTab]);
 
   const filteredUsers = usersList.filter(u =>
@@ -339,13 +340,13 @@ export const SettingsScreen = React.memo(() => {
   };
 
   const formatDate = (dateStr: string) => {
-    if (!dateStr) return '—';
+    if (!dateStr) return 'â€”';
     return parseUtcDate(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
   const RoleBadge = ({ role }: { role: string }) => {
     const isAdmin = role === 'admin';
-    return (<span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', background: isAdmin ? 'rgba(220,38,38,0.1)' : 'rgba(15,118,110,0.1)', color: isAdmin ? '#dc2626' : '#0f766e', border: isAdmin ? '1px solid rgba(220,38,38,0.3)' : '1px solid rgba(15,118,110,0.3)' }}>{isAdmin ? <ShieldIcon /> : <UserIcon />} {isAdmin ? 'Admin' : 'Client'}</span>);
+    return (<span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', textTransform: 'uppercase', background: isAdmin ? 'rgba(220,38,38,0.1)' : 'rgba(15,118,110,0.1)', color: isAdmin ? 'var(--danger)' : 'var(--primary-600)', border: isAdmin ? '1px solid rgba(220,38,38,0.3)' : '1px solid rgba(15,118,110,0.3)' }}>{isAdmin ? <ShieldIcon /> : <UserIcon />} {isAdmin ? 'Admin' : 'Client'}</span>);
   };
 
   const handleShutdown = async () => {
@@ -357,7 +358,7 @@ export const SettingsScreen = React.memo(() => {
       showToast('Server shutting down...');
     }
     setTimeout(() => {
-      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#555"><div style="text-align:center"><h2>UltrON has been shut down.</h2><p style="color:#888;margin-top:8px">Please restart UltrON from the Start Menu or desktop shortcut.</p></div></div>';
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:var(--text-secondary)"><div style="text-align:center"><h2>UltrON has been shut down.</h2><p style="color:var(--text-secondary);margin-top:8px">Please restart UltrON from the Start Menu or desktop shortcut.</p></div></div>';
     }, 1000);
   };
 
@@ -393,19 +394,19 @@ export const SettingsScreen = React.memo(() => {
         <div style={{ display: 'grid', gap: '8px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
             <span style={{ color: T.textMuted }}>Status</span>
-            <span style={{ color: s.licensed ? '#22c55e' : '#ef4444', fontWeight: '700' }}>{s.licensed ? 'ACTIVE' : 'INACTIVE'}</span>
+            <span style={{ color: s.licensed ? 'var(--success)' : 'var(--danger)', fontWeight: '700' }}>{s.licensed ? 'ACTIVE' : 'INACTIVE'}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
             <span style={{ color: T.textMuted }}>Station ID</span>
-            <span style={{ color: T.text, fontFamily: 'monospace' }}>{s.station_id || '—'}</span>
+            <span style={{ color: T.text, fontFamily: 'monospace' }}>{s.station_id || 'â€”'}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
             <span style={{ color: T.textMuted }}>License Key</span>
-            <span style={{ color: T.text, fontFamily: 'monospace' }}>{s.key || '—'}</span>
+            <span style={{ color: T.text, fontFamily: 'monospace' }}>{s.key || 'â€”'}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
             <span style={{ color: T.textMuted }}>Server URL</span>
-            <span style={{ color: T.text }}>{s.server_url || '—'}</span>
+            <span style={{ color: T.text }}>{s.server_url || 'â€”'}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
             <span style={{ color: T.textMuted }}>Lock Status</span>
@@ -414,7 +415,7 @@ export const SettingsScreen = React.memo(() => {
           {s.lock_reason && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
               <span style={{ color: T.textMuted }}>Lock Reason</span>
-              <span style={{ color: '#f59e0b' }}>{s.lock_reason}</span>
+              <span style={{ color: 'var(--warning)' }}>{s.lock_reason}</span>
             </div>
           )}
           {s.amc_expiry && (
@@ -443,18 +444,18 @@ export const SettingsScreen = React.memo(() => {
             style={{ ...INP, width: '100%', boxSizing: 'border-box' }}
           />
         </div>
-        {activationError && <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '8px' }}>{activationError}</div>}
+        {activationError && <div style={{ color: 'var(--danger)', fontSize: '12px', marginBottom: '8px' }}>{activationError}</div>}
         <button className="btn btn-primary" onClick={handleLicenseReverify} disabled={activating} style={{ padding: '8px 20px' }}>
-          {activating ? 'Verifying…' : 'Verify & Save'}
+          {activating ? 'Verifyingâ€¦' : 'Verify & Save'}
         </button>
       </div>
     </>
   );
 
   const SUB_TABS = [
-    { key: 'system', label: 'System Settings', icon: '#0f766e' },
-    { key: 'license', label: 'License', icon: '#eab308' },
-    { key: 'users', label: 'User Management', icon: '#dc2626' },
+    { key: 'system', label: 'System Settings', icon: 'var(--primary-600)' },
+    { key: 'license', label: 'License', icon: 'var(--warning)' },
+    { key: 'users', label: 'User Management', icon: 'var(--danger)' },
   ];
 
   const sectionTitleS: React.CSSProperties = {
@@ -475,14 +476,14 @@ export const SettingsScreen = React.memo(() => {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '14px' }}>
           {[
             { label: 'Application', value: `${appInfo?.app_name || 'UltrON'} v${appInfo?.version || '1.1'}` },
-            { label: 'Database', value: healthStatus?.status?.toUpperCase() || '…', ok: healthStatus?.database === 'ok' },
-            { label: 'Polling Engine', value: pollingStatus?.running ? `RUNNING — ${pollingStatus?.active_poll_loops} loop(s)` : 'STOPPED', ok: pollingStatus?.running },
+            { label: 'Database', value: healthStatus?.status?.toUpperCase() || 'â€¦', ok: healthStatus?.database === 'ok' },
+            { label: 'Polling Engine', value: pollingStatus?.running ? `RUNNING â€” ${pollingStatus?.active_poll_loops} loop(s)` : 'STOPPED', ok: pollingStatus?.running },
             { label: 'Internet', value: pushStatus?.internet_ok ? 'Connected' : 'Disconnected', ok: pushStatus?.internet_ok },
             { label: 'Pending Uploads', value: `${pushStatus?.pending_uploads ?? '?'} record(s)` },
           ].map(item => (
             <div key={item.label} style={{ flex: '1 1 120px' }}>
               <div style={{ fontSize: '10px', fontWeight: '700', color: T.textLabel, textTransform: 'uppercase' }}>{item.label}</div>
-              <div style={{ fontSize: '13px', fontWeight: '700', color: item.ok === undefined ? T.text : item.ok ? '#10b981' : '#ef4444', marginTop: '2px' }}>{item.value}</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: item.ok === undefined ? T.text : item.ok ? 'var(--success)' : 'var(--danger)', marginTop: '2px' }}>{item.value}</div>
             </div>
           ))}
         </div>
@@ -499,9 +500,9 @@ export const SettingsScreen = React.memo(() => {
           ))}
         </div>
         <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-          <button style={BTN.primary} onClick={loadInfo} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</button>
-          <button style={BTN.ghost} onClick={handleReloadPolling} disabled={!!actionLoading}>{actionLoading === 'reload' ? '…' : 'Reload Polling'}</button>
-          <button style={{ ...BTN.danger, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>{actionLoading === 'restart' ? 'Restarting…' : 'Restart App'}</button>
+          <button style={BTN.primary} onClick={loadInfo} disabled={loading}>{loading ? 'Loadingâ€¦' : 'Refresh'}</button>
+          <button style={BTN.ghost} onClick={handleReloadPolling} disabled={!!actionLoading}>{actionLoading === 'reload' ? 'â€¦' : 'Reload Polling'}</button>
+          <button style={{ ...BTN.danger, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>{actionLoading === 'restart' ? 'Restartingâ€¦' : 'Restart App'}</button>
         </div>
       </div>
 
@@ -517,11 +518,11 @@ export const SettingsScreen = React.memo(() => {
             <>
               <div>
                 <div style={labelS}>Latest Version</div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: fwInfo.update_available ? '#f59e0b' : '#10b981' }}>{fwInfo.latest_version}</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: fwInfo.update_available ? 'var(--warning)' : 'var(--success)' }}>{fwInfo.latest_version}</div>
               </div>
               <div>
                 <div style={labelS}>Status</div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: fwInfo.update_available ? '#f59e0b' : '#10b981' }}>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: fwInfo.update_available ? 'var(--warning)' : 'var(--success)' }}>
                   {fwInfo.update_available ? 'Update Available' : 'Up to Date'}
                 </div>
               </div>
@@ -532,11 +533,11 @@ export const SettingsScreen = React.memo(() => {
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             <button onClick={checkFirmware} style={BTN.ghost}>Check for Updates</button>
             <button onClick={handleRestartApp} style={BTN.danger} disabled={actionLoading === 'restart'}>
-              {actionLoading === 'restart' ? 'Restarting…' : 'Restart App'}
+              {actionLoading === 'restart' ? 'Restartingâ€¦' : 'Restart App'}
             </button>
           </div>
         )}
-        {fwChecking && <div style={{ fontSize: '12px', color: T.textMuted, marginBottom: '12px' }}>Checking for updates…</div>}
+        {fwChecking && <div style={{ fontSize: '12px', color: T.textMuted, marginBottom: '12px' }}>Checking for updatesâ€¦</div>}
         {fwInfo?.update_available && fwInfo.release_notes && (
           <div style={{ marginBottom: '10px' }}>
             <div style={labelS}>Release Notes</div>
@@ -562,14 +563,14 @@ export const SettingsScreen = React.memo(() => {
             </>
           )}
           {fwProgress?.state === 'done' && (
-            <div style={{ fontSize: '12px', fontWeight: '600', color: '#10b981', marginRight: '10px' }}>{fwProgress.message}</div>
+            <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--success)', marginRight: '10px' }}>{fwProgress.message}</div>
           )}
           {fwProgress?.state === 'error' && (
-            <div style={{ fontSize: '12px', fontWeight: '600', color: '#ef4444', marginRight: '10px' }}>{fwProgress.message}</div>
+            <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--danger)', marginRight: '10px' }}>{fwProgress.message}</div>
           )}
           {fwInfo && (
             <button style={{ ...BTN.danger, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>
-              {actionLoading === 'restart' ? 'Restarting…' : 'Restart App'}
+              {actionLoading === 'restart' ? 'Restartingâ€¦' : 'Restart App'}
             </button>
           )}
         </div>
@@ -593,7 +594,7 @@ export const SettingsScreen = React.memo(() => {
             <div style={labelS}>Broadcast Messages</div>
             <button onClick={() => { const v = !broadcastEnabled; setBroadcastEnabled(v); localStorage.setItem('ultron_broadcast_enabled', String(v)); }} style={{
               width: '44px', height: '24px', borderRadius: '12px', border: 'none', cursor: 'pointer',
-              background: broadcastEnabled ? '#0f766e' : '#cbd5e1', position: 'relative', transition: 'background 0.2s',
+              background: broadcastEnabled ? 'var(--primary-600)' : 'var(--border)', position: 'relative', transition: 'background 0.2s',
             }}>
               <span style={{
                 position: 'absolute', top: '2px', left: broadcastEnabled ? '22px' : '2px',
@@ -619,8 +620,8 @@ export const SettingsScreen = React.memo(() => {
               <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: 'none' }} id="logoInput" />
               <button style={BTN.ghost} onClick={() => document.getElementById('logoInput').click()}>Select Logo</button>
               {formData.plantLogo && (
-                <span style={{ fontSize: '11px', color: '#10b981', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  ✓ Staged for save
+                <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  âœ“ Staged for save
                 </span>
               )}
               {formData.plantLogo && <button style={BTN.danger} onClick={() => setFormData(prev => ({ ...prev, plantLogo: '' }))}>Remove</button>}
@@ -632,8 +633,8 @@ export const SettingsScreen = React.memo(() => {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button style={BTN.danger} onClick={handleResetTelemetry} disabled={!!actionLoading}>{actionLoading === 'resetTel' ? '…' : 'Clear Telemetry'}</button>
-            <button style={BTN.danger} onClick={handleFactoryReset} disabled={!!actionLoading}>{actionLoading === 'resetAll' ? '…' : 'Factory Reset'}</button>
+            <button style={BTN.danger} onClick={handleResetTelemetry} disabled={!!actionLoading}>{actionLoading === 'resetTel' ? 'â€¦' : 'Clear Telemetry'}</button>
+            <button style={BTN.danger} onClick={handleFactoryReset} disabled={!!actionLoading}>{actionLoading === 'resetAll' ? 'â€¦' : 'Factory Reset'}</button>
             <button style={BTN.danger} onClick={handleShutdown}>{'Shutdown Server'}</button>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -655,10 +656,10 @@ export const SettingsScreen = React.memo(() => {
         </div>
         <div style={{ display: 'flex', gap: '12px', marginBottom: '14px' }}>
           {[
-            { label: 'Total', value: userCounts.total, color: '#0f766e' },
-            { label: 'Admins', value: userCounts.admins, color: '#dc2626' },
-            { label: 'Clients', value: userCounts.clients, color: '#0f766e' },
-            { label: 'Disabled', value: userCounts.disabled, color: '#64748b' },
+            { label: 'Total', value: userCounts.total, color: 'var(--primary-600)' },
+            { label: 'Admins', value: userCounts.admins, color: 'var(--danger)' },
+            { label: 'Clients', value: userCounts.clients, color: 'var(--primary-600)' },
+            { label: 'Disabled', value: userCounts.disabled, color: 'var(--text-secondary)' },
           ].map(({ label, value, color }) => (
             <div key={label} style={{ flex: 1, background: T.primaryBg, border: `1px solid ${T.primaryBorder}`, borderRadius: T.r, padding: '12px 16px' }}>
               <div style={{ fontSize: '22px', fontWeight: '800', color, fontFamily: 'monospace' }}>{value}</div>
@@ -667,7 +668,7 @@ export const SettingsScreen = React.memo(() => {
           ))}
         </div>
         <div style={{ marginBottom: '12px' }}>
-          <input type="text" placeholder="Search users…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ ...INP, maxWidth: '300px' }} />
+          <input type="text" placeholder="Search usersâ€¦" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ ...INP, maxWidth: '300px' }} />
         </div>
         <div style={{ ...GLASS_CARD, padding: '0', overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '600px' }}>
@@ -681,11 +682,11 @@ export const SettingsScreen = React.memo(() => {
                 <tr><td colSpan={7} style={{ padding: '32px', textAlign: 'center', color: T.textMuted }}>{searchTerm ? 'No match.' : 'No users.'}</td></tr>
               ) : filteredUsers.map(u => (
                 <tr key={u.id} style={{ borderBottom: `1px solid ${T.primaryBorder}`, background: u.username === currentUser ? 'rgba(15,118,110,0.04)' : 'transparent' }}>
-                  <td style={{ padding: '10px 14px' }}><span style={{ fontWeight: '600', color: T.text }}>{u.username}{u.username === currentUser && <span style={{ marginLeft: '6px', fontSize: '10px', color: '#0f766e' }}>(you)</span>}</span></td>
-                  <td style={{ padding: '10px 14px', color: T.textMuted }}>{u.full_name || '—'}</td>
+                  <td style={{ padding: '10px 14px' }}><span style={{ fontWeight: '600', color: T.text }}>{u.username}{u.username === currentUser && <span style={{ marginLeft: '6px', fontSize: '10px', color: 'var(--primary-600)' }}>(you)</span>}</span></td>
+                  <td style={{ padding: '10px 14px', color: T.textMuted }}>{u.full_name || 'â€”'}</td>
                   <td style={{ padding: '10px 14px' }}><RoleBadge role={u.role} /></td>
-                  <td style={{ padding: '10px 14px' }}><span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: '600', background: u.is_active ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)', color: u.is_active ? '#059669' : '#64748b', border: u.is_active ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(100,116,139,0.3)' }}>{u.is_active ? '● Active' : '○ Disabled'}</span></td>
-                  <td style={{ padding: '10px 14px', color: T.textMuted, fontSize: '12px' }}>{formatDate(u.created_at)}{u.created_by ? <div style={{ fontSize: '11px', color: '#475569' }}>by {u.created_by}</div> : ''}</td>
+                  <td style={{ padding: '10px 14px' }}><span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: '600', background: u.is_active ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)', color: u.is_active ? 'var(--success)' : 'var(--text-secondary)', border: u.is_active ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(100,116,139,0.3)' }}>{u.is_active ? 'â— Active' : 'â—‹ Disabled'}</span></td>
+                  <td style={{ padding: '10px 14px', color: T.textMuted, fontSize: '12px' }}>{formatDate(u.created_at)}{u.created_by ? <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>by {u.created_by}</div> : ''}</td>
                   <td style={{ padding: '10px 14px', color: T.textMuted, fontSize: '12px' }}>{formatDate(u.last_login)}</td>
                   <td style={{ padding: '10px 14px' }}>
                     <div style={{ display: 'flex', gap: '4px' }}>
@@ -700,20 +701,20 @@ export const SettingsScreen = React.memo(() => {
         </div>
         <div style={{ marginTop: '14px', padding: '12px 16px', background: T.primaryBg, border: `1px solid ${T.primaryBorder}`, borderRadius: T.r, display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
           <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#dc2626', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}><ShieldIcon /> Admin</div>
-            <div style={{ fontSize: '11px', color: T.textMuted }}>Dashboard · Stations · Devices · Trends · Reports · Logs · Settings · Users</div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--danger)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}><ShieldIcon /> Admin</div>
+            <div style={{ fontSize: '11px', color: T.textMuted }}>Dashboard Â· Stations Â· Devices Â· Trends Â· Reports Â· Logs Â· Settings Â· Users</div>
           </div>
           <div>
-            <div style={{ fontSize: '11px', fontWeight: '700', color: '#0f766e', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}><UserIcon /> Client (read-only)</div>
-            <div style={{ fontSize: '11px', color: T.textMuted }}>Dashboard · Trends · Reports</div>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--primary-600)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}><UserIcon /> Client (read-only)</div>
+            <div style={{ fontSize: '11px', color: T.textMuted }}>Dashboard Â· Trends Â· Reports</div>
           </div>
         </div>
         {userModal && <UserModal mode={userModal.mode} user={userModal.user} onClose={() => setUserModal(null)} onSave={handleUserSave} />}
         {deleteTarget && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(13,79,73,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ background: '#0d4f49', border: '1px solid #1a7a6e', borderRadius: '16px', width: '380px', padding: '28px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)' }}>
-              <h3 style={{ margin: '0 0 12px', fontSize: '18px', fontWeight: '700', color: '#f1f5f9' }}>Delete User</h3>
-              <p style={{ color: '#94a3b8', fontSize: '14px', margin: '0 0 24px' }}>Delete <strong style={{ color: '#f1f5f9' }}>{deleteTarget.username}</strong>? Cannot undo.</p>
+            <div style={{ background: 'var(--primary-600)', border: '1px solid var(--primary-600)', borderRadius: '16px', width: '380px', padding: '28px', boxShadow: '0 25px 60px rgba(0,0,0,0.5)' }}>
+              <h3 style={{ margin: '0 0 12px', fontSize: '18px', fontWeight: '700', color: 'var(--surface-muted)' }}>Delete User</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '14px', margin: '0 0 24px' }}>Delete <strong style={{ color: 'var(--surface-muted)' }}>{deleteTarget.username}</strong>? Cannot undo.</p>
               <div style={{ display: 'flex', gap: '10px' }}><button className="btn btn-secondary" onClick={() => setDeleteTarget(null)} style={{ flex: 1 }}>Cancel</button><button className="btn btn-danger" onClick={handleUserDelete} style={{ flex: 1 }}>Delete</button></div>
             </div>
           </div>

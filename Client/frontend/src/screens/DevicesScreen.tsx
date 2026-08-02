@@ -1,5 +1,6 @@
 import React, { useContext, useState } from 'react';
 import { AppContext } from '../context/AppContext';
+import { IconPlus, IconTrash, IconPencil, IconX, IconBolt } from '@tabler/icons-react';
 import { T } from '../theme';
 import { PendingBadge } from '../components/PendingBadge';
 
@@ -44,15 +45,11 @@ const DEFAULT_PARAM = {
   station_name: '', poll_interval: 5,
 };
 
-const Plus = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>;
-const Trash = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6M9 6V4h6v2" /></svg>;
-const Edit = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>;
-const X = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>;
-const Bolt = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-  </svg>
-);
+const Plus = () => <IconPlus size={16} stroke={2.5} />;
+const Trash = () => <IconTrash size={15} stroke={2.5} />;
+const Edit = () => <IconPencil size={15} stroke={2.5} />;
+const X = () => <IconX size={18} stroke={2.5} />;
+const Bolt = () => <IconBolt size={14} stroke={2.5} />;
 
 const genTag = (name) => !name ? '' : name.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_').replace(/_+/g, '_').substring(0, 50);
 
@@ -418,16 +415,16 @@ export const DevicesScreen = React.memo(() => {
   };
 
   const s = () => ({
-    fontSize: '11px', fontWeight: '700', color: '#64748b',
+    fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)',
     textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px',
   });
 
   const fieldStyle = (fieldName: string) => ({
     width: '100%', background: '#fff',
-    border: errors[fieldName] ? '1.5px solid #ef4444' : '1.5px solid #cbd5e1',
+    border: errors[fieldName] ? '1.5px solid var(--danger)' : '1.5px solid var(--border)',
     padding: '10px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '600',
-    color: '#0f172a', outline: 'none', fontFamily: T.fontMono,
-    boxShadow: errors[fieldName] ? '0 0 0 3px rgba(239, 68, 68, 0.15)' : 'none',
+    color: 'var(--text-primary)', outline: 'none', fontFamily: T.fontMono,
+    boxShadow: errors[fieldName] ? '0 0 0 3px rgba(226, 75, 74, 0.15)' : 'none',
     transition: 'border-color 0.15s, box-shadow 0.15s',
   });
 
@@ -435,60 +432,60 @@ export const DevicesScreen = React.memo(() => {
 
   const btnStyle = (active) => ({
     flex: 1, padding: '10px', borderRadius: '8px',
-    border: '2px solid ' + (active ? '#0f766e' : '#e2e8f0'),
-    background: active ? '#f0fdfa' : '#fff',
-    color: active ? '#0f766e' : '#64748b',
+    border: '2px solid ' + (active ? 'var(--primary-600)' : 'var(--border)'),
+    background: active ? 'var(--primary-50)' : '#fff',
+    color: active ? 'var(--primary-600)' : 'var(--text-secondary)',
     fontWeight: '700', fontSize: '12px', cursor: 'pointer',
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f8fafc', fontFamily: T.fontBase }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--surface-muted)', fontFamily: T.fontBase }}>
 
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '16px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', gap: '12px' }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid var(--border)', padding: '16px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.02em' }}>Channel Configuration</h1>
+          <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Channel Configuration</h1>
 
         </div>
         <button onClick={openNew} style={{
-          background: '#0f766e', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 20px',
+          background: 'var(--primary-600)', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 20px',
           fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
           boxShadow: '0 4px 12px rgba(15,118,110,0.3)',
         }}><Plus /> Add Rule</button>
       </div>
 
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0 28px', display: 'flex', gap: '4px', flexShrink: 0 }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid var(--border)', padding: '0 28px', display: 'flex', gap: '4px', flexShrink: 0 }}>
         {protoTabs.map(tab => (
           <button key={tab.key} onClick={() => setActiveProtoTab(tab.key)} style={{
             padding: '12px 16px', fontSize: '12px', fontWeight: '700', cursor: 'pointer',
-            background: 'none', border: 'none', borderBottom: '3px solid ' + (activeProtoTab === tab.key ? '#0f766e' : 'transparent'),
-            color: activeProtoTab === tab.key ? '#0f766e' : '#94a3b8',
+            background: 'none', border: 'none', borderBottom: '3px solid ' + (activeProtoTab === tab.key ? 'var(--primary-600)' : 'transparent'),
+            color: activeProtoTab === tab.key ? 'var(--primary-600)' : 'var(--text-secondary)',
             transition: 'color 0.15s, border-color 0.15s',
           }}>
             {tab.label}
             <span style={{
               marginLeft: '6px', fontSize: '10px', fontWeight: '700',
-              background: activeProtoTab === tab.key ? '#f0fdfa' : '#f1f5f9',
-              color: '#64748b', padding: '1px 7px', borderRadius: '99px',
+              background: activeProtoTab === tab.key ? 'var(--primary-50)' : 'var(--surface-muted)',
+              color: 'var(--text-secondary)', padding: '1px 7px', borderRadius: '99px',
             }}>{allCount}</span>
           </button>
         ))}
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
-        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-muted)' }}>
                   {['#', 'Parameter', 'Station', 'Protocol', 'Address', 'Slave', 'Register', 'Data Type', 'Status', ''].map(h => (
-                    <th key={h} style={{ padding: '12px 14px', fontSize: '10px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                    <th key={h} style={{ padding: '12px 14px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filteredParams.length === 0 ? (
                   <tr>
-                    <td colSpan={10} style={{ padding: '48px 24px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                    <td colSpan={10} style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
                       No gateway rules found for this filter.
                     </td>
                   </tr>
@@ -497,45 +494,45 @@ export const DevicesScreen = React.memo(() => {
                     const dev = devices.find(d => d.id == p.device_id);
                     const proto = dev?.protocol || p.input_type || 'modbus_tcp';
                     const isModbus = !NON_MODBUS_PROTOCOLS.includes(proto) && proto !== 'csv';
-                    const stName = dev?.station_id ? (stations.find(s => s.id == dev.station_id)?.name || '—') : '—';
+                    const stName = dev?.station_id ? (stations.find(s => s.id == dev.station_id)?.name || 'â€”') : 'â€”';
 
                     return (
-                      <tr key={p.id || idx} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.1s' }}>
-                        <td style={{ padding: '12px 14px', color: '#94a3b8', fontWeight: '600', fontSize: '12px' }}>{idx + 1}</td>
-                        <td style={{ padding: '12px 14px', fontWeight: '700', color: '#0f172a' }}>
+                      <tr key={p.id || idx} style={{ borderBottom: '1px solid var(--surface-muted)', transition: 'background 0.1s' }}>
+                        <td style={{ padding: '12px 14px', color: 'var(--text-secondary)', fontWeight: '600', fontSize: '12px' }}>{idx + 1}</td>
+                        <td style={{ padding: '12px 14px', fontWeight: '700', color: 'var(--text-primary)' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span>{p.name}</span>
-                            <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '600' }}>({p.unit || 'ppm'})</span>
+                            <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '600' }}>({p.unit || 'ppm'})</span>
                             {(pendingStatus[`param:new`] === 'pending' || pendingStatus[`param:${p.id}`] === 'pending') && <PendingBadge />}
                           </div>
                         </td>
-                        <td style={{ padding: '12px 14px', color: '#475569', fontWeight: '600' }}>{stName}</td>
+                        <td style={{ padding: '12px 14px', color: 'var(--text-secondary)', fontWeight: '600' }}>{stName}</td>
                         <td style={{ padding: '12px 14px' }}>
                           <span style={{
                             padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '700',
-                            background: proto === 'modbus_tcp' ? '#f0fdfa' : proto === 'modbus_rtu' ? '#fff7ed' : proto === 'csv' ? '#f0f9ff' : '#fdf2f8',
-                            color: proto === 'modbus_tcp' ? '#0f766e' : proto === 'modbus_rtu' ? '#c2410c' : proto === 'csv' ? '#0369a1' : '#be185d',
+                            background: proto === 'modbus_tcp' ? 'var(--primary-50)' : proto === 'modbus_rtu' ? 'var(--warning-bg)' : proto === 'csv' ? 'var(--info-bg)' : '#fdf2f8',
+                            color: proto === 'modbus_tcp' ? 'var(--primary-600)' : proto === 'modbus_rtu' ? 'var(--warning)' : proto === 'csv' ? 'var(--info)' : '#be185d',
                           }}>
                             {DEVICE_PROTO_LABELS[proto] || proto}
                           </span>
                         </td>
-                        <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#334155' }}>
-                          {proto === 'csv' ? `Col ${p.register_address}` : p.register_address ?? '—'}
+                        <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: 'var(--text-primary)' }}>
+                          {proto === 'csv' ? `Col ${p.register_address}` : p.register_address ?? 'â€”'}
                         </td>
-                        <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: '#334155' }}>
-                          {isModbus ? (dev?.slave_id ?? p.slave_id ?? 1) : '—'}
+                        <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: 'var(--text-primary)' }}>
+                          {isModbus ? (dev?.slave_id ?? p.slave_id ?? 1) : 'â€”'}
                         </td>
-                        <td style={{ padding: '12px 14px', fontSize: '11px', color: '#64748b', fontWeight: '600' }}>
+                        <td style={{ padding: '12px 14px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '600' }}>
                           {isModbus ? (p.register_type === 'holding' ? '03 Holding' : '04 Input') : (p.parse_method || 'CSV')}
                         </td>
-                        <td style={{ padding: '12px 14px', fontSize: '11px', color: '#64748b', fontWeight: '600' }}>
+                        <td style={{ padding: '12px 14px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '600' }}>
                           {isModbus ? getDataTypeLabel(p.data_type, p.byte_order) : 'Float'}
                         </td>
                         <td style={{ padding: '12px 14px' }}>
                           <span style={{
                             padding: '2px 8px', borderRadius: '99px', fontSize: '10px', fontWeight: '700',
-                            background: p.is_active !== false ? '#dcfce7' : '#f1f5f9',
-                            color: p.is_active !== false ? '#15803d' : '#94a3b8',
+                            background: p.is_active !== false ? 'var(--success-bg)' : 'var(--surface-muted)',
+                            color: p.is_active !== false ? 'var(--success-text)' : 'var(--text-secondary)',
                           }}>
                             {p.is_active !== false ? 'Active' : 'Disabled'}
                           </span>
@@ -547,15 +544,15 @@ export const DevicesScreen = React.memo(() => {
                               disabled={testingId === p.id}
                               title="Test Connection"
                               style={{
-                                background: '#f0fdfa', color: '#0f766e', border: '1px solid #99f6e4',
+                                background: 'var(--primary-50)', color: 'var(--primary-600)', border: '1px solid var(--primary-50)',
                                 borderRadius: '6px', padding: '5px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
                                 fontSize: '11px', fontWeight: '700',
                               }}
                             >
                               <Bolt />
                             </button>
-                            <button onClick={() => openEdit(idx)} style={{ background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: '6px', padding: '5px 8px', cursor: 'pointer' }}><Edit /></button>
-                            <button onClick={() => deleteParameter(p.id)} style={{ background: '#fef2f2', color: '#ef4444', border: 'none', borderRadius: '6px', padding: '5px 8px', cursor: 'pointer' }}><Trash /></button>
+                            <button onClick={() => openEdit(idx)} style={{ background: 'var(--surface-muted)', color: 'var(--text-secondary)', border: 'none', borderRadius: '6px', padding: '5px 8px', cursor: 'pointer' }}><Edit /></button>
+                            <button onClick={() => deleteParameter(p.id)} style={{ background: 'var(--danger-bg)', color: 'var(--danger)', border: 'none', borderRadius: '6px', padding: '5px 8px', cursor: 'pointer' }}><Trash /></button>
                           </div>
                         </td>
                       </tr>
@@ -569,20 +566,20 @@ export const DevicesScreen = React.memo(() => {
       </div>
 
       {modalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(26, 29, 28, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
           <form style={{ background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '720px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden' }} onSubmit={handleSave}>
 
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-muted)' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: 'var(--text-primary)' }}>
                   {editingIdx !== null ? 'Edit Gateway Rule' : 'New Gateway Rule'}
                 </h3>
-                <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#64748b' }}>Configure telemetry parameter connection and scaling</p>
+                <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--text-secondary)' }}>Configure telemetry parameter connection and scaling</p>
               </div>
-              <button type="button" onClick={closeModal} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}><X /></button>
+              <button type="button" onClick={closeModal} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}><X /></button>
             </div>
 
-            <div style={{ borderBottom: '1px solid #e2e8f0', padding: '0 24px', display: 'flex', gap: '8px', background: '#fff' }}>
+            <div style={{ borderBottom: '1px solid var(--border)', padding: '0 24px', display: 'flex', gap: '8px', background: '#fff' }}>
               {[
                 { id: 'identification', label: '1. Identification' },
                 { id: 'source', label: '2. Source Connection' },
@@ -594,8 +591,8 @@ export const DevicesScreen = React.memo(() => {
                   onClick={() => setModalTab(t.id)}
                   style={{
                     padding: '12px 16px', fontSize: '12px', fontWeight: '700', cursor: 'pointer',
-                    background: 'none', border: 'none', borderBottom: '3px solid ' + (modalTab === t.id ? '#0f766e' : 'transparent'),
-                    color: modalTab === t.id ? '#0f766e' : '#64748b',
+                    background: 'none', border: 'none', borderBottom: '3px solid ' + (modalTab === t.id ? 'var(--primary-600)' : 'transparent'),
+                    color: modalTab === t.id ? 'var(--primary-600)' : 'var(--text-secondary)',
                   }}
                 >
                   {t.label}
@@ -643,17 +640,17 @@ export const DevicesScreen = React.memo(() => {
                             disabled={isRefreshingStations}
                             title="Refresh Stations"
                             style={{
-                              padding: '10px 12px', cursor: 'pointer', background: '#f1f5f9',
-                              border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '12px', fontWeight: '700'
+                              padding: '10px 12px', cursor: 'pointer', background: 'var(--surface-muted)',
+                              border: '1.5px solid var(--border)', borderRadius: '8px', fontSize: '12px', fontWeight: '700'
                             }}
                           >
-                            {isRefreshingStations ? '⏳' : '🔄'}
+                            {isRefreshingStations ? 'â³' : 'ðŸ”„'}
                           </button>
                         </div>
                         {stationDropdownOpen && (
                           <div style={{
                             position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
-                            background: '#fff', border: '1.5px solid #cbd5e1', borderRadius: '8px',
+                            background: '#fff', border: '1.5px solid var(--border)', borderRadius: '8px',
                             marginTop: '4px', maxHeight: '200px', overflowY: 'auto',
                             boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                           }}>
@@ -671,15 +668,15 @@ export const DevicesScreen = React.memo(() => {
                                 onMouseDown={(e) => e.preventDefault()}
                                 style={{
                                   padding: '10px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: '700',
-                                  color: '#0f766e', borderBottom: '1px solid #e2e8f0',
-                                  background: '#f0fdfa',
+                                  color: 'var(--primary-600)', borderBottom: '1px solid var(--border)',
+                                  background: 'var(--primary-50)',
                                 }}
                               >
                                 + Add "{stationSearch.trim()}"
                               </div>
                             )}
                             {filteredStations.length === 0 && !stationSearch.trim() ? (
-                              <div style={{ padding: '10px 12px', color: '#94a3b8', fontSize: '12px', fontWeight: '600' }}>
+                              <div style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '600' }}>
                                 Type to add a new station
                               </div>
                             ) : (
@@ -688,16 +685,16 @@ export const DevicesScreen = React.memo(() => {
                                   key={st.id}
                                   style={{
                                     display: 'flex', alignItems: 'center',
-                                    padding: '6px 12px', borderBottom: '1px solid #f1f5f9',
+                                    padding: '6px 12px', borderBottom: '1px solid var(--surface-muted)',
                                   }}
                                 >
                                   <div
                                     onClick={() => selectStation(st.name)}
                                     onMouseDown={(e) => e.preventDefault()}
-                                    style={{ flex: 1, cursor: 'pointer', padding: '4px 0', fontSize: '13px', fontWeight: '600', color: '#0f172a' }}
+                                    style={{ flex: 1, cursor: 'pointer', padding: '4px 0', fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}
                                   >
                                     {st.name}
-                                    <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500', marginLeft: '8px' }}>
+                                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '500', marginLeft: '8px' }}>
                                       ({st.location || 'Zone'})
                                     </span>
                                   </div>
@@ -712,7 +709,7 @@ export const DevicesScreen = React.memo(() => {
                                     onMouseDown={(e) => e.stopPropagation()}
                                     style={{
                                       background: 'none', border: 'none', cursor: 'pointer',
-                                      color: '#94a3b8', fontSize: '13px', padding: '4px 6px', fontWeight: '700',
+                                      color: 'var(--text-secondary)', fontSize: '13px', padding: '4px 6px', fontWeight: '700',
                                     }}
                                     title={`Delete ${st.name}`}
                                   >
@@ -724,7 +721,7 @@ export const DevicesScreen = React.memo(() => {
                           </div>
                         )}
                         {errors.station_name && (
-                          <span style={{ color: '#ef4444', fontSize: '11px', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                          <span style={{ color: 'var(--danger)', fontSize: '11px', fontWeight: '600', marginTop: '4px', display: 'block' }}>
                             {errors.station_name}
                           </span>
                         )}
@@ -742,7 +739,7 @@ export const DevicesScreen = React.memo(() => {
                           placeholder="SO2"
                         />
                         {errors.name && (
-                          <span style={{ color: '#ef4444', fontSize: '11px', fontWeight: '600', marginTop: '4px', display: 'block' }}>
+                          <span style={{ color: 'var(--danger)', fontSize: '11px', fontWeight: '600', marginTop: '4px', display: 'block' }}>
                             {errors.name}
                           </span>
                         )}
@@ -787,7 +784,7 @@ export const DevicesScreen = React.memo(() => {
                       </div>
                     </div>
 
-                    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
 
                       {form.input_type === 'csv' ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -807,19 +804,19 @@ export const DevicesScreen = React.memo(() => {
                               <div>
                                 <label htmlFor="param_csv_folder" style={s()}>Folder Path *</label>
                                 <input id="param_csv_folder" type="text" name="csv_folder" value={form.csv_folder || ''} onChange={handleChange} style={fieldStyle('csv_folder')} placeholder={String.raw`C:\Data\Logs`} />
-                                {errors.csv_folder && <span style={{ color: '#ef4444', fontSize: '11px', fontWeight: '600', marginTop: '3px', display: 'block' }}>{errors.csv_folder}</span>}
+                                {errors.csv_folder && <span style={{ color: 'var(--danger)', fontSize: '11px', fontWeight: '600', marginTop: '3px', display: 'block' }}>{errors.csv_folder}</span>}
                               </div>
                               <div>
                                 <label htmlFor="param_csv_filename_pattern" style={s()}>Filename Pattern</label>
                                 <input id="param_csv_filename_pattern" type="text" name="csv_filename_pattern" value={form.csv_filename_pattern || ''} onChange={handleChange} style={ipt} placeholder="{YYYYMMDD}.csv" />
-                                <div style={{ fontSize: '10px', color: '#0369a1', marginTop: '4px', fontWeight: '600' }}>{renderCsvPattern(form.csv_filename_pattern)}</div>
+                                <div style={{ fontSize: '10px', color: 'var(--info)', marginTop: '4px', fontWeight: '600' }}>{renderCsvPattern(form.csv_filename_pattern)}</div>
                               </div>
                             </div>
                           ) : (
                             <div>
                                 <label htmlFor="param_csv_path" style={s()}>Full File Path (.csv or .xlsx) *</label>
                                 <input id="param_csv_path" type="text" name="csv_path" value={form.csv_path || ''} onChange={handleChange} style={fieldStyle('csv_path')} placeholder={String.raw`C:\Data\readings.csv`} />
-                              {errors.csv_path && <span style={{ color: '#ef4444', fontSize: '11px', fontWeight: '600', marginTop: '3px', display: 'block' }}>{errors.csv_path}</span>}
+                              {errors.csv_path && <span style={{ color: 'var(--danger)', fontSize: '11px', fontWeight: '600', marginTop: '3px', display: 'block' }}>{errors.csv_path}</span>}
                             </div>
                           )}
                         </div>
@@ -848,7 +845,7 @@ export const DevicesScreen = React.memo(() => {
                             <div>
                               <label htmlFor="param_serial_port" style={s()}>Serial Port *</label>
                               <input id="param_serial_port" type="text" name="serial_port" value={form.serial_port || ''} onChange={handleChange} style={fieldStyle('serial_port')} placeholder="COM1" />
-                              {errors.serial_port && <span style={{ color: '#ef4444', fontSize: '11px', fontWeight: '600', marginTop: '3px', display: 'block' }}>{errors.serial_port}</span>}
+                              {errors.serial_port && <span style={{ color: 'var(--danger)', fontSize: '11px', fontWeight: '600', marginTop: '3px', display: 'block' }}>{errors.serial_port}</span>}
                             </div>
                             <div>
                               <label htmlFor="param_baud_rate" style={s()}>Baud Rate</label>
@@ -869,7 +866,7 @@ export const DevicesScreen = React.memo(() => {
                             <div>
                               <label htmlFor="param_request_command" style={s()}>Request Command *</label>
                               <input id="param_request_command" type="text" name="request_command" value={form.request_command || ''} onChange={handleChange} style={fieldStyle('request_command')} placeholder="<SOH>R31<CR>" />
-                              {errors.request_command && <span style={{ color: '#ef4444', fontSize: '11px', fontWeight: '600', marginTop: '3px', display: 'block' }}>{errors.request_command}</span>}
+                              {errors.request_command && <span style={{ color: 'var(--danger)', fontSize: '11px', fontWeight: '600', marginTop: '3px', display: 'block' }}>{errors.request_command}</span>}
                             </div>
                             <div>
                               <label htmlFor="param_response_delimiter" style={s()}>Response Delimiter</label>
@@ -888,12 +885,12 @@ export const DevicesScreen = React.memo(() => {
                             <div>
                               <label htmlFor="param_host" style={s()}>IP Address / Host *</label>
                               <input id="param_host" type="text" name="host" value={form.host || ''} onChange={handleChange} style={fieldStyle('host')} placeholder="192.168.1.101" />
-                              {errors.host && <span style={{ color: '#ef4444', fontSize: '11px', fontWeight: '600', marginTop: '3px', display: 'block' }}>{errors.host}</span>}
+                              {errors.host && <span style={{ color: 'var(--danger)', fontSize: '11px', fontWeight: '600', marginTop: '3px', display: 'block' }}>{errors.host}</span>}
                             </div>
                             <div>
                               <label htmlFor="param_port" style={s()}>Port *</label>
                               <input id="param_port" type="text" name="port" value={form.port || ''} onChange={handleChange} style={fieldStyle('port')} placeholder="502" />
-                              {errors.port && <span style={{ color: '#ef4444', fontSize: '11px', fontWeight: '600', marginTop: '3px', display: 'block' }}>{errors.port}</span>}
+                              {errors.port && <span style={{ color: 'var(--danger)', fontSize: '11px', fontWeight: '600', marginTop: '3px', display: 'block' }}>{errors.port}</span>}
                             </div>
                             {!CUSTOM_PROTOCOLS.includes(form.input_type) && (
                               <div>
@@ -907,7 +904,7 @@ export const DevicesScreen = React.memo(() => {
                               <div>
                                 <label htmlFor="param_request_hex" style={s()}>Request Hex Command</label>
                                 <input id="param_request_hex" type="text" name="request_hex" value={form.request_hex || ''} onChange={handleChange} style={ipt} placeholder="02 4D 31 30 34 30 34 37 43 03" />
-                                <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Hex bytes sent to device (space-separated)</div>
+                                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px' }}>Hex bytes sent to device (space-separated)</div>
                               </div>
                               <div>
                                 <label htmlFor="param_response_delimiter" style={s()}>Response Delimiter</label>
@@ -915,7 +912,7 @@ export const DevicesScreen = React.memo(() => {
                                   <option value="newline">Newline (\n)</option>
                                   <option value="etx">ETX (0x03)</option>
                                 </select>
-                                <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>Character that ends the device response</div>
+                                <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px' }}>Character that ends the device response</div>
                               </div>
                             </div>
                           )}
@@ -925,7 +922,7 @@ export const DevicesScreen = React.memo(() => {
                     </div>
 
                     {form.input_type !== 'csv' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
                         {!NON_MODBUS_PROTOCOLS.includes(form.input_type) && (
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                             <div>
@@ -954,7 +951,7 @@ export const DevicesScreen = React.memo(() => {
                             <label htmlFor="param_register_address" style={s()}>{CUSTOM_PROTOCOLS.includes(form.input_type) ? 'Field Index' : NON_MODBUS_PROTOCOLS.includes(form.input_type) ? 'Field Index / Address' : 'Start Address'}</label>
                             <input id="param_register_address" type="text" inputMode="numeric" name="register_address" value={form.register_address} onChange={handleChange} style={ipt} />
                             {CUSTOM_PROTOCOLS.includes(form.input_type) && (
-                              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>ASCII field index (0-based space-delimited position)</div>
+                              <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px' }}>ASCII field index (0-based space-delimited position)</div>
                             )}
                           </div>
                           {!NON_MODBUS_PROTOCOLS.includes(form.input_type) ? (
@@ -993,8 +990,8 @@ export const DevicesScreen = React.memo(() => {
                       </div>
                     </div>
 
-                    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
-                      <p style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Limits & Warnings</p>
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                      <p style={{ margin: '0 0 12px', fontSize: '12px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Limits & Warnings</p>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                         <div>
                           <label htmlFor="param_min_valid" style={s()}>Min Range</label>
@@ -1029,12 +1026,12 @@ export const DevicesScreen = React.memo(() => {
               </div>
             </div>
 
-            <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#fafafa' }}>
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: 'var(--surface-muted)' }}>
               <button
                 type="button"
                 onClick={closeModal}
                 disabled={isSubmitting}
-                style={{ background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 20px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
+                style={{ background: '#fff', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px 20px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
               >
                 Cancel
               </button>
@@ -1042,7 +1039,7 @@ export const DevicesScreen = React.memo(() => {
                 type="submit"
                 disabled={isSubmitting}
                 style={{
-                  background: isSubmitting ? '#94a3b8' : 'linear-gradient(135deg, #0f766e, #14b8a6)', color: '#fff', border: 'none',
+                  background: isSubmitting ? 'var(--text-secondary)' : 'linear-gradient(135deg, var(--primary-600), var(--primary-400))', color: '#fff', border: 'none',
                   borderRadius: '8px', padding: '10px 24px', fontSize: '13px', fontWeight: '800',
                   cursor: isSubmitting ? 'not-allowed' : 'pointer',
                   boxShadow: isSubmitting ? 'none' : '0 4px 12px rgba(15,118,110,0.3)',
@@ -1065,24 +1062,24 @@ export const DevicesScreen = React.memo(() => {
 
       {/* Unsaved Changes Confirmation Modal (Directive 4) */}
       {confirmDiscardOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '20px' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(26, 29, 28, 0.65)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '20px' }}>
           <div style={{ background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '420px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <h4 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>Discard Unsaved Changes?</h4>
-            <p style={{ margin: 0, fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
+            <h4 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: 'var(--text-primary)' }}>Discard Unsaved Changes?</h4>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
               You have modified configuration parameters for this Gateway Rule. If you exit now, your unsaved changes will be lost.
             </p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
               <button
                 type="button"
                 onClick={() => setConfirmDiscardOpen(false)}
-                style={{ background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
+                style={{ background: 'var(--surface-muted)', color: 'var(--text-primary)', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
               >
                 Keep Editing
               </button>
               <button
                 type="button"
                 onClick={closeModalDirect}
-                style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
+                style={{ background: 'var(--danger)', color: '#fff', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
               >
                 Discard Changes
               </button>

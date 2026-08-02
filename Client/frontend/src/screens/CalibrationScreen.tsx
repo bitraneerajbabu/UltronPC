@@ -8,7 +8,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, T
 const pad = (n: number) => String(n).padStart(2, '0');
 
 const fmtDt = (iso: string | null | undefined) => {
-  if (!iso) return '—';
+  if (!iso) return 'â€”';
   const d = new Date(iso);
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
@@ -33,8 +33,8 @@ const tabBtnStyle = (active: boolean): React.CSSProperties => ({
 });
 
 const STAT_COLORS: Record<string, string> = {
-  pending: '#f59e0b', running: '#3b82f6', completed: '#10b981',
-  approved: '#0f766e', rejected: '#ef4444',
+  pending: 'var(--warning)', running: 'var(--info)', completed: 'var(--success)',
+  approved: 'var(--primary-600)', rejected: 'var(--danger)',
 };
 
 export const CalibrationScreen = React.memo(() => {
@@ -248,11 +248,11 @@ export const CalibrationScreen = React.memo(() => {
         responsive: true,
         animation: false,
         plugins: {
-          legend: { labels: { color: '#475569', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
+          legend: { labels: { color: 'var(--text-secondary)', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
         },
         scales: {
-          x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#f1f5f9' } },
-          y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+          x: { ticks: { color: 'var(--text-secondary)', font: { size: 10 } }, grid: { color: 'var(--surface-muted)' } },
+          y: { ticks: { color: 'var(--text-secondary)', font: { size: 11 } }, grid: { color: 'var(--surface-muted)' } },
         },
       },
     });
@@ -262,8 +262,8 @@ export const CalibrationScreen = React.memo(() => {
     if (viewingJob && viewingJob.results?.length) {
       const zeroResult = viewingJob.results.find((r: any) => r.phase === 'zero');
       const spanResult = viewingJob.results.find((r: any) => r.phase === 'span');
-      if (zeroResult) drawPhaseChart(chartRef, chartInstanceRef, zeroResult, '#0f766e');
-      if (spanResult) drawPhaseChart(spanChartRef, spanChartInstanceRef, spanResult, '#3b82f6');
+      if (zeroResult) drawPhaseChart(chartRef, chartInstanceRef, zeroResult, 'var(--primary-600)');
+      if (spanResult) drawPhaseChart(spanChartRef, spanChartInstanceRef, spanResult, 'var(--info)');
     }
   }, [viewingJob]);
 
@@ -284,22 +284,22 @@ export const CalibrationScreen = React.memo(() => {
       {
         label: 'Value',
         data: shewhart.values,
-        borderColor: '#0f766e',
+        borderColor: 'var(--primary-600)',
         backgroundColor: 'rgba(15,118,110,0.07)',
         fill: true,
         tension: 0.3,
-        pointBackgroundColor: '#0f766e',
+        pointBackgroundColor: 'var(--primary-600)',
         pointRadius: 3,
       },
     ];
     if (shewhart.ucl) {
-      datasets.push({ label: 'UCL', data: shewhart.ucl, borderColor: '#ef4444', borderDash: [6, 3], pointRadius: 0, fill: false, borderWidth: 1.5 });
+      datasets.push({ label: 'UCL', data: shewhart.ucl, borderColor: 'var(--danger)', borderDash: [6, 3], pointRadius: 0, fill: false, borderWidth: 1.5 });
     }
     if (shewhart.lcl) {
-      datasets.push({ label: 'LCL', data: shewhart.lcl, borderColor: '#ef4444', borderDash: [6, 3], pointRadius: 0, fill: false, borderWidth: 1.5 });
+      datasets.push({ label: 'LCL', data: shewhart.lcl, borderColor: 'var(--danger)', borderDash: [6, 3], pointRadius: 0, fill: false, borderWidth: 1.5 });
     }
     if (shewhart.mean) {
-      datasets.push({ label: 'Mean', data: shewhart.mean, borderColor: '#3b82f6', borderDash: [4, 2], pointRadius: 0, fill: false, borderWidth: 1 });
+      datasets.push({ label: 'Mean', data: shewhart.mean, borderColor: 'var(--info)', borderDash: [4, 2], pointRadius: 0, fill: false, borderWidth: 1 });
     }
 
     ccChartInstanceRef.current = new ChartJS(ctx, {
@@ -308,12 +308,12 @@ export const CalibrationScreen = React.memo(() => {
       options: {
         responsive: true,
         plugins: {
-          legend: { labels: { color: '#475569', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
-          title: { display: true, text: 'Shewhart Control Chart', color: '#0f172a', font: { weight: 700, size: 14 } },
+          legend: { labels: { color: 'var(--text-secondary)', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
+          title: { display: true, text: 'Shewhart Control Chart', color: 'var(--text-primary)', font: { weight: 700, size: 14 } },
         },
         scales: {
-          x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#f1f5f9' } },
-          y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+          x: { ticks: { color: 'var(--text-secondary)', font: { size: 10 } }, grid: { color: 'var(--surface-muted)' } },
+          y: { ticks: { color: 'var(--text-secondary)', font: { size: 11 } }, grid: { color: 'var(--surface-muted)' } },
         },
       },
     });
@@ -327,10 +327,10 @@ export const CalibrationScreen = React.memo(() => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
           <div><div className="form-label">Start</div><div style={{ fontWeight: 600, color: T.text }}>{fmtDt(result.start_time)}</div></div>
           <div><div className="form-label">End</div><div style={{ fontWeight: 600, color: T.text }}>{fmtDt(result.end_time)}</div></div>
-          <div><div className="form-label">Min</div><div style={{ fontWeight: 700, color }}>{result.min_value?.toFixed(3) ?? '—'}</div></div>
-          <div><div className="form-label">Max</div><div style={{ fontWeight: 700, color }}>{result.max_value?.toFixed(3) ?? '—'}</div></div>
-          <div><div className="form-label">Avg</div><div style={{ fontWeight: 700, color: T.primary }}>{result.avg_value?.toFixed(3) ?? '—'}</div></div>
-          <div><div className="form-label">Std Dev</div><div style={{ fontWeight: 700, color: T.text }}>{result.std_dev?.toFixed(4) ?? '—'}</div></div>
+          <div><div className="form-label">Min</div><div style={{ fontWeight: 700, color }}>{result.min_value?.toFixed(3) ?? 'â€”'}</div></div>
+          <div><div className="form-label">Max</div><div style={{ fontWeight: 700, color }}>{result.max_value?.toFixed(3) ?? 'â€”'}</div></div>
+          <div><div className="form-label">Avg</div><div style={{ fontWeight: 700, color: T.primary }}>{result.avg_value?.toFixed(3) ?? 'â€”'}</div></div>
+          <div><div className="form-label">Std Dev</div><div style={{ fontWeight: 700, color: T.text }}>{result.std_dev?.toFixed(4) ?? 'â€”'}</div></div>
         </div>
         <canvas ref={result.phase === 'zero' ? chartRef : spanChartRef} height="80"></canvas>
       </div>
@@ -373,7 +373,7 @@ export const CalibrationScreen = React.memo(() => {
                 </thead>
                 <tbody>
                   {jobsLoading ? (
-                    <tr><td colSpan={9} className="table-empty">Loading calibration jobs…</td></tr>
+                    <tr><td colSpan={9} className="table-empty">Loading calibration jobsâ€¦</td></tr>
                   ) : jobs.length === 0 ? (
                     <tr><td colSpan={9} className="table-empty">No calibration jobs found. Start a new one.</td></tr>
                   ) : (
@@ -383,29 +383,29 @@ export const CalibrationScreen = React.memo(() => {
                         <td>{stations.find(s => s.id == job.station_id)?.name || `Station #${job.station_id}`}</td>
                         <td>{parameters.find(p => p.id == job.parameter_id)?.name || `Param #${job.parameter_id}`}</td>
                         <td><span className="badge-info">{job.calibration_type}</span></td>
-                        <td>{job.sequence || '—'}</td>
+                        <td>{job.sequence || 'â€”'}</td>
                         <td>
                           <span style={{
                             display: 'inline-block', padding: '2px 10px', borderRadius: '999px',
-                            fontSize: '11px', fontWeight: 700, background: (STAT_COLORS[job.status] || '#94a3b8') + '1A',
-                            color: STAT_COLORS[job.status] || '#94a3b8',
-                            border: `1px solid ${(STAT_COLORS[job.status] || '#94a3b8') + '33'}`,
+                            fontSize: '11px', fontWeight: 700, background: (STAT_COLORS[job.status] || 'var(--text-secondary)') + '1A',
+                            color: STAT_COLORS[job.status] || 'var(--text-secondary)',
+                            border: `1px solid ${(STAT_COLORS[job.status] || 'var(--text-secondary)') + '33'}`,
                           }}>
                             {job.status.toUpperCase()}
                           </span>
                         </td>
                         <td>{fmtDt(job.scheduled_start)}</td>
-                        <td>{job.triggered_by || '—'}</td>
+                        <td>{job.triggered_by || 'â€”'}</td>
                         <td>
                           <div style={{ display: 'flex', gap: '6px' }}>
                             <button className="table action-btn" onClick={() => handleViewResults(job.id)}
-                              disabled={resultsLoading}>{resultsLoading ? '…' : 'View'}</button>
+                              disabled={resultsLoading}>{resultsLoading ? 'â€¦' : 'View'}</button>
                             {job.status === 'completed' && (
                               <button className="table action-btn" style={{ color: T.primary, borderColor: T.primaryBorder }}
                                 onClick={() => { setSelectedJob(job); setActiveTab('results'); handleViewResults(job.id); }}
-                                disabled={resultsLoading}>{resultsLoading ? '…' : 'Approve'}</button>
+                                disabled={resultsLoading}>{resultsLoading ? 'â€¦' : 'Approve'}</button>
                             )}
-                            <button className="table action-btn" style={{ color: '#d32f2f', borderColor: '#d32f2f' }}
+                            <button className="table action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
                               onClick={async () => {
                                 if (!window.confirm(`Delete job "${job.job_name}"?`)) return;
                                 const r = await authFetch(`${API_BASE}/calibration/${job.id}`, { method: 'DELETE' });
@@ -520,9 +520,9 @@ export const CalibrationScreen = React.memo(() => {
                   <div className="section-title" style={{ marginBottom: 0 }}>{viewingJob.job_name}</div>
                   <span style={{
                     display: 'inline-block', padding: '4px 14px', borderRadius: '999px',
-                    fontSize: '12px', fontWeight: 700, background: (STAT_COLORS[viewingJob.status] || '#94a3b8') + '1A',
-                    color: STAT_COLORS[viewingJob.status] || '#94a3b8',
-                    border: `1px solid ${(STAT_COLORS[viewingJob.status] || '#94a3b8') + '33'}`,
+                    fontSize: '12px', fontWeight: 700, background: (STAT_COLORS[viewingJob.status] || 'var(--text-secondary)') + '1A',
+                    color: STAT_COLORS[viewingJob.status] || 'var(--text-secondary)',
+                    border: `1px solid ${(STAT_COLORS[viewingJob.status] || 'var(--text-secondary)') + '33'}`,
                   }}>
                     {viewingJob.status.toUpperCase()}
                   </span>
@@ -541,8 +541,8 @@ export const CalibrationScreen = React.memo(() => {
                 </div>
               )}
 
-              {phaseCard(viewingJob.results?.find((r: any) => r.phase === 'zero'), '#0f766e')}
-              {phaseCard(viewingJob.results?.find((r: any) => r.phase === 'span'), '#3b82f6')}
+              {phaseCard(viewingJob.results?.find((r: any) => r.phase === 'zero'), 'var(--primary-600)')}
+              {phaseCard(viewingJob.results?.find((r: any) => r.phase === 'span'), 'var(--info)')}
 
               {/* Control Chart */}
               {controlChartData && controlChartData.shewhart && controlChartData.shewhart.labels && (
@@ -556,13 +556,13 @@ export const CalibrationScreen = React.memo(() => {
               {controlChartData && controlChartData.cusum && controlChartData.cusum.labels && (
                 <div className="card">
                   <div className="section-title">CUSUM Control Chart</div>
-                  <canvas ref={el => { if (el) drawExtraChart(el, controlChartData.cusum, '#8b5cf6', 'CUSUM'); }} height="80"></canvas>
+                  <canvas ref={el => { if (el) drawExtraChart(el, controlChartData.cusum, '#378ADD', 'CUSUM'); }} height="80"></canvas>
                 </div>
               )}
               {controlChartData && controlChartData.ewma && controlChartData.ewma.labels && (
                 <div className="card">
                   <div className="section-title">EWMA Control Chart</div>
-                  <canvas ref={el => { if (el) drawExtraChart(el, controlChartData.ewma, '#f59e0b', 'EWMA'); }} height="80"></canvas>
+                  <canvas ref={el => { if (el) drawExtraChart(el, controlChartData.ewma, 'var(--warning)', 'EWMA'); }} height="80"></canvas>
                 </div>
               )}
 
@@ -578,9 +578,9 @@ export const CalibrationScreen = React.memo(() => {
                   </div>
                   <div className="toolbar">
                     <button className="btn btn-primary" onClick={() => handleApproveReject(viewingJob.id, 'approve')}
-                      disabled={processingJobId === viewingJob.id}>{processingJobId === viewingJob.id ? 'Processing…' : 'Approve'}</button>
+                      disabled={processingJobId === viewingJob.id}>{processingJobId === viewingJob.id ? 'Processingâ€¦' : 'Approve'}</button>
                     <button className="btn btn-danger" onClick={() => handleApproveReject(viewingJob.id, 'reject')}
-                      disabled={processingJobId === viewingJob.id}>{processingJobId === viewingJob.id ? 'Processing…' : 'Reject'}</button>
+                      disabled={processingJobId === viewingJob.id}>{processingJobId === viewingJob.id ? 'Processingâ€¦' : 'Reject'}</button>
                   </div>
                 </div>
               )}
@@ -605,7 +605,7 @@ export const CalibrationScreen = React.memo(() => {
                             <td><span className={a.status === 'approved' ? 'badge-success' : 'badge-error'}>{a.status}</span></td>
                             <td>{a.approved_by}</td>
                             <td>{fmtDt(a.approved_at)}</td>
-                            <td>{a.comments || '—'}</td>
+                            <td>{a.comments || 'â€”'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -646,11 +646,11 @@ function drawExtraChart(canvas: HTMLCanvasElement, data: any, color: string, lab
     options: {
       responsive: true,
       plugins: {
-        legend: { labels: { color: '#475569', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
+        legend: { labels: { color: 'var(--text-secondary)', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
       },
       scales: {
-        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#f1f5f9' } },
-        y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+        x: { ticks: { color: 'var(--text-secondary)', font: { size: 10 } }, grid: { color: 'var(--surface-muted)' } },
+        y: { ticks: { color: 'var(--text-secondary)', font: { size: 11 } }, grid: { color: 'var(--surface-muted)' } },
       },
     },
   });

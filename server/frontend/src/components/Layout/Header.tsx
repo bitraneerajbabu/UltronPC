@@ -109,7 +109,7 @@ export default function Header({
           <IconButton
             onClick={onRequestNotif}
             size="small"
-            sx={{ color: notifPermission === 'granted' ? '#2563EB' : '#6B7280' }}
+            sx={{ color: notifPermission === 'granted' ? '#378ADD' : '#6B6E6C' }}
           >
             <Badge
               variant="dot"
@@ -123,7 +123,7 @@ export default function Header({
         </Tooltip>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 1, pl: 2, borderLeft: 1, borderColor: 'divider' }}>
-          <Avatar sx={{ width: 36, height: 36, bgcolor: '#2563EB', fontSize: '14px', fontWeight: 700 }}>
+          <Avatar sx={{ width: 36, height: 36, bgcolor: '#0F6E56', fontSize: '14px', fontWeight: 700 }}>
             <Icon name="User" size={18} />
           </Avatar>
           <Box sx={{ display: { xs: 'none', sm: 'block' } }}>

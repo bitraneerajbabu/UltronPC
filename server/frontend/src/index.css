@@ -36,16 +36,16 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #D1D5DB;
+  background: rgba(0, 0, 0, 0.18);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9CA3AF;
+  background: #6B6E6C;
 }
 
 [data-theme="dark"] ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: rgba(17, 74, 60, 0.8);
 }
 
 [data-theme="dark"] ::-webkit-scrollbar-thumb:hover {

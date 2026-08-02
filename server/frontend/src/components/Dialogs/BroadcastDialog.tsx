@@ -3,7 +3,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button,
   Select, MenuItem, FormControl, InputLabel, Box,
 } from '@mui/material';
-import { MessageSquare } from 'lucide-react';
+import { IconMessage } from '@tabler/icons-react';
 
 interface SiteOption { id: number; name: string; location?: string; }
 
@@ -58,7 +58,7 @@ export default function BroadcastDialog({ open, editData, sites, onClose, onSave
       <form onSubmit={handleSubmit}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box sx={{ width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'primary.light', color: 'primary.main' }}>
-            <MessageSquare size={20} />
+            <IconMessage size={20} />
           </Box>
           {editData ? 'Edit Broadcast' : 'New Broadcast'}
         </DialogTitle>
