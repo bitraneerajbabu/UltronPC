@@ -476,9 +476,9 @@ export const DevicesScreen = React.memo(() => {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-muted)' }}>
+                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--primary-50)' }}>
                   {['#', 'Parameter', 'Station', 'Protocol', 'Address', 'Slave', 'Register', 'Data Type', 'Status', ''].map(h => (
-                    <th key={h} style={{ padding: '12px 14px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
+                    <th key={h} style={{ padding: '12px 14px', fontSize: '10px', fontWeight: '700', color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -510,8 +510,8 @@ export const DevicesScreen = React.memo(() => {
                         <td style={{ padding: '12px 14px' }}>
                           <span style={{
                             padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '700',
-                            background: proto === 'modbus_tcp' ? 'var(--primary-50)' : proto === 'modbus_rtu' ? 'var(--warning-bg)' : proto === 'csv' ? 'var(--info-bg)' : '#fdf2f8',
-                            color: proto === 'modbus_tcp' ? 'var(--primary-600)' : proto === 'modbus_rtu' ? 'var(--warning)' : proto === 'csv' ? 'var(--info)' : '#be185d',
+                            background: proto === 'modbus_tcp' ? 'var(--primary-50)' : proto === 'modbus_rtu' ? 'var(--primary-50)' : proto === 'csv' ? 'var(--info-bg)' : 'var(--surface-muted)',
+                            color: proto === 'modbus_tcp' ? 'var(--primary-600)' : proto === 'modbus_rtu' ? 'var(--primary-600)' : proto === 'csv' ? 'var(--info)' : 'var(--text-secondary)',
                           }}>
                             {DEVICE_PROTO_LABELS[proto] || proto}
                           </span>

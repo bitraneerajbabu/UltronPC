@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { AppContext, LiveDataContext } from './context/AppContext';
-import { IconLayoutDashboard, IconDeviceDesktop, IconReport, IconSettings, IconUsers, IconEye, IconEyeOff, IconFileText, IconShieldCheck, IconMail } from '@tabler/icons-react';
+import { IconLayoutDashboard, IconDeviceDesktop, IconReport, IconSettings, IconUsers, IconEye, IconEyeOff, IconFileText, IconShieldCheck, IconMail, IconGauge, IconChartLine, IconBellRinging, IconRouter, IconUser, IconLock } from '@tabler/icons-react';
 import './App.css';
 
 // Import Screens
@@ -308,95 +308,133 @@ function App() {
   if (!currentUser) {
     return (
       <div className="login-screen">
-        <div className="login-card">
-          <img src="/assets/Ultron_logo.png" className="login-logo" alt="UltrON Logo" />
-          <h2 className="login-title" style={{ marginBottom: localVersion ? '2px' : '8px' }}>Industrial Monitoring Platform</h2>
-          {localVersion && (
-            <div style={{
-              fontSize: '11px',
-              fontWeight: '800',
-              color: 'var(--primary-600)',
-              background: 'rgba(13,79,73,0.08)',
-              padding: '3px 10px',
-              borderRadius: '99px',
-              display: 'inline-block',
-              marginBottom: '12px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em'
-            }}>
-              Version {localVersion}
-            </div>
-          )}
-          <p className="login-description">
-            Sign in with your credentials to access the system
-          </p>
-
-          <form onSubmit={handleLoginSubmit}>
-            <div className="form-group">
-              <label className="form-label">Username</label>
-              <input
-                id="login-username"
-                type="text"
-                className={`form-input ${loginError ? 'error' : ''}`}
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                placeholder="Enter username"
-                autoComplete="username"
-              />
-            </div>
-
-            <div className="form-group relative-group">
-              <label className="form-label">Password</label>
-              <input
-                id="login-password"
-                type={showPassword ? 'text' : 'password'}
-                className={`form-input password-input ${loginError ? 'error' : ''}`}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Enter password"
-                autoComplete="current-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(v => !v)}
-                className="password-toggle-btn"
-              >
-                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-              </button>
-            </div>
-
-            {loginError && (
-              <div className="form-error-msg show" style={{ marginBottom: '18px', textAlign: 'left' }}>
-                {loginError}
+        <div className="login-main">
+          {/* Left: dark teal brand panel */}
+          <div className="login-brand-panel">
+            <img src="/assets/Ultron_logo.png" className="login-brand-logo" alt="UltrON Logo" />
+            <div className="login-brand-body">
+              <div className="login-tiles">
+                <div className="login-tile">
+                  <IconGauge size={24} stroke={1.5} className="login-tile-icon" />
+                  <span>Live parameters</span>
+                </div>
+                <div className="login-tile">
+                  <IconChartLine size={24} stroke={1.5} className="login-tile-icon" />
+                  <span>Trend reports</span>
+                </div>
+                <div className="login-tile">
+                  <IconBellRinging size={24} stroke={1.5} className="login-tile-icon" />
+                  <span>Alarm alerts</span>
+                </div>
+                <div className="login-tile">
+                  <IconRouter size={24} stroke={1.5} className="login-tile-icon" />
+                  <span>Station status</span>
+                </div>
               </div>
-            )}
+              <h2 className="login-tagline">Real-time environmental data monitor.</h2>
+              <p className="login-subtext">Monitor stations, track parameters, and respond to alarms from one dashboard.</p>
+            </div>
+          </div>
 
-            <button
-              type="submit"
-              className="btn btn-primary btn-wide"
-              style={{ height: '42px', fontSize: '14px' }}
-              disabled={loggingIn}
-            >
-              {loggingIn ? 'Signing inâ€¦' : 'Sign In to System'}
-            </button>
-          </form>
+          {/* Right: white form panel */}
+          <div className="login-form-panel">
+            <div className="login-form-inner">
+              <img
+                src="/assets/sunshine_logo.png"
+                className="login-form-logo"
+                alt="Sunshine Technologies"
+                title="Click to perform hard refresh"
+                onClick={handleHardRefresh}
+                style={{ cursor: 'pointer', transition: 'opacity 0.2s ease' }}
+                onMouseEnter={e => { e.currentTarget.style.opacity = '0.7'; }}
+                onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+              />
+              <h1 className="login-heading">Industrial monitoring platform</h1>
+              {localVersion && (
+                <div className="login-version">
+                  Version {localVersion}
+                </div>
+              )}
+              <p className="login-subheading">
+                Sign in with your credentials to access the system.
+              </p>
 
+              <form onSubmit={handleLoginSubmit}>
+                <div className="form-group">
+                  <label className="form-label">Username</label>
+                  <div className="input-with-icon">
+                    <IconUser size={16} stroke={1.5} className="input-icon" />
+                    <input
+                      id="login-username"
+                      type="text"
+                      className={`form-input ${loginError ? 'error' : ''}`}
+                      value={username}
+                      onChange={e => setUsername(e.target.value)}
+                      placeholder="Master"
+                      autoComplete="username"
+                    />
+                  </div>
+                </div>
 
-          <img
-            src="/assets/sunshine_logo.png"
-            className="brand-logo"
-            alt="Neeraj"
-            title="Click to perform hard refresh"
-            onClick={handleHardRefresh}
-            style={{ cursor: 'pointer', transition: 'transform 0.2s ease' }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
-          />
+                <div className="form-group">
+                  <label className="form-label">Password</label>
+                  <div className="input-with-icon">
+                    <IconLock size={16} stroke={1.5} className="input-icon" />
+                    <input
+                      id="login-password"
+                      type={showPassword ? 'text' : 'password'}
+                      className={`form-input password-input ${loginError ? 'error' : ''}`}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      autoComplete="current-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(v => !v)}
+                      className="password-toggle-btn"
+                    >
+                      {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="login-forgot-row">
+                  <a
+                    href="#"
+                    className="login-forgot"
+                    title="Contact support to reset your password"
+                    onClick={e => e.preventDefault()}
+                  >
+                    Forgot password?
+                  </a>
+                </div>
+
+                {loginError && (
+                  <div className="form-error-msg show" style={{ marginBottom: '18px', textAlign: 'left' }}>
+                    {loginError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-wide"
+                  style={{ height: '42px', fontSize: '14px' }}
+                  disabled={loggingIn}
+                >
+                  {loggingIn ? 'Signing in...' : 'Sign in to system'}
+                </button>
+              </form>
+            </div>
+          </div>
         </div>
-          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)', borderTop: '1px solid var(--border)', padding: '6px 20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', flexWrap: 'wrap', zIndex: 10 }}>
-              <span>&copy; 2026 All Rights Reserved to <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-400)', textDecoration: 'none' }}>Sunshinetechnologies</a></span>
+
+        <div className="login-footer">
+          <span>&copy; 2026 All rights reserved to <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" className="login-footer-link">Sunshine Technologies</a></span>
+          <span className="login-footer-sep">&middot;</span>
           <span>Support: 7659091468, 9133377852, 853 &amp; Sales: 8801231166, 9133377854</span>
         </div>
+
         <div id="toastContainer"></div>
       </div>
     );
