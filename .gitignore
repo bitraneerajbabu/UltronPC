@@ -52,6 +52,9 @@ reports/
 uploads/
 client_lock.json
 
+# Embedded WebView browser profile (runtime cache — never commit)
+webview_data/
+
 # Frontend boilerplate assets
 react.svg
 vite.svg
