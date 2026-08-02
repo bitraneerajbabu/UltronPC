@@ -235,11 +235,11 @@ function App() {
           <div style={{ textAlign: 'center' }}>
             <img src="/assets/Ultron_logo.png" className="login-logo" alt="UltrON Logo" style={{ height: '70px', marginBottom: '16px', objectFit: 'contain' }} />
             <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '6px', color: 'var(--info)' }}>License Activation</h2>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Please activate your UltrON installation with your station key.</p>
+            <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.75)' }}>Please activate your UltrON installation with your station key.</p>
           </div>
           <form onSubmit={handleActivationSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Station API Key</label>
+              <label style={{ fontSize: '12px', fontWeight: '600', color: 'rgba(255, 255, 255, 0.75)' }}>Station API Key</label>
               <input
                 type="text"
                 placeholder="Enter API Key (e.g. IN_UltronSST_...)"

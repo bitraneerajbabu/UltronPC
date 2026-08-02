@@ -16,9 +16,9 @@
   /* Neutrals */
   --bg:            #FAF8F2;
   --surface:       #FFFFFF;
-  --surface-muted: #F4F0E6;
-  --text-primary:  #1A1D1C;
-  --text-secondary:#6B6E6C;
+  --surface-muted: #E1F5EE;
+--text-primary:  #000000;
+--text-secondary:#000000;
   --border:        rgba(0, 0, 0, 0.08);
 
   /* Status */
@@ -1028,7 +1028,7 @@ input[type="number"] {
 
 
 
-.grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 18px; }
+.grid-4 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; }
 .grid-5 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 18px; }
 
 

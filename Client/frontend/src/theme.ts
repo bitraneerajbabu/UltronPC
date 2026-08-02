@@ -26,10 +26,10 @@ export const T = {
   infoBg:     'rgba(55,138,221,0.12)',
 
   // Neutrals — light mode, warm off-white
-  text:        '#1A1D1C',
-  textMuted:   '#6B6E6C',
-  textFaint:   '#6B6E6C',
-  textLabel:   '#6B6E6C',
+  text:        '#000000',
+  textMuted:   '#000000',
+  textFaint:   '#000000',
+  textLabel:   '#000000',
   border:      'rgba(0,0,0,0.08)',
   borderSoft:  'rgba(15,110,86,0.06)',
 

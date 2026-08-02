@@ -4,7 +4,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 import { T, GLASS_CARD, getParamState, getParamTheme } from '../theme';
 import { Sparkline } from '../components/Sparkline';
 import { AlarmsInspectorModal } from '../components/AlarmsInspectorModal';
-import { IconBuildingFactory, IconShieldCheck, IconShieldX, IconBell, IconDeviceDesktop, IconTemperature, IconDroplet, IconWind, IconCloudFog, IconFlask2, IconAtom2, IconActivity, IconX, IconGauge, IconGaugeFilled, IconSum, IconTestPipe, IconDroplets, IconCloudStorm, IconBuildingFactory2, IconCloudRain, IconCompass } from '@tabler/icons-react';
+import { IconBuildingFactory, IconShieldCheck, IconShieldX, IconBell, IconDeviceDesktop, IconTemperature, IconDroplet, IconWind, IconCloudFog, IconFlask2, IconAtom2, IconActivity, IconX, IconGauge, IconGaugeFilled, IconSum, IconTestPipe, IconDroplets, IconCloudStorm, IconBuildingFactory2, IconCloudRain, IconCompass, IconAlertOctagon, IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, LineController, Filler);
 
@@ -173,37 +173,37 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
             {renderIcon()}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '15px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-primary)' }}>{p.name || p.tag_name}</span>
+            <span style={{ fontSize: '15px', fontWeight: '800', color: isOffline ? '#FFFFFF' : '#000000' }}>{p.name || p.tag_name}</span>
             {deviceName && deviceName.trim().toLowerCase() !== 'global gateway' && (
-              <span style={{ fontSize: '11px', fontWeight: '700', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)', textTransform: 'uppercase' }}>{deviceName}</span>
+              <span style={{ fontSize: '11px', fontWeight: '700', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000', textTransform: 'uppercase' }}>{deviceName}</span>
             )}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ width: '10px', height: '10px', backgroundColor: isOffline ? '#FFFFFF' : (isGood ? '#639922' : state.dot), borderRadius: '50%', animation: isOffline ? 'alertPulse 1.2s ease-in-out infinite' : 'none' }}></span>
-          <span style={{ fontSize: '10px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{state.cls === 'sensor-card-exceeded' ? (state.badge || 'EXCEEDED') : (isOffline ? 'OFFLINE' : 'NOMINAL')}</span>
+          <span style={{ fontSize: '10px', fontWeight: '800', color: isOffline ? '#FFFFFF' : '#000000', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{state.cls === 'sensor-card-exceeded' ? (state.badge || 'EXCEEDED') : (isOffline ? 'OFFLINE' : 'NOMINAL')}</span>
         </div>
       </div>
 
       {/* Main Value Block */}
       <div style={{ backgroundColor: isOffline ? 'rgba(255, 255, 255, 0.14)' : 'var(--surface-muted)', borderRadius: '8px', padding: '16px', marginBottom: '16px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-        <span style={{ fontSize: '32px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1' }}>{formattedVal}</span>
-        <span style={{ fontSize: '14px', fontWeight: '700', color: isOffline ? '#FFFFFF' : '#475569' }}>{unit}</span>
+        <span style={{ fontSize: '32px', fontWeight: '800', color: isOffline ? '#FFFFFF' : '#000000', fontFamily: T.fontMono, lineHeight: '1' }}>{formattedVal}</span>
+        <span style={{ fontSize: '14px', fontWeight: '700', color: isOffline ? '#FFFFFF' : '#000000' }}>{unit}</span>
       </div>
 
       {/* Details List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Average (15m):</span>
-          <span style={{ fontSize: '12px', fontWeight: '800', color: isOffline ? '#FFFFFF' : '#166534' }}>{formattedAvgVal} {unit}</span>
+          <span style={{ fontSize: '12px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000' }}>Average (15m):</span>
+          <span style={{ fontSize: '12px', fontWeight: '800', color: isOffline ? '#FFFFFF' : '#000000' }}>{formattedAvgVal} {unit}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Warning Limit:</span>
-          <span style={{ fontSize: '12px', fontWeight: '800', color: isOffline ? '#FFFFFF' : '#991B1B' }}>{limit} {unit}</span>
+          <span style={{ fontSize: '12px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000' }}>Warning Limit:</span>
+          <span style={{ fontSize: '12px', fontWeight: '800', color: isOffline ? '#FFFFFF' : '#000000' }}>{limit} {unit}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Parameter Range:</span>
-          <span style={{ fontSize: '12px', fontWeight: '700', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>{range} {unit}</span>
+          <span style={{ fontSize: '12px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000' }}>Parameter Range:</span>
+          <span style={{ fontSize: '12px', fontWeight: '700', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000' }}>{range} {unit}</span>
         </div>
       </div>
 
@@ -218,8 +218,8 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
 
       {/* Footer */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', flexWrap: 'wrap', gap: '4px' }}>
-        <span style={{ fontSize: '11px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Raw Feed: {data?.raw_value != null ? formatValPrecision(data.raw_value) : formattedVal} {unit}</span>
-        <span style={{ fontSize: '11px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Received: <span style={{ color: isOffline ? '#FFFFFF' : 'var(--text-secondary)', fontWeight: '700' }}>{formattedTimestamp}</span></span>
+        <span style={{ fontSize: '11px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000' }}>Raw Feed: {data?.raw_value != null ? formatValPrecision(data.raw_value) : formattedVal} {unit}</span>
+        <span style={{ fontSize: '11px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000' }}>Received: <span style={{ color: isOffline ? '#FFFFFF' : '#000000', fontWeight: '700' }}>{formattedTimestamp}</span></span>
       </div>
     </div>
   );
@@ -672,8 +672,8 @@ export const DashboardScreen = React.memo(() => {
       {/* AMC Warning Banner */}
       {amcWarning && (
         <div style={{ padding: '12px 20px', marginBottom: '16px', background: amcWarning.severity === 'critical' ? 'var(--danger-bg)' : 'var(--warning-bg)', border: `1px solid ${amcWarning.severity === 'critical' ? 'var(--danger-bg)' : 'var(--warning-bg)'}`, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? '🚨' : '⚠️'}</span>
-          <span style={{ fontSize: '13px', fontWeight: '600', color: amcWarning.severity === 'critical' ? 'var(--danger-text)' : 'var(--warning-text)', flex: 1 }}>{amcWarning.msg}</span>
+          <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? <IconAlertOctagon size={20} stroke={1.75} color="var(--danger)" /> : <IconAlertTriangle size={20} stroke={1.75} color="var(--warning)" />}</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: '#000000', flex: 1 }}>{amcWarning.msg}</span>
         </div>
       )}
 
@@ -692,28 +692,28 @@ export const DashboardScreen = React.memo(() => {
 
       {/* KPI Cards */}
       <div className="card">
-        <div className="section-title">System Summary</div>
+        <div className="section-title" style={{ color: '#000000' }}>System Summary</div>
         <div className="grid-5">
           <div className={`kpi-card${(kpis?.offlineDevices || 0) > 0 ? ' kpi-card-alert' : ''}`}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Offline Parameters</span>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>Offline Parameters</span>
               <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: (kpis?.offlineDevices || 0) > 0 ? '#F09595' : 'rgba(226, 75, 74, 0.10)' }}>
                 <IconShieldX size={20} stroke={1.5} color={(kpis?.offlineDevices || 0) > 0 ? '#501313' : T.error} />
               </div>
             </div>
-            <div style={{ fontSize: '26px', fontWeight: '800', color: (kpis?.offlineDevices || 0) > 0 ? '#501313' : 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+            <div style={{ fontSize: '26px', fontWeight: '800', color: '#000000', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
               {String(kpis?.offlineDevices || 0).padStart(2, '0')}
             </div>
           </div>
 
           <div className="kpi-card kpi-amber" onClick={() => setShowAlarmsModal(true)} style={{ cursor: 'pointer' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Active Alarms</span>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>Active Alarms</span>
               <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(239, 159, 39, 0.10)' }}>
                 <AlarmIcon />
               </div>
             </div>
-            <div style={{ fontSize: '26px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ fontSize: '26px', fontWeight: '800', color: '#000000', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
               {String(kpis?.activeAlarms || 0).padStart(2, '0')}
               {(kpis?.activeAlarms || 0) > 0 && (
                 <span style={{ width: '10px', height: '10px', background: 'var(--danger)', borderRadius: '50%', display: 'inline-block' }}></span>
@@ -723,39 +723,39 @@ export const DashboardScreen = React.memo(() => {
 
           <div className="kpi-card kpi-green">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Online Parameters</span>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>Online Parameters</span>
               <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(99, 145, 34, 0.10)' }}>
                 <OnlineIcon />
               </div>
             </div>
-            <div style={{ fontSize: '26px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+            <div style={{ fontSize: '26px', fontWeight: '800', color: '#000000', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
               {String(kpis?.onlineDevices || 0).padStart(2, '0')}
             </div>
           </div>
 
           <div className="kpi-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Total Stations</span>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>Total Stations</span>
               <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 110, 86, 0.10)' }}>
                 <StationIcon />
               </div>
             </div>
-            <div style={{ fontSize: '26px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+            <div style={{ fontSize: '26px', fontWeight: '800', color: '#000000', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
               {String(kpis?.totalStations || 0).padStart(2, '0')}
             </div>
           </div>
 
           <div className="kpi-card kpi-blue">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>PC Network</span>
+              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>PC Network</span>
               <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(55, 138, 221, 0.10)' }}>
                 <NetworkIcon />
               </div>
             </div>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', marginBottom: '4px' }}>
+            <div style={{ fontSize: '20px', fontWeight: '700', color: '#000000', fontFamily: T.fontMono, lineHeight: '1.15', marginBottom: '4px' }}>
               {networkInfo?.lan_ip || '---'}
             </div>
-            <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '600', color: '#000000', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block', backgroundColor: networkInfo?.internet_connected ? 'var(--success)' : 'var(--danger)' }}></span>
                 {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
@@ -769,10 +769,10 @@ export const DashboardScreen = React.memo(() => {
       {/* Body — conditional: empty state vs live telemetry */}
       {isEmpty ? (
         <div className="card" style={{ padding: '40px 20px', textAlign: 'center', ...GLASS_CARD, boxShadow: T.shadowSm }}>
-          <div style={{ fontSize: '18px', fontWeight: '600', color: T.textLabel, marginBottom: '10px' }}>
+          <div style={{ fontSize: '18px', fontWeight: '600', color: '#000000', marginBottom: '10px' }}>
             No mapped parameters found.
           </div>
-          <div style={{ color: T.textFaint, fontSize: '14px' }}>
+          <div style={{ color: '#000000', fontSize: '14px' }}>
             Please configure your station, devices, and map parameters in the Parameter Mapping screen to start viewing live telemetry.
           </div>
         </div>
@@ -791,7 +791,7 @@ export const DashboardScreen = React.memo(() => {
                 borderRadius: '16px', width: '100%', maxWidth: '900px',
                 padding: '24px', boxShadow: T.shadowLg, position: 'relative'
               }} onClick={e => e.stopPropagation()}>
-                <button onClick={() => setIsTrendsModalOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: T.textFaint }}>
+                <button onClick={() => setIsTrendsModalOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: '#000000' }}>
                   <IconX size={24} stroke={2} />
                 </button>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
@@ -802,7 +802,7 @@ export const DashboardScreen = React.memo(() => {
                       const device = param ? devices.find(d => d.id == param.device_id) : null;
                       const station = device ? stations.find(s => s.id == device.station_id) : null;
                       return station ? (
-                        <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        <div style={{ fontSize: '12px', fontWeight: '600', color: '#000000', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           {station.name}
                         </div>
                       ) : null;
@@ -828,11 +828,11 @@ export const DashboardScreen = React.memo(() => {
 
           {/* Sensor telemetry Grid */}
           <div className="card">
-            <div className="section-title">Live Parameters</div>
+            <div className="section-title" style={{ color: '#000000' }}>Live Parameters</div>
             {Object.entries(groupedBySensor).map(([sensorName, params]) => (
               <div key={sensorName} style={{ marginBottom: '24px' }}>
                 <div style={{ fontSize: '14px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: `1px solid ${T.borderSoft}`, paddingBottom: '6px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '800', color: T.primary, background: T.primaryBg, padding: '2px 10px', borderRadius: T.rFull, letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '800', color: '#000000', background: T.primaryBg, padding: '2px 10px', borderRadius: T.rFull, letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                     {stationIconFor(sensorName)}
                     {sensorName}
                   </span>
@@ -846,7 +846,7 @@ export const DashboardScreen = React.memo(() => {
             ))}
             {unassignedParameters.length > 0 && (
               <div style={{ marginBottom: '24px' }}>
-                <div style={{ fontSize: '14px', fontWeight: '700', color: T.textLabel, marginBottom: '12px', borderBottom: '1px solid rgba(107, 110, 108, 0.15)', paddingBottom: '6px' }}>
+                <div style={{ fontSize: '14px', fontWeight: '700', color: '#000000', marginBottom: '12px', borderBottom: '1px solid rgba(107, 110, 108, 0.15)', paddingBottom: '6px' }}>
                   Unassigned Parameters
                 </div>
                 <div className="grid-4">
@@ -867,9 +867,9 @@ export const DashboardScreen = React.memo(() => {
         if (!visible) return null;
         const sev = visible.severity || 'info';
         const colors: Record<string,any> = {
-          critical: { bg: 'var(--danger-bg)', border: 'var(--danger-bg)', icon: '🚨', title: 'var(--danger-text)', text: 'var(--danger-text)', label: 'Critical Broadcast' },
-          warn:     { bg: 'var(--warning-bg)', border: 'var(--warning-bg)', icon: '⚠️',  title: 'var(--warning-text)', text: 'var(--warning-text)', label: 'Warning Broadcast' },
-          info:     { bg: 'var(--info-bg)', border: 'var(--info-bg)', icon: 'ℹ️',  title: 'var(--info-text)', text: 'var(--info-text)', label: 'Broadcast Message' },
+          critical: { bg: 'var(--danger-bg)', border: 'var(--danger-bg)', icon: <IconAlertOctagon size={22} stroke={1.75} color="var(--danger-text)" />, title: 'var(--danger-text)', text: 'var(--danger-text)', label: 'Critical Broadcast' },
+          warn:     { bg: 'var(--warning-bg)', border: 'var(--warning-bg)', icon: <IconAlertTriangle size={22} stroke={1.75} color="var(--warning-text)" />,  title: 'var(--warning-text)', text: 'var(--warning-text)', label: 'Warning Broadcast' },
+          info:     { bg: 'var(--info-bg)', border: 'var(--info-bg)', icon: <IconInfoCircle size={22} stroke={1.75} color="var(--info-text)" />,  title: 'var(--info-text)', text: 'var(--info-text)', label: 'Broadcast Message' },
         };
         const c = colors[sev] || colors.info;
         const dismiss = () => {
