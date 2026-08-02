@@ -109,6 +109,12 @@ async def _start_led_http_server(port: int):
         from fastapi.middleware.cors import CORSMiddleware
         from app.api import led as led_api
 
+        if not settings.LED_AUTH_TOKEN:
+            log.warning(
+                "[LED] LED_AUTH_TOKEN is not set — LED endpoints fall back to username-only "
+                "authentication. Set LED_AUTH_TOKEN in .env for a stronger static token."
+            )
+
         led_app = FastAPI(title="UltrON LED", docs_url=None, redoc_url=None)
         led_app.add_middleware(
             CORSMiddleware,
