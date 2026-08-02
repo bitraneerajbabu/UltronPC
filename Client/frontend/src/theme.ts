@@ -8,7 +8,7 @@
 export const T = {
   // Brand / Primary — dark teal industrial
   primary:       '#0F6E56',
-  primaryLight:  '#1D9E75',
+  primaryAccent: '#1D9E75',
   primaryGlow:   'rgba(15,110,86,0.25)',
   primaryBg:     'rgba(15,110,86,0.06)',
   primaryBorder: 'rgba(15,110,86,0.12)',
@@ -18,9 +18,10 @@ export const T = {
   successBg:  'rgba(99,145,34,0.12)',
   warning:    '#EF9F27',
   warningBg:  'rgba(239,159,39,0.12)',
-  danger:     '#E24B4A',
-  dangerBg:   'rgba(226,75,74,0.1)',
-  dangerGlow: 'rgba(226,75,74,0.35)',
+  warningDark:'#C07E12',
+  error:      '#E24B4A',
+  errorBg:    'rgba(226,75,74,0.1)',
+  errorGlow:  'rgba(226,75,74,0.35)',
   info:       '#378ADD',
   infoBg:     'rgba(55,138,221,0.12)',
 
@@ -71,7 +72,7 @@ export const INP = {
 export const SEL = { ...INP, cursor: 'pointer' };
 
 export const inpErr = (hasErr) => hasErr
-  ? { ...INP, borderColor: T.danger, boxShadow: `0 0 0 3px ${T.dangerBg}` }
+  ? { ...INP, borderColor: T.error, boxShadow: `0 0 0 3px ${T.errorBg}` }
   : INP;
 
 // ─── Protocol / Connection configs ────────────────────────────────────────────
@@ -85,7 +86,7 @@ export const PROTO = {
 
 // ─── Sensor card state ────────────────────────────────────────────────────────
 export const PARAM_STATE = {
-  offline:  { cls: 'sensor-card-offline',  badge: 'OFFLINE',  text: 'OFFLINE',  dot: T.danger   },
+  offline:  { cls: 'sensor-card-offline',  badge: 'OFFLINE',  text: 'OFFLINE',  dot: T.error   },
   critical: { cls: 'sensor-card-exceeded', badge: 'CRITICAL', text: 'CRITICAL', dot: '#E24B4A'  },
   warning:  { cls: 'sensor-card-exceeded', badge: 'WARNING',  text: 'EXCEEDED', dot: '#EF9F27'  },
   good:     { cls: 'sensor-card-good',     badge: 'VALID',    text: 'VALID',    dot: T.primary  },
@@ -109,7 +110,7 @@ export const getParamState = (param, livePoint) => {
 // ─── Button presets ───────────────────────────────────────────────────────────
 export const BTN = {
   primary: {
-    background: `linear-gradient(135deg, ${T.primary}, ${T.primaryLight})`,
+    background: `linear-gradient(135deg, ${T.primary}, ${T.primaryAccent})`,
     color: '#fff',
     border: 'none',
     borderRadius: T.r,
@@ -130,9 +131,9 @@ export const BTN = {
     fontWeight: '700',
     cursor: 'pointer',
   },
-  danger: {
-    background: T.dangerBg,
-    color: T.danger,
+  error: {
+    background: T.errorBg,
+    color: T.error,
     border: `1.5px solid rgba(239,68,68,0.2)`,
     borderRadius: T.r,
     padding: '7px 13px',
@@ -156,7 +157,7 @@ export const PARAM_THEMES = {
   pm:      { color: '#0F6E56', bg: 'rgba(15, 110, 86, 0.07)',   border: 'rgba(15, 110, 86, 0.25)',   glow: 'rgba(15, 110, 86, 0.2)'   },
   co:      { color: '#EF9F27', bg: 'rgba(239, 159, 39, 0.07)',  border: 'rgba(239, 159, 39, 0.25)',  glow: 'rgba(239, 159, 39, 0.2)'  },
   nox:     { color: '#378ADD', bg: 'rgba(55, 138, 221, 0.07)',  border: 'rgba(55, 138, 221, 0.25)',  glow: 'rgba(55, 138, 221, 0.2)'  },
-  so2:     { color: '#C07E12', bg: 'rgba(192, 126, 18, 0.07)', border: 'rgba(192, 126, 18, 0.25)', glow: 'rgba(192, 126, 18, 0.2)' },
+  so2:     { color: T.warningDark, bg: 'rgba(192, 126, 18, 0.07)', border: 'rgba(192, 126, 18, 0.25)', glow: 'rgba(192, 126, 18, 0.2)' },
   o3:      { color: '#378ADD', bg: 'rgba(55, 138, 221, 0.07)',  border: 'rgba(55, 138, 221, 0.25)',  glow: 'rgba(55, 138, 221, 0.2)'  },
   ambient: { color: '#639922', bg: 'rgba(99, 145, 34, 0.07)',  border: 'rgba(99, 145, 34, 0.25)',  glow: 'rgba(99, 145, 34, 0.2)'  },
   wind:    { color: '#1D9E75', bg: 'rgba(29, 158, 117, 0.07)',  border: 'rgba(29, 158, 117, 0.25)',  glow: 'rgba(29, 158, 117, 0.2)'  },

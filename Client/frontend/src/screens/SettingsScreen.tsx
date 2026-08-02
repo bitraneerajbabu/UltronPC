@@ -502,7 +502,7 @@ export const SettingsScreen = React.memo(() => {
         <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
           <button style={BTN.primary} onClick={loadInfo} disabled={loading}>{loading ? 'Loadingâ€¦' : 'Refresh'}</button>
           <button style={BTN.ghost} onClick={handleReloadPolling} disabled={!!actionLoading}>{actionLoading === 'reload' ? 'â€¦' : 'Reload Polling'}</button>
-          <button style={{ ...BTN.danger, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>{actionLoading === 'restart' ? 'Restartingâ€¦' : 'Restart App'}</button>
+          <button style={{ ...BTN.error, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>{actionLoading === 'restart' ? 'Restartingâ€¦' : 'Restart App'}</button>
         </div>
       </div>
 
@@ -532,7 +532,7 @@ export const SettingsScreen = React.memo(() => {
         {!fwInfo && !fwChecking && (
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             <button onClick={checkFirmware} style={BTN.ghost}>Check for Updates</button>
-            <button onClick={handleRestartApp} style={BTN.danger} disabled={actionLoading === 'restart'}>
+            <button onClick={handleRestartApp} style={BTN.error} disabled={actionLoading === 'restart'}>
               {actionLoading === 'restart' ? 'Restartingâ€¦' : 'Restart App'}
             </button>
           </div>
@@ -569,7 +569,7 @@ export const SettingsScreen = React.memo(() => {
             <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--danger)', marginRight: '10px' }}>{fwProgress.message}</div>
           )}
           {fwInfo && (
-            <button style={{ ...BTN.danger, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>
+            <button style={{ ...BTN.error, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>
               {actionLoading === 'restart' ? 'Restartingâ€¦' : 'Restart App'}
             </button>
           )}
@@ -624,7 +624,7 @@ export const SettingsScreen = React.memo(() => {
                   âœ“ Staged for save
                 </span>
               )}
-              {formData.plantLogo && <button style={BTN.danger} onClick={() => setFormData(prev => ({ ...prev, plantLogo: '' }))}>Remove</button>}
+              {formData.plantLogo && <button style={BTN.error} onClick={() => setFormData(prev => ({ ...prev, plantLogo: '' }))}>Remove</button>}
             </div>
           </div>
 
@@ -633,9 +633,9 @@ export const SettingsScreen = React.memo(() => {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button style={BTN.danger} onClick={handleResetTelemetry} disabled={!!actionLoading}>{actionLoading === 'resetTel' ? 'â€¦' : 'Clear Telemetry'}</button>
-            <button style={BTN.danger} onClick={handleFactoryReset} disabled={!!actionLoading}>{actionLoading === 'resetAll' ? 'â€¦' : 'Factory Reset'}</button>
-            <button style={BTN.danger} onClick={handleShutdown}>{'Shutdown Server'}</button>
+            <button style={BTN.error} onClick={handleResetTelemetry} disabled={!!actionLoading}>{actionLoading === 'resetTel' ? 'â€¦' : 'Clear Telemetry'}</button>
+            <button style={BTN.error} onClick={handleFactoryReset} disabled={!!actionLoading}>{actionLoading === 'resetAll' ? 'â€¦' : 'Factory Reset'}</button>
+            <button style={BTN.error} onClick={handleShutdown}>{'Shutdown Server'}</button>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button style={BTN.ghost} onClick={handleResetFrontend}>Reset UI</button>

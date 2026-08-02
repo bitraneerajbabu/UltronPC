@@ -4,7 +4,7 @@ import { T, PARAM_STATE, getParamState, PROTO, BTN } from '../theme';
 describe('theme', () => {
   it('exports core design tokens', () => {
     expect(T.primary).toBe('#0F6E56');
-    expect(T.danger).toBe('#E24B4A');
+    expect(T.error).toBe('#E24B4A');
     expect(T.success).toBe('#639922');
     expect(T.fontBase).toContain('Inter');
   });

@@ -62,4 +62,11 @@ hero.png
 *.exe
 server/backend/downloads/
 
+# Credential-bearing scratch/debug scripts — never commit
+debug_*.py
+test_*_final.py
+reset_*.py
+setup_*_config.py
+update_hash.py
+
 
