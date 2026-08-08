@@ -79,7 +79,7 @@ class SecretsVault:
                 import dotenv
                 config = dotenv.dotenv_values(str(env_file))
                 for k, v in config.items():
-                    if v is not None and k not in self._secrets:
+                    if v is not None and str(v).strip() != "" and k not in self._secrets:
                         self._secrets[k] = v
                         self._metadata[k] = {"source": ".env", "loaded_at": datetime.utcnow().isoformat()}
             except Exception:

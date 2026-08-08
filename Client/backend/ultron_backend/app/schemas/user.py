@@ -17,6 +17,7 @@ class Token(BaseModel):
     role: str
     username: str
     full_name: Optional[str] = None
+    allow_server_mgmt: Optional[bool] = None
     refresh_token: Optional[str] = None
 
 
@@ -44,6 +45,7 @@ class UserCreate(BaseModel):
     role: Literal["admin", "client"] = "client"
     full_name: Optional[str] = Field(None, max_length=150)
     is_active: bool = True
+    allow_server_mgmt: bool = True
 
 
 class UserUpdate(BaseModel):
@@ -51,6 +53,7 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=150)
     is_active: Optional[bool] = None
     role: Optional[Literal["admin", "client"]] = None
+    allow_server_mgmt: Optional[bool] = None
 
 
 class UserOut(BaseModel):
@@ -59,6 +62,7 @@ class UserOut(BaseModel):
     role: str
     full_name: Optional[str] = None
     is_active: bool
+    allow_server_mgmt: bool = True
     created_at: datetime
     created_by: Optional[str] = None
     last_login: Optional[datetime] = None

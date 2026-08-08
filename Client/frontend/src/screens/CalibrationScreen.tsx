@@ -8,7 +8,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, T
 const pad = (n: number) => String(n).padStart(2, '0');
 
 const fmtDt = (iso: string | null | undefined) => {
-  if (!iso) return 'â€”';
+  if (!iso) return '—';
   const d = new Date(iso);
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
@@ -327,10 +327,10 @@ export const CalibrationScreen = React.memo(() => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
           <div><div className="form-label">Start</div><div style={{ fontWeight: 600, color: T.text }}>{fmtDt(result.start_time)}</div></div>
           <div><div className="form-label">End</div><div style={{ fontWeight: 600, color: T.text }}>{fmtDt(result.end_time)}</div></div>
-          <div><div className="form-label">Min</div><div style={{ fontWeight: 700, color }}>{result.min_value?.toFixed(3) ?? 'â€”'}</div></div>
-          <div><div className="form-label">Max</div><div style={{ fontWeight: 700, color }}>{result.max_value?.toFixed(3) ?? 'â€”'}</div></div>
-          <div><div className="form-label">Avg</div><div style={{ fontWeight: 700, color: T.primary }}>{result.avg_value?.toFixed(3) ?? 'â€”'}</div></div>
-          <div><div className="form-label">Std Dev</div><div style={{ fontWeight: 700, color: T.text }}>{result.std_dev?.toFixed(4) ?? 'â€”'}</div></div>
+          <div><div className="form-label">Min</div><div style={{ fontWeight: 700, color }}>{result.min_value?.toFixed(3) ?? '—'}</div></div>
+          <div><div className="form-label">Max</div><div style={{ fontWeight: 700, color }}>{result.max_value?.toFixed(3) ?? '—'}</div></div>
+          <div><div className="form-label">Avg</div><div style={{ fontWeight: 700, color: T.primary }}>{result.avg_value?.toFixed(3) ?? '—'}</div></div>
+          <div><div className="form-label">Std Dev</div><div style={{ fontWeight: 700, color: T.text }}>{result.std_dev?.toFixed(4) ?? '—'}</div></div>
         </div>
         <canvas ref={result.phase === 'zero' ? chartRef : spanChartRef} height="80"></canvas>
       </div>
@@ -373,7 +373,7 @@ export const CalibrationScreen = React.memo(() => {
                 </thead>
                 <tbody>
                   {jobsLoading ? (
-                    <tr><td colSpan={9} className="table-empty">Loading calibration jobsâ€¦</td></tr>
+                    <tr><td colSpan={9} className="table-empty">Loading calibration jobs…</td></tr>
                   ) : jobs.length === 0 ? (
                     <tr><td colSpan={9} className="table-empty">No calibration jobs found. Start a new one.</td></tr>
                   ) : (
@@ -383,7 +383,7 @@ export const CalibrationScreen = React.memo(() => {
                         <td>{stations.find(s => s.id == job.station_id)?.name || `Station #${job.station_id}`}</td>
                         <td>{parameters.find(p => p.id == job.parameter_id)?.name || `Param #${job.parameter_id}`}</td>
                         <td><span className="badge-info">{job.calibration_type}</span></td>
-                        <td>{job.sequence || 'â€”'}</td>
+                        <td>{job.sequence || '—'}</td>
                         <td>
                           <span style={{
                             display: 'inline-block', padding: '2px 10px', borderRadius: '999px',
@@ -395,15 +395,15 @@ export const CalibrationScreen = React.memo(() => {
                           </span>
                         </td>
                         <td>{fmtDt(job.scheduled_start)}</td>
-                        <td>{job.triggered_by || 'â€”'}</td>
+                        <td>{job.triggered_by || '—'}</td>
                         <td>
                           <div style={{ display: 'flex', gap: '6px' }}>
                             <button className="table action-btn" onClick={() => handleViewResults(job.id)}
-                              disabled={resultsLoading}>{resultsLoading ? 'â€¦' : 'View'}</button>
+                              disabled={resultsLoading}>{resultsLoading ? '…' : 'View'}</button>
                             {job.status === 'completed' && (
                               <button className="table action-btn" style={{ color: T.primary, borderColor: T.primaryBorder }}
                                 onClick={() => { setSelectedJob(job); setActiveTab('results'); handleViewResults(job.id); }}
-                                disabled={resultsLoading}>{resultsLoading ? 'â€¦' : 'Approve'}</button>
+                                disabled={resultsLoading}>{resultsLoading ? '…' : 'Approve'}</button>
                             )}
                             <button className="table action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
                               onClick={async () => {
@@ -578,9 +578,9 @@ export const CalibrationScreen = React.memo(() => {
                   </div>
                   <div className="toolbar">
                     <button className="btn btn-primary" onClick={() => handleApproveReject(viewingJob.id, 'approve')}
-                      disabled={processingJobId === viewingJob.id}>{processingJobId === viewingJob.id ? 'Processingâ€¦' : 'Approve'}</button>
+                      disabled={processingJobId === viewingJob.id}>{processingJobId === viewingJob.id ? 'Processing…' : 'Approve'}</button>
                     <button className="btn btn-danger" onClick={() => handleApproveReject(viewingJob.id, 'reject')}
-                      disabled={processingJobId === viewingJob.id}>{processingJobId === viewingJob.id ? 'Processingâ€¦' : 'Reject'}</button>
+                      disabled={processingJobId === viewingJob.id}>{processingJobId === viewingJob.id ? 'Processing…' : 'Reject'}</button>
                   </div>
                 </div>
               )}
@@ -605,7 +605,7 @@ export const CalibrationScreen = React.memo(() => {
                             <td><span className={a.status === 'approved' ? 'badge-success' : 'badge-error'}>{a.status}</span></td>
                             <td>{a.approved_by}</td>
                             <td>{fmtDt(a.approved_at)}</td>
-                            <td>{a.comments || 'â€”'}</td>
+                            <td>{a.comments || '—'}</td>
                           </tr>
                         ))}
                       </tbody>

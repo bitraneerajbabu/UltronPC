@@ -5,7 +5,7 @@ describe('theme', () => {
   it('exports core design tokens', () => {
     expect(T.primary).toBe('#0F6E56');
     expect(T.error).toBe('#E24B4A');
-    expect(T.success).toBe('#639922');
+    expect(T.success).toBe('#1D9E75');
     expect(T.fontBase).toContain('Inter');
   });
 

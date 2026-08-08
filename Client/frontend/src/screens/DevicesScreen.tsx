@@ -494,7 +494,7 @@ export const DevicesScreen = React.memo(() => {
                     const dev = devices.find(d => d.id == p.device_id);
                     const proto = dev?.protocol || p.input_type || 'modbus_tcp';
                     const isModbus = !NON_MODBUS_PROTOCOLS.includes(proto) && proto !== 'csv';
-                    const stName = dev?.station_id ? (stations.find(s => s.id == dev.station_id)?.name || 'â€”') : 'â€”';
+                    const stName = dev?.station_id ? (stations.find(s => s.id == dev.station_id)?.name || '—') : '—';
 
                     return (
                       <tr key={p.id || idx} style={{ borderBottom: '1px solid var(--surface-muted)', transition: 'background 0.1s' }}>
@@ -517,10 +517,10 @@ export const DevicesScreen = React.memo(() => {
                           </span>
                         </td>
                         <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: 'var(--text-primary)' }}>
-                          {proto === 'csv' ? `Col ${p.register_address}` : p.register_address ?? 'â€”'}
+                          {proto === 'csv' ? `Col ${p.register_address}` : p.register_address ?? '—'}
                         </td>
                         <td style={{ padding: '12px 14px', fontFamily: T.fontMono, fontSize: '12px', color: 'var(--text-primary)' }}>
-                          {isModbus ? (dev?.slave_id ?? p.slave_id ?? 1) : 'â€”'}
+                          {isModbus ? (dev?.slave_id ?? p.slave_id ?? 1) : '—'}
                         </td>
                         <td style={{ padding: '12px 14px', fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '600' }}>
                           {isModbus ? (p.register_type === 'holding' ? '03 Holding' : '04 Input') : (p.parse_method || 'CSV')}
@@ -574,7 +574,6 @@ export const DevicesScreen = React.memo(() => {
                 <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800', color: 'var(--text-primary)' }}>
                   {editingIdx !== null ? 'Edit Gateway Rule' : 'New Gateway Rule'}
                 </h3>
-                <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--text-secondary)' }}>Configure telemetry parameter connection and scaling</p>
               </div>
               <button type="button" onClick={closeModal} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}><X /></button>
             </div>
@@ -644,7 +643,7 @@ export const DevicesScreen = React.memo(() => {
                               border: '1.5px solid var(--border)', borderRadius: '8px', fontSize: '12px', fontWeight: '700'
                             }}
                           >
-                            {isRefreshingStations ? 'â³' : 'ðŸ”„'}
+                            {isRefreshingStations ? '⏳' : '🔄'}
                           </button>
                         </div>
                         {stationDropdownOpen && (

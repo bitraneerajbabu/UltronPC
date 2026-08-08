@@ -280,9 +280,12 @@ export const DateTimeRangePicker: React.FC<DateTimeRangePickerProps> = ({
           style={{
             position: 'absolute',
             top: 'calc(100% + 8px)',
-            left: 0,
+            right: 0,
+            left: 'auto',
             zIndex: 9999,
             width: '640px',
+            maxWidth: 'calc(100vw - 32px)',
+            boxSizing: 'border-box',
             background: '#ffffff',
             borderRadius: '12px',
             border: '1px solid var(--border)',
@@ -299,7 +302,7 @@ export const DateTimeRangePicker: React.FC<DateTimeRangePickerProps> = ({
                 onClick={handlePrevMonth}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary-600)', fontSize: '18px', fontWeight: 'bold' }}
               >
-                â€¹
+                ‹
               </button>
               <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--primary-600)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 {MONTH_NAMES[viewMonth]} {viewYear}
@@ -315,7 +318,7 @@ export const DateTimeRangePicker: React.FC<DateTimeRangePickerProps> = ({
                 onClick={handleNextMonth}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--primary-600)', fontSize: '18px', fontWeight: 'bold' }}
               >
-                â€º
+                ›
               </button>
             </div>
           </div>

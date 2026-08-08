@@ -14,13 +14,13 @@ const formatCurrentTime = () => {
   return `${p(date.getDate())}-${p(date.getMonth()+1)}-${date.getFullYear()} ${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
 };
 
-const StationIcon = () => <IconBuildingFactory size={20} stroke={1.5} style={{ color: T.primary }} />;
+const StationIcon = () => <IconBuildingFactory size={14} stroke={1.5} style={{ color: T.primary }} />;
 
-const OnlineIcon = () => <IconShieldCheck size={20} stroke={1.5} style={{ color: T.success }} />;
+const OnlineIcon = () => <IconShieldCheck size={14} stroke={1.5} style={{ color: T.success }} />;
 
-const AlarmIcon = () => <IconBell size={20} stroke={1.5} style={{ color: T.warningDark }} />;
+const AlarmIcon = () => <IconBell size={14} stroke={1.5} style={{ color: T.warningDark }} />;
 
-const NetworkIcon = () => <IconDeviceDesktop size={20} stroke={1.5} style={{ color: T.info }} />;
+const NetworkIcon = () => <IconDeviceDesktop size={14} stroke={1.5} style={{ color: T.info }} />;
 
 const stationIconFor = (name: string) => {
   const n = (name || '').toLowerCase();
@@ -106,7 +106,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
 
   // Custom Icon based on tag name
   const renderIcon = () => {
-    const name = (p.tag_name || '').toLowerCase();
+    const name = `${p.tag_name || ''} ${p.name || ''}`.toLowerCase();
     const strokeColor = isOffline ? '#FFFFFF' : paramTheme.color;
     
     if (name.includes('temp')) {
@@ -156,70 +156,70 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
 
   return (
     <div className={`sensor-card ${state.cls}`} onClick={onClick} style={{ 
-      display: 'flex', flexDirection: 'column', padding: '20px', 
+      display: 'flex', flexDirection: 'column', padding: '14px 16px', 
       borderRadius: '12px', 
       width: '100%',
-      borderLeft: `2px solid ${isSelected ? paramTheme.color : (isGood ? 'rgba(29, 158, 117, 0.2)' : state.dot)}`,
-      borderTop: '1px solid #E2E8F0',
-      borderRight: '1px solid #E2E8F0',
-      borderBottom: '1px solid #E2E8F0',
+      borderLeft: `3px solid ${isSelected ? paramTheme.color : (isGood ? 'rgba(29, 158, 117, 0.25)' : state.dot)}`,
+      borderTop: '1px solid var(--border)',
+      borderRight: '1px solid var(--border)',
+      borderBottom: '1px solid var(--border)',
       backgroundColor: isOffline ? '#E24B4A' : 'var(--surface)', 
-      position: 'relative', cursor: 'pointer', transition: 'all 0.2s ease'
+      position: 'relative', cursor: 'pointer', transition: 'all 0.2s ease',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
     }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', flexWrap: 'wrap', gap: '6px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '40px', height: '40px', backgroundColor: isOffline ? 'rgba(255, 255, 255, 0.18)' : paramTheme.bg, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', flexWrap: 'wrap', gap: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ width: '34px', height: '34px', backgroundColor: isOffline ? 'rgba(255, 255, 255, 0.18)' : paramTheme.bg, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             {renderIcon()}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '15px', fontWeight: '800', color: isOffline ? '#FFFFFF' : '#000000' }}>{p.name || p.tag_name}</span>
+            <span style={{ fontSize: '14px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-primary)', lineHeight: '1.2' }}>{p.name || p.tag_name}</span>
             {deviceName && deviceName.trim().toLowerCase() !== 'global gateway' && (
-              <span style={{ fontSize: '11px', fontWeight: '700', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000', textTransform: 'uppercase' }}>{deviceName}</span>
+              <span style={{ fontSize: '10px', fontWeight: '700', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)', textTransform: 'uppercase' }}>{deviceName}</span>
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: '10px', height: '10px', backgroundColor: isOffline ? '#FFFFFF' : (isGood ? '#639922' : state.dot), borderRadius: '50%', animation: isOffline ? 'alertPulse 1.2s ease-in-out infinite' : 'none' }}></span>
-          <span style={{ fontSize: '10px', fontWeight: '800', color: isOffline ? '#FFFFFF' : '#000000', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{state.cls === 'sensor-card-exceeded' ? (state.badge || 'EXCEEDED') : (isOffline ? 'OFFLINE' : 'NOMINAL')}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <span style={{ width: '8px', height: '8px', backgroundColor: isOffline ? '#FFFFFF' : (isGood ? '#1D9E75' : state.dot), borderRadius: '50%', animation: isOffline ? 'alertPulse 1.2s ease-in-out infinite' : 'none' }}></span>
+          <span style={{ fontSize: '9px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{state.cls === 'sensor-card-exceeded' ? (state.badge || 'EXCEEDED') : (isOffline ? 'OFFLINE' : 'NOMINAL')}</span>
         </div>
       </div>
 
       {/* Main Value Block */}
-      <div style={{ backgroundColor: isOffline ? 'rgba(255, 255, 255, 0.14)' : 'var(--surface-muted)', borderRadius: '8px', padding: '16px', marginBottom: '16px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-        <span style={{ fontSize: '32px', fontWeight: '800', color: isOffline ? '#FFFFFF' : '#000000', fontFamily: T.fontMono, lineHeight: '1' }}>{formattedVal}</span>
-        <span style={{ fontSize: '14px', fontWeight: '700', color: isOffline ? '#FFFFFF' : '#000000' }}>{unit}</span>
+      <div style={{ backgroundColor: isOffline ? 'rgba(255, 255, 255, 0.14)' : 'var(--surface-muted)', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+        <span style={{ fontSize: '26px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1' }}>{formattedVal}</span>
+        <span style={{ fontSize: '13px', fontWeight: '700', color: isOffline ? '#FFFFFF' : 'var(--text-secondary)' }}>{unit}</span>
       </div>
 
       {/* Details List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '10px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000' }}>Average (15m):</span>
-          <span style={{ fontSize: '12px', fontWeight: '800', color: isOffline ? '#FFFFFF' : '#000000' }}>{formattedAvgVal} {unit}</span>
+          <span style={{ fontSize: '11px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Average (15m):</span>
+          <span style={{ fontSize: '11px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-primary)' }}>{formattedAvgVal} {unit}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000' }}>Warning Limit:</span>
-          <span style={{ fontSize: '12px', fontWeight: '800', color: isOffline ? '#FFFFFF' : '#000000' }}>{limit} {unit}</span>
+          <span style={{ fontSize: '11px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Warning Limit:</span>
+          <span style={{ fontSize: '11px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-primary)' }}>{limit} {unit}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000' }}>Parameter Range:</span>
-          <span style={{ fontSize: '12px', fontWeight: '700', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000' }}>{range} {unit}</span>
+          <span style={{ fontSize: '11px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Parameter Range:</span>
+          <span style={{ fontSize: '11px', fontWeight: '700', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>{range} {unit}</span>
         </div>
       </div>
 
       {/* Sparkline Block */}
-      <div style={{ backgroundColor: isOffline ? 'rgba(255, 255, 255, 0.14)' : 'var(--surface-muted)', borderRadius: '8px', padding: '12px', marginBottom: '16px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
-         <div style={{ position: 'absolute', top: '10px', left: '10%', right: '10%', borderTop: `1px dotted ${isOffline ? 'rgba(255, 255, 255, 0.4)' : 'var(--danger)'}`, opacity: 0.4 }}></div>
-         <div style={{ position: 'absolute', top: '20px', left: '10%', right: '10%', borderTop: `1px dotted ${isOffline ? 'rgba(255, 255, 255, 0.4)' : 'var(--warning)'}`, opacity: 0.4 }}></div>
-         <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '10px' }}>
-           <Sparkline data={history} color={isOffline ? '#FFFFFF' : sparklineColor} width={180} height={20} />
+      <div style={{ backgroundColor: isOffline ? 'rgba(255, 255, 255, 0.14)' : 'var(--surface-muted)', borderRadius: '6px', padding: '4px 8px', marginBottom: '10px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+         <div style={{ position: 'absolute', top: '6px', left: '8%', right: '8%', borderTop: `1px dotted ${isOffline ? 'rgba(255, 255, 255, 0.4)' : 'var(--danger)'}`, opacity: 0.4 }}></div>
+         <div style={{ position: 'absolute', top: '14px', left: '8%', right: '8%', borderTop: `1px dotted ${isOffline ? 'rgba(255, 255, 255, 0.4)' : 'var(--warning)'}`, opacity: 0.4 }}></div>
+         <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+           <Sparkline data={history} color={isOffline ? '#FFFFFF' : sparklineColor} width={160} height={18} />
          </div>
       </div>
 
       {/* Footer */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', flexWrap: 'wrap', gap: '4px' }}>
-        <span style={{ fontSize: '11px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000' }}>Raw Feed: {data?.raw_value != null ? formatValPrecision(data.raw_value) : formattedVal} {unit}</span>
-        <span style={{ fontSize: '11px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : '#000000' }}>Received: <span style={{ color: isOffline ? '#FFFFFF' : '#000000', fontWeight: '700' }}>{formattedTimestamp}</span></span>
+        <span style={{ fontSize: '10px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Received: <span style={{ color: isOffline ? '#FFFFFF' : 'var(--text-primary)', fontWeight: '700' }}>{formattedTimestamp}</span></span>
       </div>
     </div>
   );
@@ -271,12 +271,15 @@ export const DashboardScreen = React.memo(() => {
     return () => clearInterval(interval);
   }, [fetchNetworkInfo]);
 
-  // Keep clock running
+  // Keep clock running (rAF: ticks on display refresh, no missed seconds)
   useEffect(() => {
-    const timer = setInterval(() => {
+    let raf: number;
+    const update = () => {
       setCurrentTime(formatCurrentTime());
-    }, 1000);
-    return () => clearInterval(timer);
+      raf = requestAnimationFrame(update);
+    };
+    raf = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   const fetch15MinAverages = useCallback(async () => {
@@ -638,19 +641,6 @@ export const DashboardScreen = React.memo(() => {
     return parameters.filter(p => !devices.some(d => d.id == p.device_id));
   }, [devices, parameters]);
 
-  const offlineStations = useMemo(() => {
-    const names = new Set<string>();
-    (parameters || []).forEach(p => {
-      const d = liveData?.[p.tag_name];
-      if (!d || d.status !== 'online') {
-        const device = devices.find(dv => dv.id == p.device_id);
-        const station = stations.find(s => s.id == device?.station_id);
-        if (station?.name) names.add(station.name);
-      }
-    });
-    return [...names];
-  }, [parameters, devices, stations, liveData]);
-
   // AMC expiry warning (45 days early)
   const amcWarning = (() => {
     if (!amcExpiry) return null;
@@ -673,47 +663,34 @@ export const DashboardScreen = React.memo(() => {
       {amcWarning && (
         <div style={{ padding: '12px 20px', marginBottom: '16px', background: amcWarning.severity === 'critical' ? 'var(--danger-bg)' : 'var(--warning-bg)', border: `1px solid ${amcWarning.severity === 'critical' ? 'var(--danger-bg)' : 'var(--warning-bg)'}`, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? <IconAlertOctagon size={20} stroke={1.75} color="var(--danger)" /> : <IconAlertTriangle size={20} stroke={1.75} color="var(--warning)" />}</span>
-          <span style={{ fontSize: '13px', fontWeight: '600', color: '#000000', flex: 1 }}>{amcWarning.msg}</span>
-        </div>
-      )}
-
-      {/* Offline Alert Banner */}
-      {(kpis?.offlineDevices || 0) > 0 && (
-        <div style={{ background: '#04342C', borderRadius: '12px', padding: '14px 20px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#F09595', animation: 'alertPulse 1.2s ease-in-out infinite', flexShrink: 0 }}></span>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ color: '#FFFFFF', fontSize: '14px', fontWeight: '800', letterSpacing: '0.01em' }}>{kpis.offlineDevices} parameter{(kpis.offlineDevices || 0) > 1 ? 's' : ''} offline</span>
-            {offlineStations.length > 0 && (
-              <span style={{ color: '#9FE1CB', fontSize: '12px', fontWeight: '600' }}>Affected station{offlineStations.length > 1 ? 's' : ''}: {offlineStations.join(', ')}</span>
-            )}
-          </div>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)', flex: 1 }}>{amcWarning.msg}</span>
         </div>
       )}
 
       {/* KPI Cards */}
       <div className="card">
-        <div className="section-title" style={{ color: '#000000' }}>System Summary</div>
+        <div className="section-title" style={{ color: 'var(--text-primary)' }}>System Summary</div>
         <div className="grid-5">
           <div className={`kpi-card${(kpis?.offlineDevices || 0) > 0 ? ' kpi-card-alert' : ''}`}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>Offline Parameters</span>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: (kpis?.offlineDevices || 0) > 0 ? '#F09595' : 'rgba(226, 75, 74, 0.10)' }}>
-                <IconShieldX size={20} stroke={1.5} color={(kpis?.offlineDevices || 0) > 0 ? '#501313' : T.error} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+              <span style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Offline Parameters</span>
+              <div style={{ width: '26px', height: '26px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: (kpis?.offlineDevices || 0) > 0 ? '#F09595' : 'rgba(226, 75, 74, 0.10)' }}>
+                <IconShieldX size={14} stroke={1.5} color={(kpis?.offlineDevices || 0) > 0 ? '#501313' : T.error} />
               </div>
             </div>
-            <div style={{ fontSize: '26px', fontWeight: '800', color: '#000000', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
               {String(kpis?.offlineDevices || 0).padStart(2, '0')}
             </div>
           </div>
 
           <div className="kpi-card kpi-amber" onClick={() => setShowAlarmsModal(true)} style={{ cursor: 'pointer' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>Active Alarms</span>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(239, 159, 39, 0.10)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+              <span style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Active Alarms</span>
+              <div style={{ width: '26px', height: '26px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FBDFAE' }}>
                 <AlarmIcon />
               </div>
             </div>
-            <div style={{ fontSize: '26px', fontWeight: '800', color: '#000000', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
               {String(kpis?.activeAlarms || 0).padStart(2, '0')}
               {(kpis?.activeAlarms || 0) > 0 && (
                 <span style={{ width: '10px', height: '10px', background: 'var(--danger)', borderRadius: '50%', display: 'inline-block' }}></span>
@@ -722,40 +699,40 @@ export const DashboardScreen = React.memo(() => {
           </div>
 
           <div className="kpi-card kpi-green">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>Online Parameters</span>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(99, 145, 34, 0.10)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+              <span style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Online Parameters</span>
+              <div style={{ width: '26px', height: '26px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(29, 158, 117, 0.10)' }}>
                 <OnlineIcon />
               </div>
             </div>
-            <div style={{ fontSize: '26px', fontWeight: '800', color: '#000000', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
               {String(kpis?.onlineDevices || 0).padStart(2, '0')}
             </div>
           </div>
 
           <div className="kpi-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>Total Stations</span>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 110, 86, 0.10)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+              <span style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Total Stations</span>
+              <div style={{ width: '26px', height: '26px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 110, 86, 0.10)' }}>
                 <StationIcon />
               </div>
             </div>
-            <div style={{ fontSize: '26px', fontWeight: '800', color: '#000000', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
+            <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
               {String(kpis?.totalStations || 0).padStart(2, '0')}
             </div>
           </div>
 
           <div className="kpi-card kpi-blue">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#000000' }}>PC Network</span>
-              <div style={{ width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(55, 138, 221, 0.10)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+              <span style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>PC Network</span>
+              <div style={{ width: '26px', height: '26px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(55, 138, 221, 0.10)' }}>
                 <NetworkIcon />
               </div>
             </div>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: '#000000', fontFamily: T.fontMono, lineHeight: '1.15', marginBottom: '4px' }}>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', marginBottom: '4px' }}>
               {networkInfo?.lan_ip || '---'}
             </div>
-            <div style={{ fontSize: '11px', fontWeight: '600', color: '#000000', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ fontSize: '9px', fontWeight: '600', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block', backgroundColor: networkInfo?.internet_connected ? 'var(--success)' : 'var(--danger)' }}></span>
                 {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
@@ -769,10 +746,10 @@ export const DashboardScreen = React.memo(() => {
       {/* Body — conditional: empty state vs live telemetry */}
       {isEmpty ? (
         <div className="card" style={{ padding: '40px 20px', textAlign: 'center', ...GLASS_CARD, boxShadow: T.shadowSm }}>
-          <div style={{ fontSize: '18px', fontWeight: '600', color: '#000000', marginBottom: '10px' }}>
+          <div style={{ fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '10px' }}>
             No mapped parameters found.
           </div>
-          <div style={{ color: '#000000', fontSize: '14px' }}>
+          <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
             Please configure your station, devices, and map parameters in the Parameter Mapping screen to start viewing live telemetry.
           </div>
         </div>
@@ -787,7 +764,7 @@ export const DashboardScreen = React.memo(() => {
             }} onClick={() => setIsTrendsModalOpen(false)}>
               <div style={{
                 backgroundColor: 'rgba(253, 250, 242, 0.95)', backdropFilter: 'blur(25px)', WebkitBackdropFilter: 'blur(25px)',
-                border: '1px solid rgba(235, 225, 205, 0.9)',
+                border: '1px solid rgba(0, 0, 0, 0.12)',
                 borderRadius: '16px', width: '100%', maxWidth: '900px',
                 padding: '24px', boxShadow: T.shadowLg, position: 'relative'
               }} onClick={e => e.stopPropagation()}>
@@ -846,7 +823,7 @@ export const DashboardScreen = React.memo(() => {
             ))}
             {unassignedParameters.length > 0 && (
               <div style={{ marginBottom: '24px' }}>
-                <div style={{ fontSize: '14px', fontWeight: '700', color: '#000000', marginBottom: '12px', borderBottom: '1px solid rgba(107, 110, 108, 0.15)', paddingBottom: '6px' }}>
+                <div style={{ fontSize: '14px', fontWeight: '700', color: '#000000', marginBottom: '12px', borderBottom: '1px solid rgba(0, 0, 0, 0.15)', paddingBottom: '6px' }}>
                   Unassigned Parameters
                 </div>
                 <div className="grid-4">

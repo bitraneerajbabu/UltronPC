@@ -18,13 +18,13 @@ from app.services.cpcb.average_service import compute_15min_averages_for_station
 from app.services.cpcb.export_service import export_station_file, run_cpcb_export
 from app.services.cpcb.backfill_service import run_backfill
 from app.core.logger import get_logger
-from app.core.security import get_current_user, require_admin
+from app.core.security import get_current_user, require_admin, require_server_mgmt
 
 log = get_logger("ultron.api.cpcb")
 router = APIRouter(
     prefix="/cpcb",
     tags=["CPCB Export"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user), Depends(require_server_mgmt)],
 )
 
 

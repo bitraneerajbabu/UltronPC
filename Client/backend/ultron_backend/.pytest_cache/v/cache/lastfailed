@@ -32,5 +32,6 @@
   "tests/test_polling_engine.py::TestPerformance::test_process_readings_latency": true,
   "tests/test_polling_engine.py::TestPerformance::test_fast_cycle_latency": true,
   "tests/test_polling_engine.py::TestEdgeCases::test_no_devices_start_polling": true,
-  "test_hash.py": true
+  "test_hash.py": true,
+  "scratch_test.py::test_all": true
 }

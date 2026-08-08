@@ -97,7 +97,7 @@ export const ReportsScreen = React.memo(() => {
 
   const [selectedParamIds, setSelectedParamIds] = useState<string[]>([]);
 
-  // â”€â”€â”€ Trend Chart state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Trend Chart state ──────────────────────────────────────
   const [trendParamId, setTrendParamId] = useState('');
   const [trendResolution, setTrendResolution] = useState('raw');
   const [trendFromDate, setTrendFromDate] = useState(dlDate(-1));
@@ -285,7 +285,7 @@ export const ReportsScreen = React.memo(() => {
           }]
         });
       }
-      showToast(`Trend loaded â€” ${series.labels.length} points.`);
+      showToast(`Trend loaded — ${series.labels.length} points.`);
     } catch (e: any) {
       if (e.name === 'AbortError') return;
       showToast('Failed to fetch trend.', 'error');
@@ -400,7 +400,7 @@ export const ReportsScreen = React.memo(() => {
           const p = parameters.find(p => String(p.id) === id);
           return p ? `${p.name} (${p.tag_name})` : `Param ${id}`;
         })];
-        const naRow: Record<string, any> = { 'Date & Time': fromDate + ' ' + fromTime + ' â€” ' + toDate + ' ' + toTime };
+        const naRow: Record<string, any> = { 'Date & Time': fromDate + ' ' + fromTime + ' — ' + toDate + ' ' + toTime };
         naHeaders.slice(1).forEach(h => { naRow[h] = 'NA'; });
         showToast('No telemetry data for selected range.', 'warn');
         return { headers: naHeaders, rows: [naRow] };
@@ -512,7 +512,7 @@ const formatValPrecision = (val: any): string => {
 
   return (
     <div className="screen active" id="reportsScreen">
-      {/* â”€â”€â”€ Merged Single Reports Card â”€â”€â”€ */}
+      {/* ─── Merged Single Reports Card ─── */}
       <div className="card" style={{ marginBottom: '18px' }}>
         <div className="section-title">Reports & Data Export</div>
         {reportLoading && <div className="loader" style={{ margin: '12px 0' }}></div>}
@@ -596,12 +596,12 @@ const formatValPrecision = (val: any): string => {
           <button className="btn" onClick={handlePreview} disabled={reportLoading}>Refresh Preview</button>
         </div>
 
-        {/* Preview Data Table â€” Showing latest 30 rows (current 30 minutes) */}
+        {/* Preview Data Table — Showing latest 30 rows (current 30 minutes) */}
         {(previewHeaders.length > 0 && previewRows.length > 0) && (
           <div className="table-wrapper" style={{ marginTop: '16px' }}>
             <div style={{ padding: '10px 14px', backgroundColor: 'var(--success-bg)', border: '1px solid var(--success-bg)', borderRadius: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
               <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--success-text)' }}>
-                ðŸ“Š Showing Latest 30 Records (Current 30 Minutes) â€” True Precision
+                📊 Showing Latest 30 Records (Current 30 Minutes) — True Precision
               </span>
               <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--success-text)' }}>
                 Total Range Records: {previewRows.length}
@@ -629,7 +629,7 @@ const formatValPrecision = (val: any): string => {
         )}
       </div>
 
-      {/* â”€â”€â”€ Trend Chart Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {/* ─── Trend Chart Section ──────────────────────────── */}
       <div className="card" style={{ marginTop: '18px' }}>
         <div className="section-title">Trend Chart</div>
         <div className="filter-grid">

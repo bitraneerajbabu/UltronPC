@@ -151,6 +151,7 @@ async def login(
         role=user.role,
         username=user.username,
         full_name=user.full_name,
+        allow_server_mgmt=user.allow_server_mgmt,
         refresh_token=refresh_token_value,
     )
 

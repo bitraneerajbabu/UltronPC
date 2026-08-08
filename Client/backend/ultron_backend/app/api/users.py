@@ -49,6 +49,7 @@ async def create_user(
         role=payload.role,
         full_name=payload.full_name,
         is_active=payload.is_active,
+        allow_server_mgmt=payload.allow_server_mgmt,
         created_by=current_user.username,
     )
     db.add(new_user)

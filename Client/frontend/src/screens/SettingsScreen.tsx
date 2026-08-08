@@ -13,7 +13,7 @@ const PlusIcon = () => <IconPlus size={14} stroke={2.5} />;
 const EditIcon = () => <IconPencil size={14} stroke={2} />;
 const TrashIcon = () => <IconTrash size={14} stroke={2} />;
 
-// â”€â”€â”€ User Modal â”€â”€â”€
+// ─── User Modal ───
 function UserModal({ mode, user, onClose, onSave }: { mode: 'add' | 'edit'; user?: UserData; onClose: () => void; onSave: (p: UserPayload) => void }) {
   const [form, setForm] = useState({ username: user?.username || '', password: '', confirmPassword: '', full_name: user?.full_name || '', role: user?.role || 'client', is_active: user?.is_active !== undefined ? user.is_active : true });
   const [showPwd, setShowPwd] = useState(false);
@@ -41,13 +41,13 @@ function UserModal({ mode, user, onClose, onSave }: { mode: 'add' | 'edit'; user
     <div style={mc}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: 'var(--surface-muted)' }}>{mode === 'add' ? 'Create User' : 'Edit User'}</h3>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '4px', fontSize: '18px' }}>Ã—</button>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '4px', fontSize: '18px' }}>×</button>
       </div>
       <form onSubmit={handleSubmit}>
         {mode === 'add' && (<div className="form-group"><label className="form-label">Username *</label><input autoFocus type="text" className={`form-input ${errors.username ? 'error' : ''}`} value={form.username} onChange={e => set('username', e.target.value)} placeholder="e.g. operator1" autoComplete="off" />{errors.username && <div style={{ color: 'var(--danger)', fontSize: '11px', marginTop: '4px' }}>{errors.username}</div>}</div>)}
         <div className="form-group"><label className="form-label">Full Name</label><input type="text" className="form-input" value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Optional display name" /></div>
-        <div className="form-group"><label className="form-label">Role</label><select className="form-input form-select" value={form.role} onChange={e => set('role', e.target.value)}><option value="client">Client â€” Dashboard, Trends, Reports only</option><option value="admin">Admin â€” Full Access</option></select></div>
-        <div className="form-group"><label className="form-label">{mode === 'add' ? 'Password *' : 'New Password'}</label><div style={{ position: 'relative' }}><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.password ? 'error' : ''}`} value={form.password} onChange={e => set('password', e.target.value)} placeholder={mode === 'add' ? 'Min 4 chars' : 'Leave blank to keep'} style={{ paddingRight: '44px' }} autoComplete="new-password" /><button type="button" onClick={() => setShowPwd(v => !v)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>{showPwd ? 'ðŸ™ˆ' : 'ðŸ‘'}</button></div>{errors.password && <div style={{ color: 'var(--danger)', fontSize: '11px', marginTop: '4px' }}>{errors.password}</div>}</div>)
+        <div className="form-group"><label className="form-label">Role</label><select className="form-input form-select" value={form.role} onChange={e => set('role', e.target.value)}><option value="client">Client — Dashboard, Trends, Reports only</option><option value="admin">Admin — Full Access</option></select></div>
+        <div className="form-group"><label className="form-label">{mode === 'add' ? 'Password *' : 'New Password'}</label><div style={{ position: 'relative' }}><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.password ? 'error' : ''}`} value={form.password} onChange={e => set('password', e.target.value)} placeholder={mode === 'add' ? 'Min 4 chars' : 'Leave blank to keep'} style={{ paddingRight: '44px' }} autoComplete="new-password" /><button type="button" onClick={() => setShowPwd(v => !v)} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>{showPwd ? '🙈' : '👁'}</button></div>{errors.password && <div style={{ color: 'var(--danger)', fontSize: '11px', marginTop: '4px' }}>{errors.password}</div>}</div>)
         {form.password && (<div className="form-group"><label className="form-label">Confirm Password</label><input type={showPwd ? 'text' : 'password'} className={`form-input ${errors.confirmPassword ? 'error' : ''}`} value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} placeholder="Re-enter" />{errors.confirmPassword && <div style={{ color: 'var(--danger)', fontSize: '11px', marginTop: '4px' }}>{errors.confirmPassword}</div>}</div>)}
         <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}><label className="form-label" style={{ margin: 0 }}>Active</label><label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}><input type="checkbox" checked={form.is_active} onChange={e => set('is_active', e.target.checked)} style={{ width: '16px', height: '16px' }} /><span style={{ fontSize: '13px', color: form.is_active ? 'var(--success)' : 'var(--text-secondary)' }}>{form.is_active ? 'Active' : 'Disabled'}</span></label></div>
         <div style={{ display: 'flex', gap: '10px', marginTop: '24px' }}><button type="button" className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</button><button type="submit" className="btn btn-primary" style={{ flex: 2 }}>{mode === 'add' ? 'Create User' : 'Save Changes'}</button></div>
@@ -60,7 +60,7 @@ export const SettingsScreen = React.memo(() => {
   const { API_BASE, showToast, loadAllData, authFetch, pendingStatus, usersList, loadUsers, addUser, editUser, deleteUser, currentUser, parseUtcDate } = useContext(AppContext);
   const [settingsTab, setSettingsTab] = useState('system');
 
-  // â”€â”€â”€ User Management state â”€â”€â”€
+  // ─── User Management state ───
   const [userModal, setUserModal] = useState<{ mode: 'add' | 'edit'; user?: UserData } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserData | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -134,8 +134,8 @@ export const SettingsScreen = React.memo(() => {
     try {
       const res = await authFetch(`${API_BASE}/settings/firmware/download`, { method: 'POST' });
       if (!res.ok) throw new Error();
-      showToast('Download startedâ€¦');
-      setFwProgress({ state: 'downloading', percent: 0, message: 'Starting downloadâ€¦' });
+      showToast('Download started…');
+      setFwProgress({ state: 'downloading', percent: 0, message: 'Starting download…' });
     } catch { showToast('Failed to start download.', 'error'); }
   };
 
@@ -152,8 +152,8 @@ export const SettingsScreen = React.memo(() => {
     try {
       const res = await authFetch(`${API_BASE}/settings/firmware/download-url`, { method: 'POST', body: JSON.stringify({ url: customUrl.trim() }) });
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.detail || 'Failed'); }
-      showToast('Download startedâ€¦');
-      setFwProgress({ state: 'downloading', percent: 0, message: 'Starting downloadâ€¦' });
+      showToast('Download started…');
+      setFwProgress({ state: 'downloading', percent: 0, message: 'Starting download…' });
     } catch (e) { showToast(`Download failed: ${e.message}`, 'error'); }
   };
 
@@ -243,7 +243,7 @@ export const SettingsScreen = React.memo(() => {
       const res = await authFetch(`${API_BASE}/settings/reload-polling`, { method: 'POST' });
       if (!res.ok) throw new Error();
       const data = await res.json();
-      showToast(`Polling engine reloaded â€” ${data.active_poll_loops} loop(s) running.`);
+      showToast(`Polling engine reloaded — ${data.active_poll_loops} loop(s) running.`);
       loadInfo();
     } catch { showToast('Failed to reload polling.', 'error'); }
     finally { setActionLoading(''); }
@@ -255,7 +255,7 @@ export const SettingsScreen = React.memo(() => {
     try {
       const res = await authFetch(`${API_BASE}/settings/restart-app`, { method: 'POST' });
       if (!res.ok) throw new Error();
-      showToast('Restarting UltrONâ€¦', 'info');
+      showToast('Restarting UltrON…', 'info');
       // Poll health endpoint until server comes back
       for (let i = 0; i < 30; i++) {
         await new Promise(r => setTimeout(r, 2000));
@@ -294,7 +294,7 @@ export const SettingsScreen = React.memo(() => {
     } catch {
       showToast('Factory reset triggered. Waiting for server...', 'error');
     }
-    // Server is restarting â€” poll health endpoint until it comes back
+    // Server is restarting — poll health endpoint until it comes back
     for (let i = 0; i < 30; i++) {
       await new Promise(r => setTimeout(r, 2000));
       try {
@@ -302,7 +302,7 @@ export const SettingsScreen = React.memo(() => {
           headers: { 'Authorization': localStorage.getItem('ultron_token') ? `Bearer ${localStorage.getItem('ultron_token')}` : '' }
         });
         if (h.ok) {
-          showToast('Server restarted â€” reloading data.');
+          showToast('Server restarted — reloading data.');
           loadAllData(); loadInfo();
           setActionLoading('');
           return;
@@ -319,7 +319,7 @@ export const SettingsScreen = React.memo(() => {
     window.location.reload();
   };
 
-  // â”€â”€â”€ User Management handlers â”€â”€â”€
+  // ─── User Management handlers ───
   useEffect(() => { if (settingsTab === 'users') loadUsers(); }, [settingsTab]);
 
   const filteredUsers = usersList.filter(u =>
@@ -340,7 +340,7 @@ export const SettingsScreen = React.memo(() => {
   };
 
   const formatDate = (dateStr: string) => {
-    if (!dateStr) return 'â€”';
+    if (!dateStr) return '—';
     return parseUtcDate(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
@@ -398,15 +398,15 @@ export const SettingsScreen = React.memo(() => {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
             <span style={{ color: T.textMuted }}>Station ID</span>
-            <span style={{ color: T.text, fontFamily: 'monospace' }}>{s.station_id || 'â€”'}</span>
+            <span style={{ color: T.text, fontFamily: 'monospace' }}>{s.station_id || '—'}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
             <span style={{ color: T.textMuted }}>License Key</span>
-            <span style={{ color: T.text, fontFamily: 'monospace' }}>{s.key || 'â€”'}</span>
+            <span style={{ color: T.text, fontFamily: 'monospace' }}>{s.key || '—'}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
             <span style={{ color: T.textMuted }}>Server URL</span>
-            <span style={{ color: T.text }}>{s.server_url || 'â€”'}</span>
+            <span style={{ color: T.text }}>{s.server_url || '—'}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
             <span style={{ color: T.textMuted }}>Lock Status</span>
@@ -446,7 +446,7 @@ export const SettingsScreen = React.memo(() => {
         </div>
         {activationError && <div style={{ color: 'var(--danger)', fontSize: '12px', marginBottom: '8px' }}>{activationError}</div>}
         <button className="btn btn-primary" onClick={handleLicenseReverify} disabled={activating} style={{ padding: '8px 20px' }}>
-          {activating ? 'Verifyingâ€¦' : 'Verify & Save'}
+          {activating ? 'Verifying…' : 'Verify & Save'}
         </button>
       </div>
     </>
@@ -476,8 +476,8 @@ export const SettingsScreen = React.memo(() => {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '14px' }}>
           {[
             { label: 'Application', value: `${appInfo?.app_name || 'UltrON'} v${appInfo?.version || '1.1'}` },
-            { label: 'Database', value: healthStatus?.status?.toUpperCase() || 'â€¦', ok: healthStatus?.database === 'ok' },
-            { label: 'Polling Engine', value: pollingStatus?.running ? `RUNNING â€” ${pollingStatus?.active_poll_loops} loop(s)` : 'STOPPED', ok: pollingStatus?.running },
+            { label: 'Database', value: healthStatus?.status?.toUpperCase() || '…', ok: healthStatus?.database === 'ok' },
+            { label: 'Polling Engine', value: pollingStatus?.running ? `RUNNING — ${pollingStatus?.active_poll_loops} loop(s)` : 'STOPPED', ok: pollingStatus?.running },
             { label: 'Internet', value: pushStatus?.internet_ok ? 'Connected' : 'Disconnected', ok: pushStatus?.internet_ok },
             { label: 'Pending Uploads', value: `${pushStatus?.pending_uploads ?? '?'} record(s)` },
           ].map(item => (
@@ -500,9 +500,9 @@ export const SettingsScreen = React.memo(() => {
           ))}
         </div>
         <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-          <button style={BTN.primary} onClick={loadInfo} disabled={loading}>{loading ? 'Loadingâ€¦' : 'Refresh'}</button>
-          <button style={BTN.ghost} onClick={handleReloadPolling} disabled={!!actionLoading}>{actionLoading === 'reload' ? 'â€¦' : 'Reload Polling'}</button>
-          <button style={{ ...BTN.error, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>{actionLoading === 'restart' ? 'Restartingâ€¦' : 'Restart App'}</button>
+          <button style={BTN.primary} onClick={loadInfo} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</button>
+          <button style={BTN.ghost} onClick={handleReloadPolling} disabled={!!actionLoading}>{actionLoading === 'reload' ? '…' : 'Reload Polling'}</button>
+          <button style={{ ...BTN.error, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>{actionLoading === 'restart' ? 'Restarting…' : 'Restart App'}</button>
         </div>
       </div>
 
@@ -533,11 +533,11 @@ export const SettingsScreen = React.memo(() => {
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             <button onClick={checkFirmware} style={BTN.ghost}>Check for Updates</button>
             <button onClick={handleRestartApp} style={BTN.error} disabled={actionLoading === 'restart'}>
-              {actionLoading === 'restart' ? 'Restartingâ€¦' : 'Restart App'}
+              {actionLoading === 'restart' ? 'Restarting…' : 'Restart App'}
             </button>
           </div>
         )}
-        {fwChecking && <div style={{ fontSize: '12px', color: T.textMuted, marginBottom: '12px' }}>Checking for updatesâ€¦</div>}
+        {fwChecking && <div style={{ fontSize: '12px', color: T.textMuted, marginBottom: '12px' }}>Checking for updates…</div>}
         {fwInfo?.update_available && fwInfo.release_notes && (
           <div style={{ marginBottom: '10px' }}>
             <div style={labelS}>Release Notes</div>
@@ -570,7 +570,7 @@ export const SettingsScreen = React.memo(() => {
           )}
           {fwInfo && (
             <button style={{ ...BTN.error, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>
-              {actionLoading === 'restart' ? 'Restartingâ€¦' : 'Restart App'}
+              {actionLoading === 'restart' ? 'Restarting…' : 'Restart App'}
             </button>
           )}
         </div>
@@ -621,7 +621,7 @@ export const SettingsScreen = React.memo(() => {
               <button style={BTN.ghost} onClick={() => document.getElementById('logoInput').click()}>Select Logo</button>
               {formData.plantLogo && (
                 <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  âœ“ Staged for save
+                  ✓ Staged for save
                 </span>
               )}
               {formData.plantLogo && <button style={BTN.error} onClick={() => setFormData(prev => ({ ...prev, plantLogo: '' }))}>Remove</button>}
@@ -633,8 +633,8 @@ export const SettingsScreen = React.memo(() => {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button style={BTN.error} onClick={handleResetTelemetry} disabled={!!actionLoading}>{actionLoading === 'resetTel' ? 'â€¦' : 'Clear Telemetry'}</button>
-            <button style={BTN.error} onClick={handleFactoryReset} disabled={!!actionLoading}>{actionLoading === 'resetAll' ? 'â€¦' : 'Factory Reset'}</button>
+            <button style={BTN.error} onClick={handleResetTelemetry} disabled={!!actionLoading}>{actionLoading === 'resetTel' ? '…' : 'Clear Telemetry'}</button>
+            <button style={BTN.error} onClick={handleFactoryReset} disabled={!!actionLoading}>{actionLoading === 'resetAll' ? '…' : 'Factory Reset'}</button>
             <button style={BTN.error} onClick={handleShutdown}>{'Shutdown Server'}</button>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -668,7 +668,7 @@ export const SettingsScreen = React.memo(() => {
           ))}
         </div>
         <div style={{ marginBottom: '12px' }}>
-          <input type="text" placeholder="Search usersâ€¦" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ ...INP, maxWidth: '300px' }} />
+          <input type="text" placeholder="Search users…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ ...INP, maxWidth: '300px' }} />
         </div>
         <div style={{ ...GLASS_CARD, padding: '0', overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '600px' }}>
@@ -683,9 +683,9 @@ export const SettingsScreen = React.memo(() => {
               ) : filteredUsers.map(u => (
                 <tr key={u.id} style={{ borderBottom: `1px solid ${T.primaryBorder}`, background: u.username === currentUser ? 'rgba(15,118,110,0.04)' : 'transparent' }}>
                   <td style={{ padding: '10px 14px' }}><span style={{ fontWeight: '600', color: T.text }}>{u.username}{u.username === currentUser && <span style={{ marginLeft: '6px', fontSize: '10px', color: 'var(--primary-600)' }}>(you)</span>}</span></td>
-                  <td style={{ padding: '10px 14px', color: T.textMuted }}>{u.full_name || 'â€”'}</td>
+                  <td style={{ padding: '10px 14px', color: T.textMuted }}>{u.full_name || '—'}</td>
                   <td style={{ padding: '10px 14px' }}><RoleBadge role={u.role} /></td>
-                  <td style={{ padding: '10px 14px' }}><span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: '600', background: u.is_active ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)', color: u.is_active ? 'var(--success)' : 'var(--text-secondary)', border: u.is_active ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(100,116,139,0.3)' }}>{u.is_active ? 'â— Active' : 'â—‹ Disabled'}</span></td>
+                  <td style={{ padding: '10px 14px' }}><span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: '600', background: u.is_active ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)', color: u.is_active ? 'var(--success)' : 'var(--text-secondary)', border: u.is_active ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(100,116,139,0.3)' }}>{u.is_active ? '● Active' : '○ Disabled'}</span></td>
                   <td style={{ padding: '10px 14px', color: T.textMuted, fontSize: '12px' }}>{formatDate(u.created_at)}{u.created_by ? <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>by {u.created_by}</div> : ''}</td>
                   <td style={{ padding: '10px 14px', color: T.textMuted, fontSize: '12px' }}>{formatDate(u.last_login)}</td>
                   <td style={{ padding: '10px 14px' }}>
@@ -702,11 +702,11 @@ export const SettingsScreen = React.memo(() => {
         <div style={{ marginTop: '14px', padding: '12px 16px', background: T.primaryBg, border: `1px solid ${T.primaryBorder}`, borderRadius: T.r, display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--danger)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}><ShieldIcon /> Admin</div>
-            <div style={{ fontSize: '11px', color: T.textMuted }}>Dashboard Â· Stations Â· Devices Â· Trends Â· Reports Â· Logs Â· Settings Â· Users</div>
+            <div style={{ fontSize: '11px', color: T.textMuted }}>Dashboard · Stations · Devices · Trends · Reports · Logs · Settings · Users</div>
           </div>
           <div>
             <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--primary-600)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}><UserIcon /> Client (read-only)</div>
-            <div style={{ fontSize: '11px', color: T.textMuted }}>Dashboard Â· Trends Â· Reports</div>
+            <div style={{ fontSize: '11px', color: T.textMuted }}>Dashboard · Trends · Reports</div>
           </div>
         </div>
         {userModal && <UserModal mode={userModal.mode} user={userModal.user} onClose={() => setUserModal(null)} onSave={handleUserSave} />}

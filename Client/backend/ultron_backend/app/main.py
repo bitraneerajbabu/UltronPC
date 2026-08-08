@@ -5,6 +5,7 @@ CORS for the frontend, and APScheduler for averaging + heartbeat.
 """
 
 import asyncio
+import json
 import os
 import threading
 from contextlib import asynccontextmanager
@@ -379,12 +380,23 @@ async def websocket_live(
     """
     WebSocket endpoint for live dashboard data.
 
-    Connect: ws://localhost:8000/ws/live?token=JWT_TOKEN&station_ids=1,2,3
+    Connect: ws://localhost:8000/ws/live?station_ids=1,2,3
+    Auth: send {"type": "auth", "token": "JWT"} as the first message,
+          or pass ?token=JWT for backward compatibility.
     Messages received:
       - {"type": "live_data", "device_id": ..., "data": [...], "ts": "..."}
       - {"type": "alarm", "alarm_id": ..., "severity": ..., ...}
       - {"type": "heartbeat", "ts": ..., "clients": ...}
     """
+    if not token:
+        try:
+            data = await websocket.receive_text()
+            try:
+                token = json.loads(data).get("token", "")
+            except Exception:
+                token = ""
+        except WebSocketDisconnect:
+            return
     if not token:
         await websocket.close(code=4001, reason="Missing auth token")
         return

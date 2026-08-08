@@ -25,6 +25,7 @@ export const AppProvider = ({ children }) => {
   const [activeScreen, setActiveScreen] = useState('dashboardScreen');
   const [currentUser, setCurrentUser] = useState(localStorage.getItem('ultron_user') || null);
   const [currentUserRole, setCurrentUserRole] = useState(localStorage.getItem('ultron_role') || null);
+  const [allowServerMgmt, setAllowServerMgmt] = useState(() => localStorage.getItem('ultron_allow_sm') !== '0');
   const [authToken, setAuthToken] = useState(localStorage.getItem('ultron_token') || null);
   const [loading, setLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -536,10 +537,11 @@ export const AppProvider = ({ children }) => {
 
     wsIsClosing.current = false;
     const token = localStorage.getItem('ultron_token');
-    const ws = new WebSocket(`${WS_BASE}?token=${encodeURIComponent(token || '')}`);
+    const ws = new WebSocket(WS_BASE);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (token) ws.send(JSON.stringify({ type: 'auth', token }));
       console.log('[AppContext] Live WebSocket stream connected.');
     };
 
@@ -677,9 +679,11 @@ export const AppProvider = ({ children }) => {
       localStorage.setItem('ultron_refresh', data.refresh_token);
       localStorage.setItem('ultron_user', data.username);
       localStorage.setItem('ultron_role', data.role);
+      localStorage.setItem('ultron_allow_sm', data.allow_server_mgmt === undefined || data.allow_server_mgmt ? '1' : '0');
       setAuthToken(data.access_token);
       setCurrentUser(data.username);
       setCurrentUserRole(data.role);
+      setAllowServerMgmt(data.allow_server_mgmt === undefined || data.allow_server_mgmt);
 
       // Reset to dashboard on login
       setActiveScreen('dashboardScreen');
@@ -709,9 +713,11 @@ export const AppProvider = ({ children }) => {
     localStorage.removeItem('ultron_refresh');
     localStorage.removeItem('ultron_user');
     localStorage.removeItem('ultron_role');
+    localStorage.removeItem('ultron_allow_sm');
     setAuthToken(null);
     setCurrentUser(null);
     setCurrentUserRole(null);
+    setAllowServerMgmt(true);
     if (wsRef.current) wsRef.current.close();
     showToast('Logged out of UltrON.');
   };
@@ -930,7 +936,7 @@ export const AppProvider = ({ children }) => {
     <AppContext.Provider value={{
       stations, refreshStations, devices, parameters, logs, liveData, kpis,
       activeScreen, setActiveScreen,
-      currentUser, currentUserRole, authToken, login, logout,
+      currentUser, currentUserRole, allowServerMgmt, authToken, login, logout,
       usersList, loadUsers, addUser, editUser, deleteUser,
       addStation, editStation, deleteStation,
       addDevice, editDevice, deleteDevice,

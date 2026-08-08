@@ -14,8 +14,8 @@ export const T = {
   primaryBorder: 'rgba(15,110,86,0.12)',
 
   // Semantic
-  success:    '#639922',
-  successBg:  'rgba(99,145,34,0.12)',
+  success:    '#1D9E75',
+  successBg:  'rgba(29,158,117,0.12)',
   warning:    '#EF9F27',
   warningBg:  'rgba(239,159,39,0.12)',
   warningDark:'#C07E12',
@@ -25,23 +25,23 @@ export const T = {
   info:       '#378ADD',
   infoBg:     'rgba(55,138,221,0.12)',
 
-  // Neutrals — light mode, warm off-white
-  text:        '#000000',
-  textMuted:   '#000000',
-  textFaint:   '#000000',
-  textLabel:   '#000000',
-  border:      'rgba(0,0,0,0.08)',
-  borderSoft:  'rgba(15,110,86,0.06)',
+  // Neutrals — light mode, slate hierarchy
+  text:        '#0F172A',
+  textMuted:   '#475569',
+  textFaint:   '#64748B',
+  textLabel:   '#334155',
+  border:      'rgba(15, 110, 86, 0.15)',
+  borderSoft:  'rgba(15, 110, 86, 0.08)',
 
   // Surfaces
   glass:       '#FFFFFF',
-  glassHover:  '#F4F0E6',
-  glassDark:   '#F4F0E6',
+  glassHover:  '#F0FDF4',
+  glassDark:   '#F0FDF4',
 
-  // Shadows — minimal, hairline only
-  shadowSm:    'none',
-  shadowMd:    'none',
-  shadowLg:    'none',
+  // Shadows
+  shadowSm:    '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+  shadowMd:    '0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04)',
+  shadowLg:    '0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04)',
   shadowGlow:  '0 0 16px rgba(15,110,86,0.12)',
 
   // Radii
@@ -61,7 +61,7 @@ export const INP = {
   padding: '7px 10px',
   borderRadius: T.r,
   border: `1px solid ${T.primaryBorder}`,
-  background: 'rgba(250, 248, 242, 0.8)',
+  background: 'rgba(225, 245, 238, 0.5)',
   fontSize: '12px',
   fontFamily: T.fontBase,
   color: T.text,
@@ -77,10 +77,10 @@ export const inpErr = (hasErr) => hasErr
 
 // ─── Protocol / Connection configs ────────────────────────────────────────────
 export const PROTO = {
-  modbus_tcp: { label: 'Modbus TCP', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', glow: 'rgba(56,189,248,0.25)', icon: '' },
-  modbus_rtu: { label: 'Modbus RTU', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', glow: 'rgba(167,139,250,0.25)', icon: '' },
-  tcp_custom: { label: 'TCP Custom', color: '#34d399', bg: 'rgba(52,211,153,0.12)', glow: 'rgba(52,211,153,0.25)', icon: '' },
-  udp_custom: { label: 'UDP Custom', color: '#f472b6', bg: 'rgba(244,114,182,0.12)', glow: 'rgba(244,114,182,0.25)', icon: '' },
+  modbus_tcp: { label: 'Modbus TCP', color: '#378ADD', bg: 'rgba(55,138,221,0.12)', glow: 'rgba(55,138,221,0.25)', icon: '' },
+  modbus_rtu: { label: 'Modbus RTU', color: '#EF9F27', bg: 'rgba(239,159,39,0.12)', glow: 'rgba(239,159,39,0.25)', icon: '' },
+  tcp_custom: { label: 'TCP Custom', color: '#0F6E56', bg: 'rgba(15,110,86,0.12)', glow: 'rgba(15,110,86,0.25)', icon: '' },
+  udp_custom: { label: 'UDP Custom', color: '#E24B4A', bg: 'rgba(226,75,74,0.12)', glow: 'rgba(226,75,74,0.25)', icon: '' },
   csv:        { label: 'CSV Watch',  color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  glow: 'rgba(251,191,36,0.25)',  icon: '' },
 };
 
@@ -159,7 +159,7 @@ export const PARAM_THEMES = {
   nox:     { color: '#378ADD', bg: 'rgba(55, 138, 221, 0.07)',  border: 'rgba(55, 138, 221, 0.25)',  glow: 'rgba(55, 138, 221, 0.2)'  },
   so2:     { color: T.warningDark, bg: 'rgba(192, 126, 18, 0.07)', border: 'rgba(192, 126, 18, 0.25)', glow: 'rgba(192, 126, 18, 0.2)' },
   o3:      { color: '#378ADD', bg: 'rgba(55, 138, 221, 0.07)',  border: 'rgba(55, 138, 221, 0.25)',  glow: 'rgba(55, 138, 221, 0.2)'  },
-  ambient: { color: '#639922', bg: 'rgba(99, 145, 34, 0.07)',  border: 'rgba(99, 145, 34, 0.25)',  glow: 'rgba(99, 145, 34, 0.2)'  },
+  ambient: { color: '#1D9E75', bg: 'rgba(29, 158, 117, 0.07)',  border: 'rgba(29, 158, 117, 0.25)',  glow: 'rgba(29, 158, 117, 0.2)'  },
   wind:    { color: '#1D9E75', bg: 'rgba(29, 158, 117, 0.07)',  border: 'rgba(29, 158, 117, 0.25)',  glow: 'rgba(29, 158, 117, 0.2)'  },
   default: { color: '#0F6E56', bg: 'rgba(15, 110, 86, 0.07)',  border: 'rgba(15, 110, 86, 0.18)',  glow: 'rgba(15, 110, 86, 0.2)'  },
 };

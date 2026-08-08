@@ -144,6 +144,16 @@ async def require_admin(current_user=Depends(get_current_user)):
     return current_user
 
 
+async def require_server_mgmt(current_user=Depends(require_admin)):
+    """Dependency: admin with Server Management permission (allow_server_mgmt)."""
+    if not getattr(current_user, "allow_server_mgmt", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Server Management access required",
+        )
+    return current_user
+
+
 async def optional_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),

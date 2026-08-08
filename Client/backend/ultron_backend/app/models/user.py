@@ -1,4 +1,4 @@
-"""UltrON — User ORM Model"""
+﻿"""UltrON — User ORM Model"""
 
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Boolean, DateTime
@@ -17,6 +17,7 @@ class User(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
     created_by  = Column(String(80), nullable=True)
     last_login  = Column(DateTime, nullable=True)
+    allow_server_mgmt = Column(Boolean, default=True)
 
     failed_login_attempts = Column(Integer, default=0)
     locked_until          = Column(DateTime, nullable=True)

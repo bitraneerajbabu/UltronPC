@@ -15,7 +15,7 @@ const CPCB = React.lazy(() => import('./screens/CPCB').then(m => ({ default: m.C
 const CalibrationScreen = React.lazy(() => import('./screens/CalibrationScreen').then(m => ({ default: m.CalibrationScreen })));
 
 
-// â”€â”€â”€ SVG Icons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── SVG Icons ────────────────────────────────────────────────────────────────
 const DashboardIcon = () => <IconLayoutDashboard className="nav-icon" size={20} stroke={1.8} />;
 
 const DevicesIcon = () => <IconDeviceDesktop className="nav-icon" size={20} stroke={1.8} />;
@@ -36,7 +36,7 @@ const CalibrationIcon = () => <IconShieldCheck className="nav-icon" size={20} st
 
 const ContactIcon = () => <IconMail className="nav-icon" size={20} stroke={1.8} />;
 
-// â”€â”€â”€ Clock â€” self-contained, prevents App re-render on every second â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Clock — self-contained, prevents App re-render on every second ──────────
 const Clock = React.memo(() => {
   const [timeStr, setTimeStr] = useState('');
   useEffect(() => {
@@ -59,7 +59,7 @@ const Clock = React.memo(() => {
   return <>{timeStr}</>;
 });
 
-// â”€â”€â”€ Nav definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Nav definitions ──────────────────────────────────────────────────────────
 const ALL_NAV = [
   { key: 'dashboardScreen', label: 'Dashboard Overview', Icon: DashboardIcon, roles: ['admin', 'client'] },
   { key: 'devicesScreen', label: 'Devices & Config', Icon: DevicesIcon, roles: ['admin'] },
@@ -77,6 +77,7 @@ function App() {
   const {
     currentUser,
     currentUserRole,
+    allowServerMgmt,
     login,
     logout,
     activeScreen,
@@ -166,7 +167,7 @@ function App() {
     }
   }, [API_BASE]);
 
-  // License check removed â€” AMC block bypassed. Goes straight to Master login.
+  // License check removed — AMC block bypassed. Goes straight to Master login.
 
   const handleLogoClick = async () => {
     if (refreshing) return;
@@ -215,6 +216,7 @@ function App() {
   // Filter nav items based on role
   const visibleNav = ALL_NAV.filter(item =>
     currentUserRole && item.roles.includes(currentUserRole)
+    && (item.key !== 'cpcbScreen' || allowServerMgmt)
   );
 
   // Ensure active screen is accessible by this role
@@ -224,14 +226,16 @@ function App() {
       if (!allowedScreens.includes(activeScreen)) {
         setActiveScreen('dashboardScreen');
       }
+    } else if (!allowServerMgmt && activeScreen === 'cpcbScreen') {
+      setActiveScreen('dashboardScreen');
     }
-  }, [currentUserRole, activeScreen, setActiveScreen]);
+  }, [currentUserRole, activeScreen, setActiveScreen, allowServerMgmt]);
 
-  // â”€â”€â”€ License Setup Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── License Setup Screen ──────────────────────────────────────────────────
   if (!isLicensed) {
     return (
       <div className="login-screen" style={{ background: 'linear-gradient(135deg, var(--text-primary) 0%, var(--text-primary) 100%)', color: 'var(--surface-muted)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-        <div className="login-card" style={{ maxWidth: '450px', width: '100%', padding: '40px', background: 'rgba(30, 41, 59, 0.7)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div className="login-card" style={{ maxWidth: '450px', width: '100%', padding: '40px', background: 'rgba(4, 52, 44, 0.7)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ textAlign: 'center' }}>
             <img src="/assets/Ultron_logo.png" className="login-logo" alt="UltrON Logo" style={{ height: '70px', marginBottom: '16px', objectFit: 'contain' }} />
             <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '6px', color: 'var(--info)' }}>License Activation</h2>
@@ -251,7 +255,7 @@ function App() {
             </div>
             {activationError && (
               <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(226, 75, 74, 0.1)', border: '1px solid rgba(226, 75, 74, 0.2)', color: 'var(--danger)', fontSize: '12px', fontWeight: '500' }}>
-                âš ï¸ {activationError}
+                ⚠️ {activationError}
               </div>
             )}
             <button type="submit" disabled={activating} style={{ padding: '14px', borderRadius: '10px', border: 'none', background: 'var(--info)', color: '#fff', fontSize: '14px', fontWeight: '700', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(55, 138, 221, 0.3)' }}>
@@ -263,13 +267,13 @@ function App() {
     );
   }
 
-  // â”€â”€â”€ Remote Administrator Lock Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Remote Administrator Lock Screen ──────────────────────────────────────
   if ((lockStatus === 'manual_lock' || lockStatus === 'amc_expired') && !bypassed) {
     return (
       <div className="login-screen" style={{ background: 'linear-gradient(135deg, var(--danger-text) 0%, var(--danger-text) 100%)', color: 'var(--surface-muted)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
         <div className="login-card" style={{ maxWidth: '450px', width: '100%', padding: '40px', background: 'rgba(40, 10, 10, 0.7)', backdropFilter: 'blur(16px)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '50px', marginBottom: '12px' }}>ðŸ”’</div>
+            <div style={{ fontSize: '50px', marginBottom: '12px' }}>🔒</div>
             <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '8px', color: 'var(--danger)' }}>System Locked</h2>
             <p style={{ fontSize: '13px', color: 'var(--danger-bg)', lineHeight: '1.5' }}>
               {lockStatus === 'amc_expired' 
@@ -291,7 +295,7 @@ function App() {
               </div>
               {passcodeError && (
                 <div style={{ color: 'var(--danger)', fontSize: '11px', fontWeight: '500' }}>
-                  âŒ {passcodeError}
+                  ❌ {passcodeError}
                 </div>
               )}
               <button type="submit" style={{ padding: '10px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
@@ -304,7 +308,7 @@ function App() {
     );
   }
 
-  // â”€â”€â”€ Login Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Login Screen ──────────────────────────────────────────────────────────
   if (!currentUser) {
     return (
       <div className="login-screen">
@@ -430,9 +434,9 @@ function App() {
         </div>
 
         <div className="login-footer">
-          <span>&copy; 2026 All rights reserved to <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" className="login-footer-link">Sunshine Technologies</a></span>
+          <span>&copy; 2026 <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" className="login-footer-link">Sunshine Technologies</a>. All rights reserved.</span>
           <span className="login-footer-sep">&middot;</span>
-          <span>Support: 7659091468, 9133377852, 853 &amp; Sales: 8801231166, 9133377854</span>
+          <span>Support: 7659091468, 9133377852 &nbsp;|&nbsp; Sales: 8801231166, 9133377854</span>
         </div>
 
         <div id="toastContainer"></div>
@@ -440,7 +444,7 @@ function App() {
     );
   }
 
-  // â”€â”€â”€ Screen renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Screen renderer ───────────────────────────────────────────────────────
   const renderScreen = () => {
     let screenComponent;
     switch (activeScreen) {
@@ -448,13 +452,13 @@ function App() {
       case 'devicesScreen': screenComponent = currentUserRole === 'admin' ? <DevicesScreen /> : <DashboardScreen />; break;
       case 'reportsScreen': screenComponent = <ReportsScreen />; break;
       case 'settingsScreen': screenComponent = currentUserRole === 'admin' ? <SettingsScreen /> : <DashboardScreen />; break;
-      case 'cpcbScreen': screenComponent = currentUserRole === 'admin' ? <CPCB /> : <DashboardScreen />; break;
+      case 'cpcbScreen': screenComponent = currentUserRole === 'admin' && allowServerMgmt ? <CPCB /> : <DashboardScreen />; break;
       case 'calibrationScreen': screenComponent = currentUserRole === 'admin' ? <CalibrationScreen /> : <DashboardScreen />; break;
       case 'contactScreen': screenComponent = <ContactScreen />; break;
       default: screenComponent = <DashboardScreen />; break;
     }
     return (
-      <React.Suspense fallback={<div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '600' }}>Loading moduleâ€¦</div>}>
+      <React.Suspense fallback={<div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '600' }}>Loading module…</div>}>
         {screenComponent}
       </React.Suspense>
     );
@@ -494,7 +498,7 @@ function App() {
         </div>
       </aside>
 
-      {/* Main Container â€” header + content + footer stacked vertically */}
+      {/* Main Container — header + content + footer stacked vertically */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
 
         {/* Top Header Bar */}
@@ -597,8 +601,8 @@ function App() {
             lineHeight: 1.4
           }}>
             <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'none', letterSpacing: '0.02em', lineHeight: 1.6 }}>
-              All &copy; 2026 rights reserved | All Rights Reserved to <a href="https://www.sunshinetechno.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-600)', textDecoration: 'underline' }}>Sunshinetechnologies</a>
-              <br />Support: 7659091468, 9133377852, 853 &amp; Sales: 8801231166, 9133377854
+              &copy; 2026 <a href="https://www.sunshinetechno.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-600)', textDecoration: 'underline' }}>Sunshine Technologies</a>. All rights reserved.
+              <br />Support: 7659091468, 9133377852 &nbsp;|&nbsp; Sales: 8801231166, 9133377854
             </div>
           </div>
           <div className="marquee-container" style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
@@ -607,7 +611,7 @@ function App() {
                 {broadcasts && broadcasts.length > 0 && localStorage.getItem('ultron_broadcast_enabled') !== 'false' ? (
                   broadcasts.map((b, i) => (
                     <span key={b.id} style={{ color: b.severity === 'critical' ? 'var(--danger)' : b.severity === 'warn' ? 'var(--warning)' : 'inherit' }}>
-                      {b.message}{i < broadcasts.length - 1 ? '  â—†  ' : ''}
+                      {b.message}{i < broadcasts.length - 1 ? '  ◆  ' : ''}
                     </span>
                   ))
                 ) : (

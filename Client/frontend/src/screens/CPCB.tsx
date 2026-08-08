@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from 'react';
+﻿import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { T } from '../theme';
@@ -68,7 +68,7 @@ export const CPCB = React.memo(() => {
   const { API_BASE, showToast, authFetch, currentUser } = useContext(AppContext);
   const [subTab, setSubTab] = useState('spcb');
 
-  // â”€â”€â”€ Push Servers (SPCB / CPCB / Central Sync / LED) â”€â”€â”€
+  // ─── Push Servers (SPCB / CPCB / Central Sync / LED) ───
   const [servers, setServers] = useState<PushServer[]>([]);
   const [mappings, setMappings] = useState<Record<string, any>[]>([]);
   const [editedMappings, setEditedMappings] = useState<Record<number, Record<string, MappingEdit>>>({});
@@ -241,7 +241,7 @@ export const CPCB = React.memo(() => {
       const data: any = await res.json();
       const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const parts = (data.results || []).map((r: any) => {
-        const head = `<div style="font:600 13px/1.5 system-ui;padding:8px 12px;background:var(--surface-muted);border-bottom:1px solid var(--border)">${esc(r.label)}: ${r.reachable ? `OK (HTTP ${r.status_code}, ${r.latency_ms}ms)` : `FAILED â€” ${esc(r.error || 'unreachable')}`}<div style="font-weight:400;color:var(--text-secondary);font-size:12px">${esc(r.url || '')}</div></div>`;
+        const head = `<div style="font:600 13px/1.5 system-ui;padding:8px 12px;background:var(--surface-muted);border-bottom:1px solid var(--border)">${esc(r.label)}: ${r.reachable ? `OK (HTTP ${r.status_code}, ${r.latency_ms}ms)` : `FAILED — ${esc(r.error || 'unreachable')}`}<div style="font-weight:400;color:var(--text-secondary);font-size:12px">${esc(r.url || '')}</div></div>`;
         return `<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:10px;font-family:system-ui">${head}${r.body ? `<div style="padding:12px">${r.body}</div>` : ''}</div>`;
       }).join('');
       setTestResultModal({ title: 'URL Check', response: parts || 'No URLs to check.', status: 0, success: (data.results || []).every((r: any) => r.reachable) });
@@ -280,7 +280,7 @@ export const CPCB = React.memo(() => {
     setEditedMappings((prev) => ({ ...prev, [paramId]: { ...prev[paramId], [serverId]: { ...(prev[paramId]?.[serverId] || {} as MappingEdit), [field]: value } } }));
   };
 
-  // â”€â”€â”€ Shared render helpers (Push Servers tab) â”€â”€â”€
+  // ─── Shared render helpers (Push Servers tab) ───
   const sectionHeader = (num: number, title: string, desc: string, color: string, onSave?: (() => void) | null) => (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '14px' }}>
       <div style={{ width: 28, height: 28, borderRadius: '8px', background: color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '800', flexShrink: 0, marginTop: '2px' }}>{num}</div>
@@ -341,7 +341,7 @@ export const CPCB = React.memo(() => {
               <div style={{ padding: '10px 14px', background: 'var(--surface-muted)', borderBottom: '1px solid var(--border)', fontSize: '12px', fontWeight: '700', color: 'var(--primary-600)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {srv.name || <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>Unsaved Server</span>}
                 <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: isLed ? 'var(--warning-bg)' : isCpcb ? 'var(--warning-bg)' : 'var(--primary-50)', color: isLed ? 'var(--warning)' : isCpcb ? 'var(--warning)' : 'var(--primary-600)' }}>{isLed ? 'LED' : isCpcb ? 'CPCB' : isBoth ? 'Both' : 'SPCB'}</span>
-                {!srv.id && <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: 'var(--warning-bg)', color: 'var(--warning-text)' }}>âš  Save server first to enable Test Push</span>}
+                {!srv.id && <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: 'var(--warning-bg)', color: 'var(--warning-text)' }}>⚠ Save server first to enable Test Push</span>}
               </div>
 
               <div style={{ overflowX: 'auto' }}>
@@ -428,7 +428,7 @@ export const CPCB = React.memo(() => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {servers.map((conf, idx) => (conf.protocol === 'tspcb' || conf.protocol === 'both') ? renderServerCard(conf, idx, 'tspcb',
             <><div style={{ flex: '1 1 200px' }}><label style={s()}>Live URL</label><input type="text" name="live_url" value={conf.live_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://.../live" style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Delay URL</label><input type="text" name="delay_url" value={conf.delay_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://.../delay" style={ipt} /></div></>,
-            <><label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}><Toggle checked={!!conf.is_active} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_active', type: 'checkbox', checked: !conf.is_active } })} />{conf.is_active ? 'Enabled' : 'Disabled'}</label>{conf.protocol === 'both' && <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}><Toggle checked={conf.is_cpcb_active ?? true} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_cpcb_active', type: 'checkbox', checked: !(conf.is_cpcb_active ?? true) } })} />CPCB Push</label>}{conf.id && <div style={{ display: 'flex', gap: '6px' }}><button onClick={() => handleTestUrlCheck(conf.id)} disabled={testingUrlCheck[conf.id]} style={{ background: 'var(--warning)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingUrlCheck[conf.id] ? '...' : 'âš¡ Url Check'}</button><button onClick={() => handleTestPush(conf.id)} disabled={testingPush[conf.id]} style={{ background: 'var(--primary-600)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingPush[conf.id] ? '...' : 'Test Live'}</button><button onClick={() => handleTestDelayPush(conf.id)} disabled={testingDelayPush[conf.id]} style={{ background: 'var(--info)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingDelayPush[conf.id] ? '...' : 'Test Delay'}</button></div>}</>
+            <><label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}><Toggle checked={!!conf.is_active} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_active', type: 'checkbox', checked: !conf.is_active } })} />{conf.is_active ? 'Enabled' : 'Disabled'}</label>{conf.protocol === 'both' && <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}><Toggle checked={conf.is_cpcb_active ?? true} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_cpcb_active', type: 'checkbox', checked: !(conf.is_cpcb_active ?? true) } })} />CPCB Push</label>}{conf.id && <div style={{ display: 'flex', gap: '6px' }}><button onClick={() => handleTestUrlCheck(conf.id)} disabled={testingUrlCheck[conf.id]} style={{ background: 'var(--warning)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingUrlCheck[conf.id] ? '...' : 'Url Check'}</button><button onClick={() => handleTestPush(conf.id)} disabled={testingPush[conf.id]} style={{ background: 'var(--primary-600)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingPush[conf.id] ? '...' : 'Test Live'}</button><button onClick={() => handleTestDelayPush(conf.id)} disabled={testingDelayPush[conf.id]} style={{ background: 'var(--info)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingDelayPush[conf.id] ? '...' : 'Test Delay'}</button></div>}</>
           ) : null)}
           {servers.filter((s) => s.protocol === 'tspcb' || s.protocol === 'both').length === 0 && (
             <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)', fontSize: '13px', border: '1.5px dashed var(--border)', borderRadius: '10px' }}>No SPCB server configured. <button onClick={() => addServer('tspcb')} style={{ background: 'none', border: 'none', color: 'var(--primary-600)', fontWeight: '700', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}>Add SPCB Server</button></div>
@@ -445,11 +445,10 @@ export const CPCB = React.memo(() => {
     if (pushLoading) return <p style={{ color: T.textFaint }}>Loading...</p>;
     return (
       <div className="card" style={{ padding: '20px' }}>
-        {sectionHeader(2, 'TNPCB Server (Tamil Nadu PCB - OCEMS REST API)', 'Pushes JSON payload arrays grouped by TNPCB Device ID to tnpcb.gov.in endpoint with Base64 Authorization Token', 'var(--info)', () => handleSave('tnpcb'))}
+        {sectionHeader(2, 'TNPCB Server (Tamil Nadu PCB - OCEMS REST API)', '', 'var(--info)', () => handleSave('tnpcb'))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {servers.map((conf, idx) => conf.protocol === 'tnpcb' ? renderServerCard(conf, idx, 'tnpcb',
-            <><div style={{ flex: '1 1 300px' }}><label style={s()}>TNPCB Endpoint URL</label><input type="text" name="live_url" value={conf.live_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://tnpcb.gov.in/ocems/tnpcb-api/api/industry/<indId>/station/<stId>/data" style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Authorization Base64 Token</label><input type="text" name="cpcb_file_path" value={conf.cpcb_file_path || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="Base64 encoded authentication token" style={ipt} /></div></>,
-            <><label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}><Toggle checked={!!conf.is_active} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_active', type: 'checkbox', checked: !conf.is_active } })} />{conf.is_active ? 'Enabled' : 'Disabled'}</label>{conf.id && <div style={{ display: 'flex', gap: '6px' }}><button onClick={() => handleTestUrlCheck(conf.id)} disabled={testingUrlCheck[conf.id]} style={{ background: 'var(--warning)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingUrlCheck[conf.id] ? '...' : 'âš¡ Url Check'}</button><button onClick={() => handleTestPush(conf.id)} disabled={testingPush[conf.id]} style={{ background: 'var(--info)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingPush[conf.id] ? '...' : 'Test TNPCB Push'}</button></div>}</>
+          {servers.map((conf, idx) => conf.protocol === 'tnpcb' ? renderServerCard(conf, idx, 'tnpcb', null,
+            <><label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}><Toggle checked={!!conf.is_active} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_active', type: 'checkbox', checked: !conf.is_active } })} />{conf.is_active ? 'Enabled' : 'Disabled'}</label>{conf.id && <div style={{ display: 'flex', gap: '6px' }}><button onClick={() => handleTestUrlCheck(conf.id)} disabled={testingUrlCheck[conf.id]} style={{ background: 'var(--warning)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingUrlCheck[conf.id] ? '...' : 'Url Check'}</button><button onClick={() => handleTestPush(conf.id)} disabled={testingPush[conf.id]} style={{ background: 'var(--info)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingPush[conf.id] ? '...' : 'Test TNPCB Push'}</button></div>}</>
           ) : null)}
           {servers.filter((s) => s.protocol === 'tnpcb').length === 0 && (
             <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)', fontSize: '13px', border: '1.5px dashed var(--border)', borderRadius: '10px' }}>No TNPCB server configured. <button onClick={() => addServer('tnpcb')} style={{ background: 'none', border: 'none', color: 'var(--info)', fontWeight: '700', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}>Add TNPCB Server</button></div>
@@ -550,7 +549,7 @@ export const CPCB = React.memo(() => {
     );
   };
 
-  // â”€â”€â”€ Test Response Modal â”€â”€â”€
+  // ─── Test Response Modal ───
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--surface-muted)', fontFamily: T.fontBase }}>

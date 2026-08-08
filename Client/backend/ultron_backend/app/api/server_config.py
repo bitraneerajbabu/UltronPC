@@ -14,11 +14,11 @@ from app.schemas.server_config import (
     ServerConfigCreate, ServerConfigUpdate, ServerConfigResponse,
     ParameterMappingResponse, BulkMappingUpdate, ServerMappingBase
 )
-from app.core.security import require_admin
+from app.core.security import require_admin, require_server_mgmt
 from app.core.logger import get_logger
 
 log = get_logger("ultron.api.server_config")
-router = APIRouter(prefix="/server-config", tags=["Server Config"])
+router = APIRouter(prefix="/server-config", tags=["Server Config"], dependencies=[Depends(require_server_mgmt)])
 
 @router.get("/", response_model=List[ServerConfigResponse], dependencies=[Depends(require_admin)])
 async def get_all_servers(db: AsyncSession = Depends(get_db)):

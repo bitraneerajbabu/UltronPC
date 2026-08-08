@@ -1,4 +1,5 @@
 [
+  "scratch_test.py::test_all",
   "tests/test_auth_security.py::TestAccountLockout::test_active_unlocked_returns_none",
   "tests/test_auth_security.py::TestAccountLockout::test_disabled_account_returns_reason",
   "tests/test_auth_security.py::TestAccountLockout::test_expired_lock_is_cleared",

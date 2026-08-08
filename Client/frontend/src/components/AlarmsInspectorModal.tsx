@@ -253,7 +253,7 @@ export const AlarmsInspectorModal = ({ isOpen, onClose }) => {
                               OFFLINE
                             </span>
                           </td>
-                          <td>{data.timestamp && data.timestamp !== 'â€”' ? data.timestamp : 'Unknown'}</td>
+                          <td>{data.timestamp && data.timestamp !== '—' ? data.timestamp : 'Unknown'}</td>
                         </tr>
                       );
                     })}
