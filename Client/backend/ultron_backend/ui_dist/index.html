@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UltrON Industrial Monitoring Platform</title>
+    <style>
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        background: #FAF8F2;
+        pointer-events: none;
+        opacity: 1;
+        animation: splash-out 1.55s ease forwards;
+      }
+      .splash-logo-wrap { position: relative; width: 280px; height: 280px; display: flex; align-items: center; justify-content: center; }
+      .splash-ring {
+        position: absolute;
+        width: 280px;
+        height: 280px;
+        border: 2px solid #0F6E56;
+        border-radius: 50%;
+        opacity: 0;
+        animation: splash-ring 0.7s ease-out 0.15s 2;
+      }
+      .splash-logo {
+        position: absolute;
+        inset: 0;
+        margin: auto;
+      }
+      .splash-logo--ultron {
+        width: 170px;
+        height: auto;
+        opacity: 0;
+        animation: splash-ultron 1.35s ease forwards;
+      }
+      .splash-logo--sunshine {
+        width: 260px;
+        height: auto;
+        opacity: 0;
+        animation: splash-sunshine 0.4s ease 0.92s forwards;
+      }
+      @keyframes splash-out {
+        0%, 85% { opacity: 1; }
+        100% { opacity: 0; visibility: hidden; }
+      }
+      @keyframes splash-ultron {
+        0% { opacity: 0; transform: scale(0.6); }
+        15% { opacity: 1; transform: scale(1.04); }
+        52% { opacity: 1; transform: scale(1); }
+        72% { opacity: 1; transform: scale(1); }
+        90% { opacity: 0; transform: scale(0.94); }
+        100% { opacity: 0; }
+      }
+      @keyframes splash-sunshine {
+        0% { opacity: 0; transform: scale(0.96); }
+        100% { opacity: 1; transform: scale(1); }
+      }
+      @keyframes splash-ring {
+        0% { transform: scale(0.6); opacity: 0.55; }
+        100% { transform: scale(1.6); opacity: 0; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #splash { animation-duration: 0.5s; }
+        .splash-ring { display: none; }
+        .splash-logo--ultron { animation: none; display: none; }
+        .splash-logo--sunshine { animation: none; opacity: 1; }
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-BHiibfl-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-jnwjSeI-.css">
+  </head>
+  <body>
+    <div id="splash">
+      <div class="splash-logo-wrap">
+        <div class="splash-ring"></div>
+        <img class="splash-logo splash-logo--ultron" src="/assets/Ultron_logo.png" alt="UltrON" />
+        <img class="splash-logo splash-logo--sunshine" src="/assets/sunshine_logo.png" alt="Sunshine Technologies" />
+      </div>
+    </div>
+    <div id="root"></div>
+  </body>
+</html>
