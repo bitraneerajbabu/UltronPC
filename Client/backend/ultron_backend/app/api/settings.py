@@ -583,6 +583,10 @@ def _do_firmware_download(custom_url: str | None = None) -> None:
     try:
         from app.core.ssl_utils import urlopen_with_ssl_fallback
 
+        current_exe_name = "UltrON.exe"
+        if getattr(sys, "frozen", False):
+            current_exe_name = os.path.basename(sys.executable)
+
         if custom_url:
             download_url = custom_url
             tag_name = "custom"
@@ -593,10 +597,6 @@ def _do_firmware_download(custom_url: str | None = None) -> None:
             req = urllib.request.Request(url, headers={"User-Agent": "UltrON-Updater/1.0", "Accept": "application/vnd.github.v3+json"})
             with urlopen_with_ssl_fallback(req, timeout=15) as resp:
                 data = _json.loads(resp.read().decode("utf-8"))
-
-            current_exe_name = "UltrON.exe"
-            if getattr(sys, "frozen", False):
-                current_exe_name = os.path.basename(sys.executable)
 
             download_url = ""
             for asset in data.get("assets", []):
