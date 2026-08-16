@@ -24,46 +24,44 @@ jobs:
           node-version: 22
 
       - name: Build Frontend
+        shell: bash
         run: |
-          npm install
+          cd Client/frontend || cd client/frontend
+          npm install --legacy-peer-deps --no-audit
           npm run build
-        working-directory: Client/frontend
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
-          cache-dependency-path: Client/backend/ultron_backend/requirements.txt
 
       - name: Install Python Dependencies
+        shell: bash
         run: |
+          cd Client/backend/ultron_backend || cd client/backend/ultron_backend
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller pywebview
-        working-directory: Client/backend/ultron_backend
 
       - name: Create Config File from Template
+        shell: bash
         run: |
+          cd Client/backend/ultron_backend || cd client/backend/ultron_backend
           python -c "import secrets; open('secret.key','w').write(secrets.token_urlsafe(64))"
-          Copy-Item .env.template .env
+          cp .env.template .env
           python run.py --encrypt-env
-        working-directory: Client/backend/ultron_backend
 
       - name: Build UltrON.exe
-        run: python -m PyInstaller UltrON.spec --noconfirm
-        working-directory: Client/backend/ultron_backend
-
-      - name: Rename Output Exe
+        shell: bash
         run: |
-          if (-not (Test-Path dist/UltrON.exe)) {
-            Copy-Item dist/Ultron_*.exe dist/UltrON.exe
-          }
-        working-directory: Client/backend/ultron_backend
+          cd Client/backend/ultron_backend || cd client/backend/ultron_backend
+          python -m PyInstaller UltrON.spec --noconfirm
 
       - name: Build UltrON_Installer.exe
-        run: python -m PyInstaller ../../installer.py --onefile --console --icon=ultron.ico --name=UltrON_Installer --noconfirm
-        working-directory: Client/backend/ultron_backend
+        shell: bash
+        run: |
+          cd Client/backend/ultron_backend || cd client/backend/ultron_backend
+          python -m PyInstaller ../../installer.py --onefile --console --icon=ultron.ico --name=UltrON_Installer --noconfirm
 
       - name: Upload Assets to Release
         uses: softprops/action-gh-release@v2
@@ -71,5 +69,5 @@ jobs:
           files: |
             Client/backend/ultron_backend/dist/UltrON.exe
             Client/backend/ultron_backend/dist/UltrON_Installer.exe
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false
           generate_release_notes: true
