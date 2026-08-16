@@ -81,26 +81,12 @@ os.chdir(APP_DIR)
 # STEP 1.5 — Auto-Updater (Applies downloaded firmware)
 # ─────────────────────────────────────────────────────────────────────────────
 def _apply_pending_update():
+    """Clean up residual old executables safely on launch."""
     if not getattr(sys, "frozen", False):
         return
 
-    install_dir = APP_DIR
-    flag_path = os.path.join(install_dir, "update_pending.flag")
-    new_exe = os.path.join(install_dir, "UltrON_new.exe")
-    current_exe = sys.executable
-    old_exe = os.path.join(install_dir, "UltrON_old.exe")
-
-    def _retry_rename(src: str, dst: str, max_attempts: int = 5, delay: float = 0.3) -> None:
-        """Rename src → dst with retry on sharing violation (WinError 32)."""
-        for attempt in range(max_attempts):
-            try:
-                os.rename(src, dst)
-                return
-            except OSError as e:
-                if e.winerror == 32 and attempt < max_attempts - 1:  # ERROR_SHARING_VIOLATION
-                    time.sleep(delay * (attempt + 1))
-                    continue
-                raise
+    exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+    old_exe = os.path.join(exe_dir, "UltrON_old.exe")
 
     # Clean up previous old exe if exists
     if os.path.exists(old_exe):
@@ -108,26 +94,6 @@ def _apply_pending_update():
             os.remove(old_exe)
         except Exception:
             pass
-
-    if os.path.exists(flag_path) and os.path.exists(new_exe):
-        try:
-            import subprocess
-            # Rename current exe to old_exe — retry if AV briefly locks it
-            _retry_rename(current_exe, old_exe)
-            # Rename downloaded exe to current exe name
-            os.rename(new_exe, current_exe)
-            # Remove flag
-            os.remove(flag_path)
-            # Relaunch newly replaced exe
-            subprocess.Popen([current_exe] + sys.argv[1:])
-            sys.exit(0)
-        except Exception as e:
-            with open(os.path.join(install_dir, "ultron_update_error.log"), "w") as f:
-                f.write(f"Update failed: {e}\n")
-            try:
-                os.remove(flag_path)
-            except Exception:
-                pass
 
 _apply_pending_update()
 

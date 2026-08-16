@@ -239,24 +239,56 @@ async def polling_status():
 async def restart_app():
     """
     Restart the UltrON desktop application (frozen PyInstaller exe only).
-    Spawns a new process in the background, then exits the current one.
+    Handles swapping UltrON_new.exe -> UltrON.exe if a software update is pending,
+    then cleanly restarts the application without file-lock crashes.
     """
-    import sys, os, subprocess, threading
+    import sys, os, subprocess, threading, tempfile
 
     if not getattr(sys, "frozen", False):
         raise HTTPException(status_code=400, detail="Restart is only supported in desktop (frozen) mode")
 
+    current_exe = os.path.abspath(sys.executable)
+    exe_dir = os.path.dirname(current_exe)
+    exe_name = os.path.basename(current_exe)
+    new_exe = os.path.join(exe_dir, "UltrON_new.exe")
+    old_exe = os.path.join(exe_dir, "UltrON_old.exe")
+    flag_path = os.path.join(exe_dir, "update_pending.flag")
+
     def _do_restart():
         import time
-        time.sleep(2)
+        # Write helper updater batch script into temp dir
+        bat_path = os.path.join(tempfile.gettempdir(), f"ultron_updater_{os.getpid()}.bat")
+        bat_content = f"""@echo off
+timeout /t 2 /nobreak >nul
+if exist "{new_exe}" (
+    :retry_swap
+    if exist "{old_exe}" del /f /q "{old_exe}" >nul 2>&1
+    move /y "{current_exe}" "{old_exe}" >nul 2>&1
+    if errorlevel 1 (
+        timeout /t 1 /nobreak >nul
+        goto retry_swap
+    )
+    move /y "{new_exe}" "{current_exe}" >nul 2>&1
+    if exist "{flag_path}" del /f /q "{flag_path}" >nul 2>&1
+)
+start "" "{current_exe}"
+del "%~f0" >nul 2>&1
+exit
+"""
         try:
-            startup_info = None
-            if sys.platform == "win32":
-                startup_info = subprocess.STARTUPINFO()
-                startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            subprocess.Popen([sys.executable], startupinfo=startup_info, close_fds=True)
+            with open(bat_path, "w", encoding="utf-8") as f:
+                f.write(bat_content)
+            
+            flags = 0x08000000 | 0x00000008  # CREATE_NO_WINDOW | DETACHED_PROCESS
+            subprocess.Popen(["cmd.exe", "/c", bat_path], creationflags=flags, close_fds=True)
         except Exception as e:
-            log.error(f"Restart spawn failed: {e}")
+            log.error(f"Restart batch launch failed: {e}")
+            try:
+                subprocess.Popen([current_exe], close_fds=True)
+            except Exception as ex2:
+                log.error(f"Direct restart failed: {ex2}")
+        
+        time.sleep(0.5)
         os._exit(0)
 
     threading.Thread(target=_do_restart, daemon=True).start()
