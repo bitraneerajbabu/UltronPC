@@ -7,6 +7,8 @@ import {
   IconChevronLeft, IconCopy, IconSpeakerphone, IconActivity, IconPlayerSkipBack,
   IconHistory, IconChartBar, IconMenu2, IconSun, IconMoon, IconBell, IconUser,
   IconLogout, IconLayoutDashboard, IconAdjustmentsHorizontal, IconMapPin,
+  IconServer, IconShieldCheck, IconSend, IconUsers, IconUserShield, IconSettings,
+  IconClipboardList, IconLock, IconKey, IconEye, IconEyeOff, IconListDetails,
 } from '@tabler/icons-react';
 
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
@@ -42,6 +44,18 @@ const ICON_MAP: Record<string, React.ComponentType<any>> = {
   LayoutDashboard: IconLayoutDashboard,
   Sliders: IconAdjustmentsHorizontal,
   MapPin: IconMapPin,
+  Server: IconServer,
+  ShieldCheck: IconShieldCheck,
+  Send: IconSend,
+  Users: IconUsers,
+  UserShield: IconUserShield,
+  Settings: IconSettings,
+  ClipboardList: IconClipboardList,
+  Lock: IconLock,
+  Key: IconKey,
+  Eye: IconEye,
+  EyeOff: IconEyeOff,
+  ListDetails: IconListDetails,
 };
 
 interface IconProps {

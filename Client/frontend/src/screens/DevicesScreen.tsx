@@ -967,6 +967,9 @@ export const DevicesScreen = React.memo(() => {
                                 <option value="regex">Regex</option>
                                 <option value="delimiter_split">Delimiter Split</option>
                                 <option value="key_value">Key-Value ASCII</option>
+                                <option value="m10404">Envco M10404 (PM)</option>
+                                <option value="af2216">Envco AF2216 (SO2)</option>
+                                <option value="ac3216">Envco AC3216 (NO/NO2/NOx)</option>
                               </select>
                             </div>
                           )}

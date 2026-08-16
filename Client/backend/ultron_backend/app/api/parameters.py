@@ -123,6 +123,10 @@ async def delete_parameter(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
+    from app.models.device import Device
+    from app.models.station import Station
+    from sqlalchemy import func
+
     result = await db.execute(select(Parameter).where(Parameter.id == param_id))
     param = result.scalar_one_or_none()
     if not param:
@@ -130,7 +134,26 @@ async def delete_parameter(
     device_id = param.device_id
     await db.delete(param)
     await db.commit()
-    background_tasks.add_task(polling_engine.reload_device, device_id)
+
+    # Clean up device if it has no remaining parameters
+    rem_params = await db.execute(select(func.count(Parameter.id)).where(Parameter.device_id == device_id))
+    if (rem_params.scalar() or 0) == 0:
+        dev_res = await db.execute(select(Device).where(Device.id == device_id))
+        dev = dev_res.scalar_one_or_none()
+        if dev:
+            station_id = dev.station_id
+            await db.delete(dev)
+            await db.commit()
+            # Clean up station if it has no remaining devices
+            rem_devs = await db.execute(select(func.count(Device.id)).where(Device.station_id == station_id))
+            if (rem_devs.scalar() or 0) == 0:
+                st_res = await db.execute(select(Station).where(Station.id == station_id))
+                st = st_res.scalar_one_or_none()
+                if st:
+                    await db.delete(st)
+                    await db.commit()
+
+    background_tasks.add_task(polling_engine.reload_all)
 
 
 @router.post("/{param_id}/test-read", dependencies=[Depends(require_admin)])

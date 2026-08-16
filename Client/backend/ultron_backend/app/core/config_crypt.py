@@ -11,17 +11,17 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet
 
+def _get_app_dir() -> Path:
+    """Persistent app dir: next to the exe (frozen) or package root (dev)."""
+    import sys
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent.resolve()
+    return Path(__file__).parent.parent.parent.resolve()
+
+
 def _get_secret_key_from_file() -> str:
     """Read SECRET_KEY directly from secret.key file, or generate a new one if missing."""
-    from pathlib import Path
-    import sys
-    import secrets
-    IS_FROZEN = getattr(sys, "frozen", False)
-    if IS_FROZEN:
-        app_dir = Path(sys.executable).parent.resolve()
-    else:
-        app_dir = Path(__file__).parent.parent.parent.resolve()
-    key_file = app_dir / "secret.key"
+    key_file = _get_app_dir() / "secret.key"
     try:
         if key_file.is_file():
             key = key_file.read_text(encoding="utf-8").strip()
@@ -51,7 +51,7 @@ def get_fernet_key() -> bytes:
             "open('secret.key','w').write(secrets.token_urlsafe(64))\""
         )
     password = file_key.encode("utf-8")
-    salt_path = Path(__file__).parent.parent.parent / "secret.salt"
+    salt_path = _get_app_dir() / "secret.salt"
     if salt_path.is_file():
         salt = base64.urlsafe_b64decode(salt_path.read_text(encoding="utf-8").strip())
     else:

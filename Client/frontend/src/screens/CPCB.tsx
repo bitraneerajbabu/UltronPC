@@ -1,4 +1,4 @@
-﻿import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../context/AppContext';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { T } from '../theme';
@@ -15,6 +15,9 @@ interface PushServer {
   live_url?: string;
   delay_url?: string;
   cpcb_file_path?: string;
+  appcb_site_id?: string;
+  appcb_site_uid?: string;
+  appcb_encryption_key?: string;
 }
 interface MappingEdit {
   is_active: boolean;
@@ -27,6 +30,11 @@ interface MappingEdit {
   cpcb_parameter: string;
   led_channel_name: string;
   led_unit: string;
+  appcb_monitoring_unit_id: string;
+  appcb_analyzer_id: string;
+  appcb_parameter_id: string;
+  appcb_parameter_name: string;
+  appcb_unit_id: string;
 }
 interface TestResult { title: string; status: number; response: string; success: boolean; }
 
@@ -60,6 +68,7 @@ const formatError = (detail: unknown, fallback: string): string => {
 const SUB_TABS = [
   { key: 'spcb', label: 'SPCB server', icon: 'var(--primary-600)' },
   { key: 'tnpcb', label: 'TNPCB Server (Tamil Nadu)', icon: 'var(--info)' },
+  { key: 'appcb', label: 'APPCB Server (Encrypted Zip)', icon: 'var(--success)' },
   { key: 'cpcb', label: 'CPCB TXT File Generation', icon: 'var(--warning)' },
   { key: 'led', label: 'LED Board (LAN)', icon: 'var(--warning)' },
 ];
@@ -120,6 +129,8 @@ export const CPCB = React.memo(() => {
             api_password: existing.api_password || '', api_vname: existing.api_vname || '', api_unit: existing.api_unit || '',
             cpcb_station_name: existing.cpcb_station_name || '', cpcb_parameter: existing.cpcb_parameter || '',
             led_channel_name: existing.led_channel_name || '', led_unit: existing.led_unit || '',
+            appcb_monitoring_unit_id: existing.appcb_monitoring_unit_id || '', appcb_analyzer_id: existing.appcb_analyzer_id || '',
+            appcb_parameter_id: existing.appcb_parameter_id || '', appcb_parameter_name: existing.appcb_parameter_name || '', appcb_unit_id: existing.appcb_unit_id || ''
           };
         });
       });
@@ -138,24 +149,33 @@ export const CPCB = React.memo(() => {
     const base: PushServer = { _tempId, name: '', protocol, is_active: true, is_cpcb_active: true, led_station_name: '' };
     if (protocol === 'tspcb') setServers((prev: PushServer[]) => [...prev, { ...base, live_url: '', delay_url: '' }]);
     else if (protocol === 'cpcb') setServers((prev: PushServer[]) => [...prev, { ...base, cpcb_file_path: '' }]);
+    else if (protocol === 'appcb') setServers((prev: PushServer[]) => [...prev, { ...base, live_url: '', appcb_site_id: '', appcb_site_uid: '', appcb_encryption_key: '' }]);
     else setServers((prev: PushServer[]) => [...prev, { ...base }]);
   };
 
-  const removeServer = async (index: number, id: number) => {
+  const removeServer = async (conf: PushServer, index: number) => {
+    const id = conf.id;
     if (id) {
-      if (!confirm('Delete this server permanently?')) return;
-      try { await authFetch(`${API_BASE}/server-config/${id}`, { method: 'DELETE' }); showToast('Deleted.', 'success'); } catch { showToast('Delete failed.', 'error'); return; }
+      try {
+        const res = await authFetch(`${API_BASE}/server-config/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Delete failed (${res.status})`);
+        showToast('Server deleted successfully.', 'success');
+      } catch (e: unknown) {
+        showToast(`Delete failed: ${(e as Error).message}`, 'error');
+        return;
+      }
     }
-    setServers((prev: PushServer[]) => prev.filter((_, i) => i !== index));
+    setServers((prev: PushServer[]) => prev.filter((s) => s !== conf && (id ? s.id !== id : s._tempId !== conf._tempId)));
   };
 
   const SECTION_FILTERS: Record<string, (s: PushServer) => boolean> = {
     spcb: (s) => s.protocol === 'tspcb' || s.protocol === 'both',
     tnpcb: (s) => s.protocol === 'tnpcb',
+    appcb: (s) => s.protocol === 'appcb',
     cpcb: (s) => s.protocol === 'cpcb' || s.protocol === 'both',
     led: (s) => s.protocol === 'led',
   };
-  const SECTION_LABELS: Record<string, string> = { spcb: 'SPCB', tnpcb: 'TNPCB', cpcb: 'CPCB', led: 'LED' };
+  const SECTION_LABELS: Record<string, string> = { spcb: 'SPCB', tnpcb: 'TNPCB', appcb: 'APPCB', cpcb: 'CPCB', led: 'LED' };
 
   const handleSave = async (section?: string) => {
     setSaving(true);
@@ -189,7 +209,7 @@ export const CPCB = React.memo(() => {
             editedMappings[param.parameter_id]?.[String(srv.id)] ||
             (tempKey && editedMappings[param.parameter_id]?.[tempKey]) ||
             ({} as MappingEdit);
-          paramUpdates[srv.id] = { server_id: srv.id, is_active: false, api_id: '', api_name: '', api_password: '', api_vname: '', api_unit: '', cpcb_station_name: '', cpcb_parameter: '', led_channel_name: '', led_unit: '', ...mapped };
+          paramUpdates[srv.id] = { server_id: srv.id, is_active: false, api_id: '', api_name: '', api_password: '', api_vname: '', api_unit: '', cpcb_station_name: '', cpcb_parameter: '', led_channel_name: '', led_unit: '', appcb_monitoring_unit_id: '', appcb_analyzer_id: '', appcb_parameter_id: '', appcb_parameter_name: '', appcb_unit_id: '', ...mapped };
         });
         return { parameter_id: param.parameter_id, mappings: paramUpdates };
       });
@@ -209,27 +229,89 @@ export const CPCB = React.memo(() => {
     } finally { setSaving(false); }
   };
 
-  const handleTestPush = async (serverId: number) => {
-    setTestingPush((prev) => ({ ...prev, [serverId]: true }));
+  interface TestTargetOptions {
+    parameterId?: number;
+    apiId?: string;
+    deviceId?: number;
+    stationName?: string;
+  }
+
+  const handleTestPush = async (serverId: number, opts?: TestTargetOptions | number) => {
+    const options: TestTargetOptions = typeof opts === 'number' ? { parameterId: opts } : (opts || {});
+    const { parameterId, apiId, deviceId, stationName } = options;
+    const key = parameterId
+      ? `${serverId}_p${parameterId}`
+      : apiId
+      ? `${serverId}_a${apiId}`
+      : deviceId
+      ? `${serverId}_d${deviceId}`
+      : stationName
+      ? `${serverId}_s${stationName}`
+      : String(serverId);
+
+    setTestingPush((prev) => ({ ...prev, [key]: true }));
     try {
-      const res = await authFetch(`${API_BASE}/server-config/${serverId}/test-push`, { method: 'POST' });
+      const params = new URLSearchParams();
+      if (parameterId) params.append('parameter_id', String(parameterId));
+      if (apiId) params.append('api_id', String(apiId));
+      if (deviceId) params.append('device_id', String(deviceId));
+      if (stationName) params.append('station_name', stationName);
+      const q = params.toString() ? `?${params.toString()}` : '';
+
+      const res = await authFetch(`${API_BASE}/server-config/${serverId}/test-push${q}`, { method: 'POST' });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Test failed (${res.status})`);
       const data: any = await res.json();
-      if (data.results?.length > 0) setTestResultModal({ title: 'Live Push', status: data.results[0].status_code, response: data.results[0].response, success: data.results[0].success });
-      else showToast('No payloads sent.', 'warn');
+      if (data.results?.length > 0) {
+        const allSuccess = data.results.every((r: any) => r.success);
+        const firstStatus = data.results[0].status_code;
+        const titleLabel = stationName ? `Live Push Test (${stationName})` : apiId ? `Live Push Test (Device ID: ${apiId})` : 'Live Push Test';
+        const formattedResp = data.results.map((r: any) =>
+          `[Device ID: ${r.device_id}]\nStatus: ${r.status_code === 0 ? 'HTTP 0 (Failed / Unreachable)' : `HTTP ${r.status_code}`}\nResponse:\n${r.response}`
+        ).join('\n\n' + '='.repeat(50) + '\n\n');
+
+        setTestResultModal({ title: titleLabel, status: firstStatus, response: formattedResp, success: allSuccess });
+      } else showToast('No payloads sent.', 'warn');
     } catch (e: unknown) { showToast(`Failed: ${(e as Error).message}`, 'error'); }
-    finally { setTestingPush((prev) => ({ ...prev, [serverId]: false })); }
+    finally { setTestingPush((prev) => ({ ...prev, [key]: false })); }
   };
 
-  const handleTestDelayPush = async (serverId: number) => {
-    setTestingDelayPush((prev) => ({ ...prev, [serverId]: true }));
+  const handleTestDelayPush = async (serverId: number, opts?: TestTargetOptions | number) => {
+    const options: TestTargetOptions = typeof opts === 'number' ? { parameterId: opts } : (opts || {});
+    const { parameterId, apiId, deviceId, stationName } = options;
+    const key = parameterId
+      ? `${serverId}_p${parameterId}`
+      : apiId
+      ? `${serverId}_a${apiId}`
+      : deviceId
+      ? `${serverId}_d${deviceId}`
+      : stationName
+      ? `${serverId}_s${stationName}`
+      : String(serverId);
+
+    setTestingDelayPush((prev) => ({ ...prev, [key]: true }));
     try {
-      const res = await authFetch(`${API_BASE}/server-config/${serverId}/test-delay-push`, { method: 'POST' });
+      const params = new URLSearchParams();
+      if (parameterId) params.append('parameter_id', String(parameterId));
+      if (apiId) params.append('api_id', String(apiId));
+      if (deviceId) params.append('device_id', String(deviceId));
+      if (stationName) params.append('station_name', stationName);
+      const q = params.toString() ? `?${params.toString()}` : '';
+
+      const res = await authFetch(`${API_BASE}/server-config/${serverId}/test-delay-push${q}`, { method: 'POST' });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Test failed (${res.status})`);
       const data: any = await res.json();
-      setTestResultModal({ ...data, title: 'Delay Push Test', success: true });
+      if (data.results?.length > 0) {
+        const allSuccess = data.results.every((r: any) => r.success);
+        const firstStatus = data.results[0].status_code;
+        const titleLabel = stationName ? `Delay Push Test (${stationName})` : apiId ? `Delay Push Test (Device ID: ${apiId})` : 'Delay Push Test';
+        const formattedResp = data.results.map((r: any) =>
+          `[Device ID: ${r.device_id}]\nStatus: ${r.status_code === 0 ? 'HTTP 0 (Failed / Unreachable)' : `HTTP ${r.status_code}`}\nResponse:\n${r.response}`
+        ).join('\n\n' + '='.repeat(50) + '\n\n');
+
+        setTestResultModal({ title: titleLabel, status: firstStatus, response: formattedResp, success: allSuccess });
+      } else showToast('No payloads sent.', 'warn');
     } catch (err: unknown) { setTestResultModal({ title: 'Delay Push Test', response: (err as Error).message, status: 0, success: false }); }
-    finally { setTestingDelayPush((prev) => ({ ...prev, [serverId]: false })); }
+    finally { setTestingDelayPush((prev) => ({ ...prev, [key]: false })); }
   };
 
   const handleTestUrlCheck = async (serverId: number) => {
@@ -250,7 +332,6 @@ export const CPCB = React.memo(() => {
   };
 
   const handleClearPending = async (serverId: number) => {
-    if (!confirm('Delete all pending upload records for this server?')) return;
     try {
       const res = await authFetch(`${API_BASE}/server-config/${serverId}/pending-records`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
@@ -316,7 +397,7 @@ export const CPCB = React.memo(() => {
                 <button onClick={() => handleClearPending(conf.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '10px', fontWeight: '700', padding: '2px 4px', marginLeft: '2px', textDecoration: 'underline' }}>Clear</button>
               </div>
             )}
-            <button onClick={() => removeServer(idx, conf.id)} style={{ padding: '8px', borderRadius: '8px', border: '1px solid var(--danger-bg)', background: 'var(--danger-bg)', color: 'var(--danger)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Trash /></button>
+            <button onClick={() => removeServer(conf, idx)} style={{ padding: '8px', borderRadius: '8px', border: '1px solid var(--danger-bg)', background: 'var(--danger-bg)', color: 'var(--danger)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}><Trash /></button>
           </div>
         </div>
         {subRow && <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--surface-muted)', flexWrap: 'wrap' }}>{subRow}</div>}
@@ -325,118 +406,157 @@ export const CPCB = React.memo(() => {
   };
 
   const renderMappingTable = (serverFilter: (s: PushServer) => boolean, forceStationName?: string) => {
-    const filteredServers = servers.filter((s) => (s.id || s._tempId) && s.is_active && serverFilter(s));
+    const filteredServers = servers.filter((s) => (s.id || s._tempId) && serverFilter(s));
     if (filteredServers.length === 0) return null;
+
+    const primarySrv = filteredServers[0];
+    const isCpcb = primarySrv.protocol === 'cpcb';
+    const isBoth = primarySrv.protocol === 'both';
+    const isLed = primarySrv.protocol === 'led';
+    const isAppcb = primarySrv.protocol === 'appcb';
+    const showCpcbCols = isCpcb || isBoth;
+    const showTgpcbCols = primarySrv.protocol === 'tspcb' || primarySrv.protocol === 'spcb' || isBoth;
+    const showAppcbCols = isAppcb;
+
+    const handleSharedMappingChange = (paramId: number, field: string, value: string | boolean) => {
+      filteredServers.forEach((srv) => {
+        const srvKey = srv.id ?? srv._tempId;
+        if (srvKey) handleMappingChange(paramId, srvKey, field, value);
+      });
+    };
 
     return (
       <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '10px', overflowX: 'auto', marginTop: '10px' }}>
-        {filteredServers.map((srv) => {
-          const isCpcb = srv.protocol === 'cpcb';
-          const isBoth = srv.protocol === 'both';
-          const isLed = srv.protocol === 'led';
-          const showCpcbCols = isCpcb || isBoth;
-          const showTgpcbCols = srv.protocol === 'tspcb' || isBoth;
-          return (
-            <div key={srv.id ?? srv._tempId}>
-              <div style={{ padding: '10px 14px', background: 'var(--surface-muted)', borderBottom: '1px solid var(--border)', fontSize: '12px', fontWeight: '700', color: 'var(--primary-600)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {srv.name || <span style={{ color: 'var(--text-secondary)', fontStyle: 'italic' }}>Unsaved Server</span>}
-                <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: isLed ? 'var(--warning-bg)' : isCpcb ? 'var(--warning-bg)' : 'var(--primary-50)', color: isLed ? 'var(--warning)' : isCpcb ? 'var(--warning)' : 'var(--primary-600)' }}>{isLed ? 'LED' : isCpcb ? 'CPCB' : isBoth ? 'Both' : 'SPCB'}</span>
-                {!srv.id && <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: 'var(--warning-bg)', color: 'var(--warning-text)' }}>⚠ Save server first to enable Test Push</span>}
-              </div>
+        <div style={{ padding: '10px 14px', background: 'var(--surface-muted)', borderBottom: '1px solid var(--border)', fontSize: '12px', fontWeight: '700', color: 'var(--primary-600)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          Parameter Mappings (Shared for all {filteredServers.length} {filteredServers.length === 1 ? 'Server' : 'Servers'})
+          <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '99px', background: isLed ? 'var(--warning-bg)' : isAppcb ? 'var(--success-bg)' : isCpcb ? 'var(--warning-bg)' : 'var(--primary-50)', color: isLed ? 'var(--warning)' : isAppcb ? 'var(--success)' : isCpcb ? 'var(--warning)' : 'var(--primary-600)' }}>{isLed ? 'LED' : isAppcb ? 'APPCB' : isCpcb ? 'CPCB' : isBoth ? 'Both' : 'SPCB'}</span>
+        </div>
 
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-muted)' }}>
-                      <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Ch</th>
-                      <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Station Name</th>
-                      <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Parameter</th>
-                      <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Push</th>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-muted)' }}>
+                <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Ch</th>
+                <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Station Name</th>
+                <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Parameter</th>
+                <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Push</th>
+                {isLed ? (
+                  <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>LED Name</th>
+                ) : (
+                  <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>vname</th>
+                )}
+                {isLed ? (
+                  <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Unit</th>
+                ) : !isAppcb && (
+                  <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>unit</th>
+                )}
+                {showCpcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>CPCB Station</th>}
+                {showCpcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>CPCB Param</th>}
+                {showAppcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Unit ID</th>}
+                {showAppcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Analyzer ID</th>}
+                {showAppcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Param ID</th>}
+                {showAppcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Param Name</th>}
+                {showAppcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>UOM ID</th>}
+                {showTgpcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Device ID</th>}
+                {showTgpcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Username</th>}
+                {showTgpcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Password</th>}
+                <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Test Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mappings.length === 0 ? (
+                <tr><td colSpan={13} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>No parameters found. Add devices and parameters first.</td></tr>
+              ) : (
+                mappings.map((param) => {
+                  const srvKey = primarySrv.id ?? primarySrv._tempId;
+                  const state: MappingEdit = editedMappings[param.parameter_id]?.[srvKey] || editedMappings[param.parameter_id]?.[String(srvKey)] || { is_active: false, api_id: '', api_name: '', api_password: '', api_vname: '', api_unit: '', cpcb_station_name: '', cpcb_parameter: '', led_channel_name: '', led_unit: '' };
+                  const cellChg = (f: string, v: string | boolean) => handleSharedMappingChange(param.parameter_id, f, v);
+                  const inpS: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '5px 6px', border: '1px solid transparent', borderBottom: '1px solid var(--border)', borderRadius: '4px', background: 'transparent', fontSize: '12px', color: 'var(--text-primary)', outline: 'none', fontFamily: T.fontMono };
+                  const testKey = primarySrv.id ? `${primarySrv.id}_p${param.parameter_id}` : '';
+                  return (
+                    <tr key={param.parameter_id} style={{ borderBottom: '1px solid var(--surface-muted)' }}>
+                      <td style={{ padding: '6px 10px', fontWeight: '700', color: 'var(--text-primary)', fontSize: '12px' }}>{param.channel_no}</td>
+                      <td style={{ padding: '6px 10px', color: 'var(--text-secondary)', fontSize: '12px' }}>{forceStationName || param.station_name}</td>
+                      <td style={{ padding: '6px 10px', fontWeight: '700', color: 'var(--primary-600)', fontSize: '12px' }}>{param.parameter_name}</td>
+                      <td style={{ padding: '6px 10px' }}><Toggle checked={!!state.is_active} onChange={() => cellChg('is_active', !state.is_active)} /></td>
                       {isLed ? (
-                        <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>LED Name</th>
+                        <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="LED Name" value={state.led_channel_name || ''} onChange={e => cellChg('led_channel_name', e.target.value)} /></td>
                       ) : (
-                        <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>vname</th>
+                        <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="vname" value={state.api_vname || ''} onChange={e => cellChg('api_vname', e.target.value)} /></td>
                       )}
                       {isLed ? (
-                        <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Unit</th>
-                      ) : (
-                        <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>unit</th>
+                        <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="Unit" value={state.led_unit || ''} onChange={e => cellChg('led_unit', e.target.value)} /></td>
+                      ) : !isAppcb && (
+                        <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="unit" value={state.api_unit || ''} onChange={e => cellChg('api_unit', e.target.value)} /></td>
                       )}
-                      {showCpcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>CPCB Station</th>}
-                      {showCpcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>CPCB Param</th>}
-                      {showTgpcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Device ID</th>}
-                      {showTgpcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Username</th>}
-                      {showTgpcbCols && <th style={{ padding: '8px 10px', fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em', textAlign: 'left', whiteSpace: 'nowrap' }}>Password</th>}
+                      {showCpcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="St. Name" value={state.cpcb_station_name || ''} onChange={e => cellChg('cpcb_station_name', e.target.value)} /></td>}
+                      {showCpcbCols && (
+                        <td style={{ padding: '4px 6px' }}>
+                          <select style={{ ...inpS, cursor: 'pointer' }} value={state.cpcb_parameter || ''} onChange={e => cellChg('cpcb_parameter', e.target.value)}>
+                            <option value="">--</option>
+                            {CPCB_PARAMS.map(p => <option key={p} value={p}>{p}</option>)}
+                          </select>
+                        </td>
+                      )}
+                      {showAppcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="Unit ID" value={state.appcb_monitoring_unit_id || ''} onChange={e => cellChg('appcb_monitoring_unit_id', e.target.value)} /></td>}
+                      {showAppcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="Analyzer ID" value={state.appcb_analyzer_id || ''} onChange={e => cellChg('appcb_analyzer_id', e.target.value)} /></td>}
+                      {showAppcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="Param ID" value={state.appcb_parameter_id || ''} onChange={e => cellChg('appcb_parameter_id', e.target.value)} /></td>}
+                      {showAppcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="Param Name" value={state.appcb_parameter_name || ''} onChange={e => cellChg('appcb_parameter_name', e.target.value)} /></td>}
+                      {showAppcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="UOM ID" value={state.appcb_unit_id || ''} onChange={e => cellChg('appcb_unit_id', e.target.value)} /></td>}
+                      {showTgpcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="ID" value={state.api_id || ''} onChange={e => cellChg('api_id', e.target.value)} /></td>}
+                      {showTgpcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="Username" value={state.api_name || ''} onChange={e => cellChg('api_name', e.target.value)} /></td>}
+                      {showTgpcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="Password" value={state.api_password || ''} onChange={e => cellChg('api_password', e.target.value)} /></td>}
+                      <td style={{ padding: '4px 6px', whiteSpace: 'nowrap' }}>
+                        {primarySrv.id ? (
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button
+                              onClick={() => handleTestPush(primarySrv.id!, { parameterId: param.parameter_id })}
+                              disabled={!!testingPush[testKey]}
+                              style={{ background: 'var(--primary-600)', color: '#fff', border: 'none', height: '24px', padding: '0 8px', fontSize: '10px', borderRadius: '6px', fontWeight: '700', cursor: 'pointer' }}
+                            >
+                              {testingPush[testKey] ? '...' : 'Test Live'}
+                            </button>
+                            <button
+                              onClick={() => handleTestDelayPush(primarySrv.id!, { parameterId: param.parameter_id })}
+                              disabled={!!testingDelayPush[testKey]}
+                              style={{ background: 'var(--info)', color: '#fff', border: 'none', height: '24px', padding: '0 8px', fontSize: '10px', borderRadius: '6px', fontWeight: '700', cursor: 'pointer' }}
+                            >
+                              {testingDelayPush[testKey] ? '...' : 'Test Delay'}
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>Save first</span>
+                        )}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {mappings.length === 0 ? (
-                      <tr><td colSpan={12} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>No parameters found. Add devices and parameters first.</td></tr>
-                    ) : (
-                      mappings.map((param) => {
-                        const srvKey = srv.id ?? srv._tempId;
-                        const state: MappingEdit = editedMappings[param.parameter_id]?.[srvKey] || editedMappings[param.parameter_id]?.[String(srvKey)] || { is_active: false, api_id: '', api_name: '', api_password: '', api_vname: '', api_unit: '', cpcb_station_name: '', cpcb_parameter: '', led_channel_name: '', led_unit: '' };
-                        const cellChg = (f: string, v: string | boolean) => handleMappingChange(param.parameter_id, srvKey, f, v);
-                        const inpS: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '5px 6px', border: '1px solid transparent', borderBottom: '1px solid var(--border)', borderRadius: '4px', background: 'transparent', fontSize: '12px', color: 'var(--text-primary)', outline: 'none', fontFamily: T.fontMono };
-                        return (
-                          <tr key={param.parameter_id} style={{ borderBottom: '1px solid var(--surface-muted)' }}>
-                            <td style={{ padding: '6px 10px', fontWeight: '700', color: 'var(--text-primary)', fontSize: '12px' }}>{param.channel_no}</td>
-                            <td style={{ padding: '6px 10px', color: 'var(--text-secondary)', fontSize: '12px' }}>{forceStationName || param.station_name}</td>
-                            <td style={{ padding: '6px 10px', fontWeight: '700', color: 'var(--primary-600)', fontSize: '12px' }}>{param.parameter_name}</td>
-                            <td style={{ padding: '6px 10px' }}><Toggle checked={!!state.is_active} onChange={() => cellChg('is_active', !state.is_active)} /></td>
-                            {isLed ? (
-                              <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="LED Name" value={state.led_channel_name || ''} onChange={e => cellChg('led_channel_name', e.target.value)} /></td>
-                            ) : (
-                              <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="vname" value={state.api_vname || ''} onChange={e => cellChg('api_vname', e.target.value)} /></td>
-                            )}
-                            {isLed ? (
-                              <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="Unit" value={state.led_unit || ''} onChange={e => cellChg('led_unit', e.target.value)} /></td>
-                            ) : (
-                              <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="unit" value={state.api_unit || ''} onChange={e => cellChg('api_unit', e.target.value)} /></td>
-                            )}
-                            {showCpcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="St. Name" value={state.cpcb_station_name || ''} onChange={e => cellChg('cpcb_station_name', e.target.value)} /></td>}
-                            {showCpcbCols && (
-                              <td style={{ padding: '4px 6px' }}>
-                                <select style={{ ...inpS, cursor: 'pointer' }} value={state.cpcb_parameter || ''} onChange={e => cellChg('cpcb_parameter', e.target.value)}>
-                                  <option value="">--</option>
-                                  {CPCB_PARAMS.map(p => <option key={p} value={p}>{p}</option>)}
-                                </select>
-                              </td>
-                            )}
-                            {showTgpcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="ID" value={state.api_id || ''} onChange={e => cellChg('api_id', e.target.value)} /></td>}
-                            {showTgpcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="Username" value={state.api_name || ''} onChange={e => cellChg('api_name', e.target.value)} /></td>}
-                            {showTgpcbCols && <td style={{ padding: '4px 6px' }}><input style={inpS} placeholder="Password" value={state.api_password || ''} onChange={e => cellChg('api_password', e.target.value)} /></td>}
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          );
-        })}
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   };
-
   const renderSpcbSection = () => {
+
     if (pushLoading) return <p style={{ color: T.textFaint }}>Loading...</p>;
     return (
       <div className="card" style={{ padding: '20px' }}>
         {sectionHeader(1, 'SPCB server', '', 'var(--primary-600)', () => handleSave('spcb'))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {servers.map((conf, idx) => (conf.protocol === 'tspcb' || conf.protocol === 'both') ? renderServerCard(conf, idx, 'tspcb',
+          {servers.map((conf, idx) => (conf.protocol === 'tspcb' || conf.protocol === 'spcb' || conf.protocol === 'both') ? renderServerCard(conf, idx, conf.protocol,
             <><div style={{ flex: '1 1 200px' }}><label style={s()}>Live URL</label><input type="text" name="live_url" value={conf.live_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://.../live" style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Delay URL</label><input type="text" name="delay_url" value={conf.delay_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://.../delay" style={ipt} /></div></>,
             <><label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}><Toggle checked={!!conf.is_active} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_active', type: 'checkbox', checked: !conf.is_active } })} />{conf.is_active ? 'Enabled' : 'Disabled'}</label>{conf.protocol === 'both' && <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}><Toggle checked={conf.is_cpcb_active ?? true} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_cpcb_active', type: 'checkbox', checked: !(conf.is_cpcb_active ?? true) } })} />CPCB Push</label>}{conf.id && <div style={{ display: 'flex', gap: '6px' }}><button onClick={() => handleTestUrlCheck(conf.id)} disabled={testingUrlCheck[conf.id]} style={{ background: 'var(--warning)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingUrlCheck[conf.id] ? '...' : 'Url Check'}</button><button onClick={() => handleTestPush(conf.id)} disabled={testingPush[conf.id]} style={{ background: 'var(--primary-600)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingPush[conf.id] ? '...' : 'Test Live'}</button><button onClick={() => handleTestDelayPush(conf.id)} disabled={testingDelayPush[conf.id]} style={{ background: 'var(--info)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingDelayPush[conf.id] ? '...' : 'Test Delay'}</button></div>}</>
           ) : null)}
-          {servers.filter((s) => s.protocol === 'tspcb' || s.protocol === 'both').length === 0 && (
+          {servers.filter((s) => s.protocol === 'tspcb' || s.protocol === 'spcb' || s.protocol === 'both').length === 0 && (
             <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)', fontSize: '13px', border: '1.5px dashed var(--border)', borderRadius: '10px' }}>No SPCB server configured. <button onClick={() => addServer('tspcb')} style={{ background: 'none', border: 'none', color: 'var(--primary-600)', fontWeight: '700', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}>Add SPCB Server</button></div>
           )}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
           <button onClick={() => addServer('tspcb')} style={{ background: 'transparent', border: '1.5px solid var(--primary-600)', borderRadius: '8px', color: 'var(--primary-600)', padding: '6px 14px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Plus /> Add SPCB Server</button>
         </div>
+        {renderMappingTable((s) => s.protocol === 'tspcb' || s.protocol === 'spcb' || s.protocol === 'both')}
       </div>
     );
   };
@@ -458,6 +578,28 @@ export const CPCB = React.memo(() => {
           <button onClick={() => addServer('tnpcb')} style={{ background: 'transparent', border: '1.5px solid var(--info)', borderRadius: '8px', color: 'var(--info)', padding: '6px 14px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Plus /> Add TNPCB Server</button>
         </div>
         {renderMappingTable((s) => s.protocol === 'tnpcb')}
+      </div>
+    );
+  };
+
+  const renderAppcbSection = () => {
+    if (pushLoading) return <p style={{ color: T.textFaint }}>Loading...</p>;
+    return (
+      <div className="card" style={{ padding: '20px' }}>
+        {sectionHeader(2, 'APPCB Server (Encrypted Zip Protocol)', '', 'var(--success)', () => handleSave('appcb'))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {servers.map((conf, idx) => conf.protocol === 'appcb' ? renderServerCard(conf, idx, 'appcb',
+            <><div style={{ flex: '1 1 120px' }}><label style={s()}>Site ID</label><input type="text" name="appcb_site_id" value={conf.appcb_site_id || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="e.g. site_1392" style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Site UID</label><input type="text" name="appcb_site_uid" value={conf.appcb_site_uid || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="UUID" style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Encryption Key</label><input type="password" name="appcb_encryption_key" value={conf.appcb_encryption_key || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="AES-128 Key (16 bytes)" style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Live URL</label><input type="text" name="live_url" value={conf.live_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://.../api/..." style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Delay URL</label><input type="text" name="delay_url" value={conf.delay_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://.../delay" style={ipt} /></div></>,
+            <><label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}><Toggle checked={!!conf.is_active} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_active', type: 'checkbox', checked: !conf.is_active } })} />{conf.is_active ? 'Enabled' : 'Disabled'}</label>{conf.id && <div style={{ display: 'flex', gap: '6px' }}><button onClick={() => handleTestUrlCheck(conf.id)} disabled={testingUrlCheck[conf.id]} style={{ background: 'var(--warning)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingUrlCheck[conf.id] ? '...' : 'Url Check'}</button><button onClick={() => handleTestPush(conf.id)} disabled={testingPush[conf.id]} style={{ background: 'var(--success)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingPush[conf.id] ? '...' : 'Test APPCB Push'}</button><button onClick={() => handleTestDelayPush(conf.id)} disabled={testingDelayPush[conf.id]} style={{ background: 'var(--info)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingDelayPush[conf.id] ? '...' : 'Test Delay'}</button></div>}</>
+          ) : null)}
+          {servers.filter((s) => s.protocol === 'appcb').length === 0 && (
+            <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)', fontSize: '13px', border: '1.5px dashed var(--border)', borderRadius: '10px' }}>No APPCB server configured. <button onClick={() => addServer('appcb')} style={{ background: 'none', border: 'none', color: 'var(--success)', fontWeight: '700', cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}>Add APPCB Server</button></div>
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+          <button onClick={() => addServer('appcb')} style={{ background: 'transparent', border: '1.5px solid var(--success)', borderRadius: '8px', color: 'var(--success)', padding: '6px 14px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}><Plus /> Add APPCB Server</button>
+        </div>
+        {renderMappingTable((s) => s.protocol === 'appcb')}
       </div>
     );
   };
@@ -572,6 +714,7 @@ export const CPCB = React.memo(() => {
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
         {subTab === 'spcb' && renderSpcbSection()}
         {subTab === 'tnpcb' && renderTnpcbSection()}
+        {subTab === 'appcb' && renderAppcbSection()}
         {subTab === 'cpcb' && renderCpcbSection()}
         {subTab === 'led' && renderLedSection()}
       </div>

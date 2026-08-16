@@ -4,7 +4,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 import { T, GLASS_CARD, getParamState, getParamTheme } from '../theme';
 import { Sparkline } from '../components/Sparkline';
 import { AlarmsInspectorModal } from '../components/AlarmsInspectorModal';
-import { IconBuildingFactory, IconShieldCheck, IconShieldX, IconBell, IconDeviceDesktop, IconTemperature, IconDroplet, IconWind, IconCloudFog, IconFlask2, IconAtom2, IconActivity, IconX, IconGauge, IconGaugeFilled, IconSum, IconTestPipe, IconDroplets, IconCloudStorm, IconBuildingFactory2, IconCloudRain, IconCompass, IconAlertOctagon, IconAlertTriangle, IconInfoCircle } from '@tabler/icons-react';
+import { IconBuildingFactory, IconShieldCheck, IconShieldX, IconBell, IconDeviceDesktop, IconTemperature, IconDroplet, IconWind, IconCloudFog, IconFlask2, IconAtom2, IconActivity, IconX, IconGauge, IconGaugeFilled, IconSum, IconTestPipe, IconDroplets, IconCloudStorm, IconBuildingFactory2, IconCloudRain, IconCompass, IconAlertOctagon, IconAlertTriangle, IconInfoCircle, IconRefresh, IconReportAnalytics, IconMail } from '@tabler/icons-react';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, LineController, Filler);
 
@@ -226,7 +226,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
 });
 
 export const DashboardScreen = React.memo(() => {
-  const { stations, devices, parameters, showToast, authFetch, API_BASE, parseUtcDate, amcExpiry, broadcasts } = useContext(AppContext);
+  const { stations, devices, parameters, showToast, authFetch, API_BASE, parseUtcDate, amcExpiry, broadcasts, setActiveScreen } = useContext(AppContext);
   const liveDataCtx = useContext(LiveDataContext) || {};
   const liveData = liveDataCtx.liveData || {};
   const kpis = liveDataCtx.kpis || {};
@@ -420,32 +420,43 @@ export const DashboardScreen = React.memo(() => {
               datasets: [{
                 label: `${paramObj.name || activeParam} (${unit})`,
                 data: dataPointsRef.current.datasets[activeParam] || [],
-                borderColor: activeParamTheme.color,
-                backgroundColor: activeParamTheme.glow,
+                borderColor: '#0F766E',
+                backgroundColor: 'rgba(15, 118, 110, 0.08)',
                 fill: true,
-                tension: 0.35,
-                pointBackgroundColor: activeParamTheme.color,
-                pointBorderColor: '#fff',
+                tension: 0, // Standard Time-Series Line (no smoothing/Bezier distortion)
+                spanGaps: false,
+                pointBackgroundColor: '#0F766E',
+                pointBorderColor: '#FFFFFF',
+                pointBorderWidth: 1.5,
                 pointRadius: 3,
                 pointHoverRadius: 6
               }]
             },
             options: {
               responsive: true,
+              maintainAspectRatio: false,
               animation: false,
               plugins: {
                 legend: {
                   labels: {
-                    color: T.textMuted,
-                    font: { weight: 600, family: T.fontBase }
+                    color: 'var(--text-secondary)',
+                    font: { weight: 600, family: "'Source Sans 3', Inter, sans-serif" }
                   }
+                },
+                tooltip: {
+                  backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                  titleColor: '#F8FAFC',
+                  bodyColor: '#E2E8F0',
+                  borderColor: 'rgba(15, 118, 110, 0.4)',
+                  borderWidth: 1,
+                  padding: 8,
                 }
               },
               scales: {
-                x: { ticks: { color: T.textFaint, font: { size: 11 } }, grid: { color: 'var(--surface-muted)' } },
+                x: { ticks: { color: 'var(--text-secondary)', font: { size: 11, family: "'Source Sans 3', sans-serif" }, maxTicksLimit: 12 }, grid: { color: 'rgba(0,0,0,0.05)' } },
                 y: { 
-                  ticks: { color: T.textFaint, font: { size: 11 } }, 
-                  grid: { color: 'var(--surface-muted)' },
+                  ticks: { color: 'var(--text-secondary)', font: { size: 11, family: "'Source Sans 3', sans-serif" } }, 
+                  grid: { color: 'rgba(0,0,0,0.05)' },
                   suggestedMax: maxLimit !== undefined ? maxLimit * 1.1 : undefined,
                   suggestedMin: minLimit !== undefined ? Math.min(0, minLimit * 0.9) : undefined
                 }
@@ -667,144 +678,66 @@ export const DashboardScreen = React.memo(() => {
         </div>
       )}
 
-      {/* KPI Cards */}
-      <div className="card">
-        <div className="section-title" style={{ color: 'var(--text-primary)' }}>System Summary</div>
-        <div className="grid-5">
-          <div className={`kpi-card${(kpis?.offlineDevices || 0) > 0 ? ' kpi-card-alert' : ''}`}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-              <span style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Offline Parameters</span>
-              <div style={{ width: '26px', height: '26px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: (kpis?.offlineDevices || 0) > 0 ? '#F09595' : 'rgba(226, 75, 74, 0.10)' }}>
-                <IconShieldX size={14} stroke={1.5} color={(kpis?.offlineDevices || 0) > 0 ? '#501313' : T.error} />
-              </div>
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-              {String(kpis?.offlineDevices || 0).padStart(2, '0')}
-            </div>
-          </div>
-
-          <div className="kpi-card kpi-amber" onClick={() => setShowAlarmsModal(true)} style={{ cursor: 'pointer' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-              <span style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Active Alarms</span>
-              <div style={{ width: '26px', height: '26px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FBDFAE' }}>
-                <AlarmIcon />
-              </div>
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {String(kpis?.activeAlarms || 0).padStart(2, '0')}
-              {(kpis?.activeAlarms || 0) > 0 && (
-                <span style={{ width: '10px', height: '10px', background: 'var(--danger)', borderRadius: '50%', display: 'inline-block' }}></span>
-              )}
-            </div>
-          </div>
-
-          <div className="kpi-card kpi-green">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-              <span style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Online Parameters</span>
-              <div style={{ width: '26px', height: '26px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(29, 158, 117, 0.10)' }}>
-                <OnlineIcon />
-              </div>
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-              {String(kpis?.onlineDevices || 0).padStart(2, '0')}
-            </div>
-          </div>
-
-          <div className="kpi-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-              <span style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>Total Stations</span>
-              <div style={{ width: '26px', height: '26px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 110, 86, 0.10)' }}>
-                <StationIcon />
-              </div>
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-              {String(kpis?.totalStations || 0).padStart(2, '0')}
-            </div>
-          </div>
-
-          <div className="kpi-card kpi-blue">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
-              <span style={{ fontSize: '9px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)' }}>PC Network</span>
-              <div style={{ width: '26px', height: '26px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(55, 138, 221, 0.10)' }}>
-                <NetworkIcon />
-              </div>
-            </div>
-            <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1.15', marginBottom: '4px' }}>
-              {networkInfo?.lan_ip || '---'}
-            </div>
-            <div style={{ fontSize: '9px', fontWeight: '600', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block', backgroundColor: networkInfo?.internet_connected ? 'var(--success)' : 'var(--danger)' }}></span>
-                {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
-              </span>
-              {networkInfo?.hostname && <span>{networkInfo.hostname}</span>}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Body — conditional: empty state vs live telemetry */}
-      {isEmpty ? (
-        <div className="card" style={{ padding: '40px 20px', textAlign: 'center', ...GLASS_CARD, boxShadow: T.shadowSm }}>
-          <div style={{ fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '10px' }}>
-            No mapped parameters found.
-          </div>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
-            Please configure your station, devices, and map parameters in the Parameter Mapping screen to start viewing live telemetry.
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* Live Trends Modal */}
-          {isTrendsModalOpen && (
-            <div style={{
-              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(15, 110, 86, 0.6)', backdropFilter: 'blur(4px)',
-              zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
-            }} onClick={() => setIsTrendsModalOpen(false)}>
-              <div style={{
-                backgroundColor: 'rgba(253, 250, 242, 0.95)', backdropFilter: 'blur(25px)', WebkitBackdropFilter: 'blur(25px)',
-                border: '1px solid rgba(0, 0, 0, 0.12)',
-                borderRadius: '16px', width: '100%', maxWidth: '900px',
-                padding: '24px', boxShadow: T.shadowLg, position: 'relative'
-              }} onClick={e => e.stopPropagation()}>
-                <button onClick={() => setIsTrendsModalOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: '#000000' }}>
-                  <IconX size={24} stroke={2} />
-                </button>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-                  <div>
-                    <div className="section-title" style={{ margin: 0, fontSize: '20px' }}>Live Trends</div>
-                    {(() => {
-                      const param = parameters.find(p => p.tag_name === selectedParam);
-                      const device = param ? devices.find(d => d.id == param.device_id) : null;
-                      const station = device ? stations.find(s => s.id == device.station_id) : null;
-                      return station ? (
-                        <div style={{ fontSize: '12px', fontWeight: '600', color: '#000000', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          {station.name}
-                        </div>
-                      ) : null;
-                    })()}
-                  </div>
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <select value={selectedParam} onChange={handleParamChange} style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${T.borderSoft}`, fontSize: '14px', fontWeight: '700', color: T.text, backgroundColor: 'var(--surface-muted)', outline: 'none', cursor: 'pointer' }}>
-                      {parameters.map(p => <option key={p.id} value={p.tag_name}>{p.name || p.tag_name}</option>)}
-                    </select>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      <button onClick={downloadPNG} style={{ background: 'var(--surface-muted)', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PNG</button>
-                      <button onClick={downloadPDF} style={{ background: 'var(--surface-muted)', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PDF</button>
-                      <button onClick={exportTrendCSV} style={{ background: 'var(--surface-muted)', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>CSV</button>
+            {/* Body — always render layout, conditionally render parameter grid or empty state */}
+      {!isEmpty && isTrendsModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 110, 86, 0.6)', backdropFilter: 'blur(4px)',
+          zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+        }} onClick={() => setIsTrendsModalOpen(false)}>
+          <div style={{
+            backgroundColor: 'rgba(253, 250, 242, 0.95)', backdropFilter: 'blur(25px)', WebkitBackdropFilter: 'blur(25px)',
+            border: '1px solid rgba(0, 0, 0, 0.12)',
+            borderRadius: '16px', width: '100%', maxWidth: '900px',
+            padding: '24px', boxShadow: T.shadowLg, position: 'relative'
+          }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => setIsTrendsModalOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: '#000000' }}>
+              <IconX size={24} stroke={2} />
+            </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <div className="section-title" style={{ margin: 0, fontSize: '20px' }}>Live Trends</div>
+                {(() => {
+                  const param = parameters.find(p => p.tag_name === selectedParam);
+                  const device = param ? devices.find(d => d.id == param.device_id) : null;
+                  const station = device ? stations.find(s => s.id == device.station_id) : null;
+                  return station ? (
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#000000', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {station.name}
                     </div>
-                  </div>
-                </div>
-                <div style={{ position: 'relative', width: '100%', minHeight: '350px' }}>
-                  <canvas ref={chartRef}></canvas>
+                  ) : null;
+                })()}
+              </div>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <select value={selectedParam} onChange={handleParamChange} style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${T.borderSoft}`, fontSize: '14px', fontWeight: '700', color: T.text, backgroundColor: 'var(--surface-muted)', outline: 'none', cursor: 'pointer' }}>
+                  {parameters.map(p => <option key={p.id} value={p.tag_name}>{p.name || p.tag_name}</option>)}
+                </select>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button onClick={downloadPNG} style={{ background: 'var(--surface-muted)', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PNG</button>
+                  <button onClick={downloadPDF} style={{ background: 'var(--surface-muted)', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PDF</button>
+                  <button onClick={exportTrendCSV} style={{ background: 'var(--surface-muted)', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>CSV</button>
                 </div>
               </div>
             </div>
-          )}
+            <div style={{ position: 'relative', width: '100%', minHeight: '350px' }}>
+              <canvas ref={chartRef}></canvas>
+            </div>
+          </div>
+        </div>
+      )}
 
-          {/* Sensor telemetry Grid */}
-          <div className="card">
+      <div className="dash-layout">
+        {isEmpty ? (
+          <div className="card" style={{ padding: '40px 20px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: 0, alignSelf: 'start', backgroundColor: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)' }}>
+            <div style={{ fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '10px' }}>
+              No mapped parameters found.
+            </div>
+            <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+              Please configure your station, devices, and map parameters in the Parameter Mapping screen to start viewing live telemetry.
+            </div>
+          </div>
+        ) : (
+          <div className="card" style={{ marginBottom: 0 }}>
             <div className="section-title" style={{ color: '#000000' }}>Live Parameters</div>
             {Object.entries(groupedBySensor).map(([sensorName, params]) => (
               <div key={sensorName} style={{ marginBottom: '24px' }}>
@@ -834,8 +767,46 @@ export const DashboardScreen = React.memo(() => {
               </div>
             )}
           </div>
-        </>
-      )}
+        )}
+
+        {/* Side rail — health, devices, system info, quick actions */}
+        <aside className="dash-sidebar">
+          <div className="card">
+            <div className="dash-card-title">Device Status</div>
+            <div className="dash-health-row">
+              <span className="dash-health-dot" style={{ background: 'var(--success)' }}></span>
+              <span className="dash-health-name">Online Device</span>
+              <span className="dash-health-count">{String(kpis?.onlineDevices || 0).padStart(2, '0')}</span>
+            </div>
+            <div className="dash-health-row">
+              <span className="dash-health-dot" style={{ background: 'var(--danger)' }}></span>
+              <span className="dash-health-name">Offline Device</span>
+              <span className="dash-health-count">{String(kpis?.offlineDevices || 0).padStart(2, '0')}</span>
+            </div>
+            <div className="dash-health-row">
+              <span className="dash-health-dot" style={{ background: 'var(--primary-600)' }}></span>
+              <span className="dash-health-name">Stations</span>
+              <span className="dash-health-count">{String(kpis?.totalStations || stations.length || 0).padStart(2, '0')}</span>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="dash-card-title">Quick Actions</div>
+            <button className="dash-action" onClick={() => { fetchLatestTelemetryAndKpis(); showToast('Telemetry refreshed'); }} style={{ borderColor: '#000000', color: '#000000' }}>
+              <IconRefresh size={16} stroke={2} color="var(--primary-600)" /> Refresh Data
+            </button>
+            <button className="dash-action" onClick={() => setActiveScreen('reportsScreen')} style={{ borderColor: 'rgba(15, 110, 86, 0.2)' }}>
+              <IconReportAnalytics size={16} stroke={1.75} color="var(--primary-600)" /> View Reports
+            </button>
+            <button className="dash-action" onClick={() => setShowAlarmsModal(true)} style={{ borderColor: 'rgba(15, 110, 86, 0.2)' }}>
+              <IconBell size={16} stroke={1.75} color="#C07E12" /> Active Alarms
+            </button>
+            <button className="dash-action" onClick={() => setActiveScreen('contactScreen')} style={{ borderColor: 'rgba(15, 110, 86, 0.2)' }}>
+              <IconMail size={16} stroke={1.75} color="var(--primary-600)" /> Contact
+            </button>
+          </div>
+        </aside>
+      </div>
 
       <AlarmsInspectorModal isOpen={showAlarmsModal} onClose={() => setShowAlarmsModal(false)} />
 

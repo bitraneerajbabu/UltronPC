@@ -90,10 +90,11 @@ class SecretsVault:
         if env_enc.is_file():
             try:
                 import dotenv, io
+                from app.core.config_crypt import decrypt_file_to_string
                 decrypted = decrypt_file_to_string(str(env_enc))
                 config = dotenv.dotenv_values(stream=io.StringIO(decrypted))
                 for k, v in config.items():
-                    if v is not None and k not in self._secrets:
+                    if v is not None and str(v).strip() != "" and k not in self._secrets:
                         self._secrets[k] = v
                         self._metadata[k] = {"source": ".env.enc", "loaded_at": datetime.utcnow().isoformat()}
             except Exception:

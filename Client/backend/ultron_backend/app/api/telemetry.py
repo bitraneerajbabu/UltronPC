@@ -80,6 +80,7 @@ async def latest_values(
         pt.parameter_id for pt in points
         if pt.quality in (DataQuality.comms_fail, DataQuality.sensor_fail)
     ]
+    config_ts_map: dict = {}
     if bad_param_ids:
         # Use a correlated subquery to get last good timestamp per parameter
         latest_good = select(
@@ -93,9 +94,21 @@ async def latest_values(
         good_result = await db.execute(latest_good)
         good_map = {row.parameter_id: row.last_good_ts for row in good_result.all()}
 
+        # Config-time fallback for parameters that never delivered a good reading:
+        # stamp the time the parameter was configured so the offline timestamp is
+        # honest (frozen at last-online OR config time) instead of poll time.
+        config_result = await db.execute(
+            select(LiveData.parameter_id, Parameter.created_at)
+            .join(Parameter, Parameter.id == LiveData.parameter_id)
+            .where(LiveData.parameter_id.in_(bad_param_ids))
+        )
+        config_ts_map = {row.parameter_id: row.created_at for row in config_result.all()}
+
         for pt in points:
             if pt.parameter_id in good_map:
                 pt.timestamp = good_map[pt.parameter_id]
+            elif pt.parameter_id in config_ts_map:
+                pt.timestamp = config_ts_map[pt.parameter_id]
 
     return points
 

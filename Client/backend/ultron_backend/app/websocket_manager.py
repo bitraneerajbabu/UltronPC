@@ -8,6 +8,8 @@ import json
 from datetime import datetime
 from typing import Set
 from fastapi import WebSocket
+# ponytail: state guard so accepting is idempotent (main.py accepts pre-auth)
+from starlette.websockets import WebSocketState
 from app.core.logger import get_logger
 
 log = get_logger("ultron.websocket")
@@ -26,7 +28,8 @@ class ConnectionManager:
         self._connections: Set[WebSocket] = set()
 
     async def connect(self, ws: WebSocket):
-        await ws.accept()
+        if ws.application_state != WebSocketState.CONNECTED:
+            await ws.accept()
         self._connections.add(ws)
         log.info(f"WS client connected. Total: {len(self._connections)}")
 

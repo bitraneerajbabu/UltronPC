@@ -426,6 +426,8 @@ app.include_router(alarms.router, prefix=f"{settings.API_V1_STR}/alarms", tags=[
 app.include_router(cpcb.router, prefix=f"{settings.API_V1_STR}/cpcb", tags=["cpcb"])
 app.include_router(ota.router, prefix=f"{settings.API_V1_STR}/ota", tags=["ota"])
 app.include_router(stations.router, prefix=f"{settings.API_V1_STR}/stations", tags=["stations"])
+from app.api.endpoints import fleet
+app.include_router(fleet.router, prefix=f"{settings.API_V1_STR}/fleet", tags=["fleet"])
 
 # Background heartbeat monitor loop for server
 from datetime import datetime, timezone, timedelta

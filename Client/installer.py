@@ -35,6 +35,123 @@ GITHUB_REPO = "bitraneerajbabu/UltronPC"
 APP_NAME = "UltrON"
 MAX_RELEASES_TO_SHOW = 20
 
+# ─── EULA ────────────────────────────────────────────────────────────────────
+EULA_SPEC = {
+    "app_name": "UltrON",
+    "publisher": "Sunshine Technologies",
+    "window_title": "UltrON - License Agreement",
+    "intro_text": (
+        "Please read the following License Agreement carefully. You must accept "
+        "the terms of this agreement before continuing with the installation of UltrON."
+    ),
+    "sections": [
+        ("1. License Grant", "Sunshine Technologies grants you a non-exclusive, non-transferable license to install and use UltrON (Local Machine software and connected RajAPI services) on the facility/plant for which it was licensed. You may not copy, resell, sub-license, or reverse-engineer this software."),
+        ("2. What This Software Does", "UltrON polls your Modbus-connected devices (TCP/RS485), stores readings locally in SQLite, computes CPCB-format averages and quality codes (U/O/E/N), and pushes this data to Sunshine Technologies' central server (RajAPI) for fleet dashboards, AMC management, and OTA updates."),
+        ("3. Data Collection & Privacy", "This software collects device readings, timestamps, computed averages, device configuration metadata, and basic operational logs, and transmits them to RajAPI over a secured connection. Your data is not sold to third parties. Full details are in the Data Privacy & Processing Addendum provided with your service agreement."),
+        ("4. Compliance Disclaimer", "UltrON is a monitoring and reporting tool only. It does not certify, calibrate, or guarantee your instruments' accuracy, and Sunshine Technologies is not a Pollution Control Board or certifying authority. You remain solely responsible for instrument calibration, data accuracy, and all statutory filings with CPCB/SPCB or any regulator."),
+        ("5. Updates & Service Continuity", "This software may receive automatic OTA updates. Continued access to RajAPI-connected features (fleet dashboard, reports, remote support) requires an active AMC/subscription; access may be locked if payment lapses and restored on renewal."),
+        ("6. Limitation of Liability", "Sunshine Technologies is not liable for inaccurate readings caused by faulty or uncalibrated client instruments, outages beyond its control, or regulatory penalties arising from your compliance obligations. Total liability is limited as set out in your Service & Installation Agreement."),
+        ("7. Governing Law", "This Agreement is governed by the laws of India."),
+    ],
+    "checkbox_text": "I have read and agree to the terms of this License Agreement",
+    "agree_label": "I Agree",
+    "decline_label": "Cancel",
+    "decline_message": "You must accept the License Agreement to install UltrON. Setup will now exit.",
+}
+
+
+def _machine_id():
+    """Stable per-machine id: hashed Windows MachineGuid, fallback to MAC address."""
+    import hashlib
+    import uuid
+    import winreg
+    raw = ""
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Cryptography") as key:
+            raw, _ = winreg.QueryValueEx(key, "MachineGuid")
+    except OSError:
+        raw = str(uuid.getnode())
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def eula_body_text(spec=None):
+    """Render the EULA into the plain text shown in the dialog."""
+    spec = spec or EULA_SPEC
+    parts = [spec["intro_text"], ""]
+    for heading, body in spec["sections"]:
+        parts.append(heading)
+        parts.append("")
+        parts.append(body)
+        parts.append("")
+    return "\n".join(parts)
+
+
+def record_acceptance(version):
+    """Write the acceptance record next to the installer's install dir."""
+    import json
+    from datetime import datetime, timezone
+    record = {
+        "app_name": EULA_SPEC["app_name"],
+        "publisher": EULA_SPEC["publisher"],
+        "version": version,
+        "accepted_at_timestamp": datetime.now(timezone.utc).isoformat(),
+        "user_machine_id": _machine_id(),
+    }
+    local_app_data = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~\\AppData\\Local")
+    log_dir = Path(local_app_data) / APP_NAME
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / "license_acceptance.json"
+    with open(str(log_file), "w", encoding="utf-8") as f:
+        json.dump(record, f, indent=2)
+
+
+def show_eula_gui():
+    """Show the License Agreement dialog. Returns True only if the user checked the box and clicked Agree."""
+    import tkinter as tk
+    from tkinter import ttk
+    root = tk.Tk()
+    root.title(EULA_SPEC["window_title"])
+    root.geometry("620x560")
+    root.minsize(560, 500)
+
+    frame = ttk.Frame(root, padding=12)
+    frame.pack(fill="both", expand=True)
+
+    ttk.Label(frame, text=EULA_SPEC["intro_text"], wraplength=560, justify="left").pack(anchor="w", pady=(0, 8))
+
+    text_frame = ttk.Frame(frame)
+    text_frame.pack(fill="both", expand=True)
+    text = tk.Text(text_frame, wrap="word", relief="solid", borderwidth=1, padx=8, pady=8)
+    scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text.yview)
+    text.configure(yscrollcommand=scrollbar.set)
+    scrollbar.pack(side="right", fill="y")
+    text.pack(side="left", fill="both", expand=True)
+    text.insert("1.0", eula_body_text())
+    text.configure(state="disabled")
+
+    agreed = tk.BooleanVar(value=False)
+    ttk.Checkbutton(frame, text=EULA_SPEC["checkbox_text"], variable=agreed).pack(anchor="w", pady=(10, 4))
+
+    buttons = ttk.Frame(frame)
+    buttons.pack(fill="x", pady=(4, 0))
+    accept = ttk.Button(buttons, text=EULA_SPEC["agree_label"], state="disabled", command=root.destroy)
+    accept.pack(side="left", padx=(0, 8))
+    ttk.Button(buttons, text=EULA_SPEC["decline_label"], command=root.destroy).pack(side="left")
+
+    result = {"accepted": False}
+
+    def on_check():
+        accept.configure(state="normal" if agreed.get() else "disabled")
+    agreed.trace_add("write", lambda *_: on_check())
+
+    def on_accept():
+        result["accepted"] = True
+        root.destroy()
+    accept.configure(command=on_accept)
+
+    root.mainloop()
+    return result["accepted"]
+
 
 def _github_json(url):
     """Fetch JSON from the GitHub API with installer-friendly headers."""
@@ -250,6 +367,15 @@ def main():
     version = selected_release["tag"]
     print(f"[OK] Selected version: {version}")
 
+    # 1.5 License agreement — required before any installation proceeds
+    if not show_eula_gui():
+        print()
+        print(EULA_SPEC["decline_message"])
+        input("Press Enter to exit...")
+        sys.exit(1)
+    record_acceptance(version)
+    print("[OK] License agreement accepted.")
+
     # 2. Determine installation paths
     local_app_data = os.environ.get("LOCALAPPDATA")
     if not local_app_data:
@@ -318,4 +444,16 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--self-check" in sys.argv:
+        import json
+        body = eula_body_text()
+        assert all(heading in body for heading, _ in EULA_SPEC["sections"])
+        assert len(_machine_id()) == 16
+        record_acceptance("self-check")
+        log_path = Path(os.environ["LOCALAPPDATA"]) / APP_NAME / "license_acceptance.json"
+        assert log_path.is_file()
+        rec = json.loads(log_path.read_text(encoding="utf-8"))
+        assert rec["app_name"] == "UltrON" and rec["version"] == "self-check" and rec["user_machine_id"]
+        print("self-check OK: eula text, machine id, acceptance record")
+        sys.exit(0)
     main()

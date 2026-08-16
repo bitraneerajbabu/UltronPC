@@ -47,17 +47,25 @@ if exist ".env.enc" (
 
 
 :build_exe
+REM 6b. Pre-build smoke test — imports every app/ module to catch broken
+REM imports before a 40MB build + install cycle finds them on a client PC.
+echo.
+echo [STEP 4b] Running pre-build import smoke test...
+venv\Scripts\python.exe tests\smoke_test.py
+if errorlevel 1 (
+    echo SMOKE TEST FAILED - fix imports before building
+    goto smoke_failed
+)
+
 REM 7. Build executable via PyInstaller
 echo.
 echo [STEP 5] Building standalone executable using PyInstaller...
 venv\Scripts\python.exe -m PyInstaller UltrON.spec --noconfirm
 if errorlevel 1 goto pyinstaller_failed
 
-REM 8. Build Bootstrapper Installer
-echo.
-echo [STEP 6] Building lightweight Bootstrapper Installer...
-venv\Scripts\python.exe -m PyInstaller ..\..\installer.py --onefile --console --icon=ultron.ico --name=UltrON_Installer --noconfirm
-if errorlevel 1 goto installer_failed
+REM 7b. Installer smoke test — skipped since installer.py is obsolete (replaced by Inno Setup)
+
+REM 8. Build Bootstrapper Installer — skipped (using Inno Setup now)
 
 echo.
 echo ============================================================
@@ -83,6 +91,14 @@ goto end
 
 :pip_failed
 echo [ERROR] Failed to install python dependencies!
+goto end
+
+:smoke_failed
+echo [ERROR] Pre-build smoke test failed - broken imports found
+goto end
+
+:installer_smoke_failed
+echo [ERROR] Installer smoke test failed - fix installer.py imports
 goto end
 
 :pyinstaller_failed

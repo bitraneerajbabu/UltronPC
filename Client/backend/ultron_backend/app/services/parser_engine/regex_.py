@@ -21,7 +21,7 @@ class RegexParser(BaseParser):
 
     def parse(self, response: str, config: dict, param: dict) -> Optional[float]:
         try:
-            pattern = config.get("pattern", r"(\d+\.?\d*)")
+            pattern = config.get("pattern", r"([-+]?\d+\.?\d*)")
             m = re.search(pattern, response)
             raw_str = m.group(1) if m else None
             return float(raw_str) if raw_str not in (None, "", "N/A", "---") else None

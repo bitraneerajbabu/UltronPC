@@ -79,12 +79,12 @@ async def _seed_admin():
             if admin.locked_until is not None:
                 admin.locked_until = None
                 changed = True
-            if not verify_password(settings.ADMIN_PASSWORD, admin.hashed_password):
-                admin.hashed_password = hash_password(settings.ADMIN_PASSWORD)
-                changed = True
             if changed:
                 await db.commit()
-                log.info(f"Admin account '{settings.ADMIN_USERNAME}' state and password synced.")
+                log.info(f"Admin account '{settings.ADMIN_USERNAME}' state re-activated.")
+
+            # Password is NOT synced here — Master password is authoritative in the
+            # database only (matches users.py guard: only manual DB edit changes it).
 
 
 async def _sync_admin_password():
@@ -192,7 +192,13 @@ async def lifespan(app: FastAPI):
     # 3. Start polling engine
     await polling_engine.start_polling()
 
-    # 4. Seed default admin user if no users exist
+    # 3.5 Start Historian Service (records LiveCache history for trends & reports)
+    from app.services.historian_service import historian_service
+    historian_service.start()
+
+    # 4. Seed default admin users (Master and SuperMaster)
+    from app.database_initializer import initialize_defaults
+    await initialize_defaults()
     await _seed_admin()
 
     # 4.1 Sync admin password from .env if it changed
@@ -277,6 +283,8 @@ async def lifespan(app: FastAPI):
     # ─── Shutdown ─────────────────────────────────────────────────────────────
     log.info("UltrON shutting down …")
     scheduler.shutdown(wait=False)
+    from app.services.historian_service import historian_service
+    await historian_service.stop()
     await polling_engine.stop_polling()
     log.info("UltrON stopped")
 
@@ -388,6 +396,7 @@ async def websocket_live(
       - {"type": "alarm", "alarm_id": ..., "severity": ..., ...}
       - {"type": "heartbeat", "ts": ..., "clients": ...}
     """
+    await websocket.accept()
     if not token:
         try:
             data = await websocket.receive_text()

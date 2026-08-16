@@ -17,8 +17,8 @@ log = get_logger("ultron.cpcb.export")
 
 def format_cpcb_value(value: float | None) -> str:
     if value is None:
-        return ""
-    return f"{value:.4f}"
+        return "0.00"
+    return f"{value:.2f}"
 
 
 def format_cpcb_timestamp(dt: datetime) -> str:

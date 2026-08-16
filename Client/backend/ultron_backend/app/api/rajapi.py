@@ -13,7 +13,7 @@ from app.schemas.rajapi import (
     RajAPIStationConfigSchema, RajAPIStationBulkUpdate,
     RajAPITestResult,
 )
-from app.core.security import require_admin
+from app.core.security import require_server_mgmt
 from app.core.logger import get_logger
 from app.config import settings
 
@@ -21,7 +21,7 @@ log = get_logger("ultron.api.rajapi")
 router = APIRouter(prefix="/rajapi", tags=["RajAPI"])
 
 
-@router.get("/config", response_model=List[RajAPIConfigSchema], dependencies=[Depends(require_admin)])
+@router.get("/config", response_model=List[RajAPIConfigSchema], dependencies=[Depends(require_server_mgmt)])
 async def get_rajapi_config(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(RajAPIConfig).options(selectinload(RajAPIConfig.stations)).order_by(RajAPIConfig.id)
@@ -58,7 +58,7 @@ async def get_rajapi_config(db: AsyncSession = Depends(get_db)):
     return result_list
 
 
-@router.put("/config", response_model=RajAPIConfigSchema, dependencies=[Depends(require_admin)])
+@router.put("/config", response_model=RajAPIConfigSchema, dependencies=[Depends(require_server_mgmt)])
 async def update_rajapi_config(config_in: RajAPIConfigUpdate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(RajAPIConfig).options(selectinload(RajAPIConfig.stations)))
     config = result.scalars().first()
@@ -83,7 +83,7 @@ async def update_rajapi_config(config_in: RajAPIConfigUpdate, db: AsyncSession =
     return await _config_to_schema(config, db)
 
 
-@router.put("/stations", dependencies=[Depends(require_admin)])
+@router.put("/stations", dependencies=[Depends(require_server_mgmt)])
 async def update_rajapi_stations(update: RajAPIStationBulkUpdate, db: AsyncSession = Depends(get_db)):
     # Get or create config
     result = await db.execute(select(RajAPIConfig))
@@ -118,7 +118,7 @@ async def update_rajapi_stations(update: RajAPIStationBulkUpdate, db: AsyncSessi
     return {"detail": "Station configs updated"}
 
 
-@router.post("/test", response_model=RajAPITestResult, dependencies=[Depends(require_admin)])
+@router.post("/test", response_model=RajAPITestResult, dependencies=[Depends(require_server_mgmt)])
 async def test_rajapi_connection(db: AsyncSession = Depends(get_db)):
     """Test connection to RajAPI with stored token."""
     result = await db.execute(select(RajAPIConfig))
@@ -181,3 +181,4 @@ async def _config_to_schema(config: RajAPIConfig, db: AsyncSession) -> RajAPICon
         updated_at=config.updated_at,
         stations=stations,
     )
+

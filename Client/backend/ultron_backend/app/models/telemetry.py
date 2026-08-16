@@ -197,10 +197,11 @@ class PendingUpload(Base):
     __tablename__ = "pending_uploads"
 
     id = Column(Integer, primary_key=True, index=True)
-    server_config_id = Column(Integer, ForeignKey("server_config.id", ondelete="CASCADE"), nullable=False, index=True)
+    server_config_id = Column(Integer, ForeignKey("server_config.id", ondelete="CASCADE"), nullable=True, index=True)
     url = Column(String(500), nullable=False)
     payload = Column(JSON, nullable=False)
     mode = Column(String(20), default="live")        # "live" or "delay"
+    protocol = Column(String(20), default="spcb")    # "spcb", "tnpcb", or "rajapi"
     retry_count = Column(Integer, default=0)
     last_error = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -216,6 +217,7 @@ class Broadcast(Base):
     __tablename__ = "broadcasts"
 
     id = Column(Integer, primary_key=True, index=True)
+    server_id = Column(String(100), nullable=True, index=True)
     message = Column(Text, nullable=False)
     severity = Column(String(20), default="info")  # info / warn / critical
     is_active = Column(Boolean, default=True)
@@ -223,4 +225,4 @@ class Broadcast(Base):
     expires_at = Column(DateTime, nullable=True)
 
     def __repr__(self):
-        return f"<Broadcast id={self.id} severity={self.severity}>"
+        return f"<Broadcast id={self.id} server_id={self.server_id} severity={self.severity}>"

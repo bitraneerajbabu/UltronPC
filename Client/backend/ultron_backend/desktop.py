@@ -64,7 +64,8 @@ import argparse
 # ─────────────────────────────────────────────────────────────────────────────
 if getattr(sys, "frozen", False):
     BUNDLE_DIR = sys._MEIPASS                          # extracted packages
-    APP_DIR    = os.path.dirname(sys.executable)       # dir holding the .exe
+    APP_DIR    = os.path.join(os.environ.get("PROGRAMDATA", "C:\\ProgramData"), "UltrON")
+    os.makedirs(APP_DIR, exist_ok=True)
 else:
     BUNDLE_DIR = os.path.dirname(os.path.abspath(__file__))
     APP_DIR    = BUNDLE_DIR
@@ -455,6 +456,8 @@ def _run_server() -> None:
         server.run()
     except Exception:
         log.critical("Server thread crashed:\n%s", traceback.format_exc())
+    except BaseException:
+        log.critical("Server thread terminated (BaseException):\n%s", traceback.format_exc())
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 5 — Windows Startup Registration
@@ -604,7 +607,7 @@ def main() -> None:
     # 3. Wait for server
     log.info("Waiting for API server at %s …", URL)
     if not _wait_for_server(HOST, PORT, timeout=60):
-        log.error("Server did not start within 30 s")
+        log.error("Server did not start within 60 s")
         try:
             import ctypes
             ctypes.windll.user32.MessageBoxW(

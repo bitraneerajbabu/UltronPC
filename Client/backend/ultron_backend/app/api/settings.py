@@ -1,7 +1,7 @@
 """UltrON — Settings API (app-level configuration, user management, DB utilities)"""
 
 from fastapi import APIRouter, Depends, HTTPException
-from app.core.security import get_current_user, require_admin, hash_password
+from app.core.security import get_current_user, require_admin, require_super_admin, hash_password
 from app.models.user import User
 from app.models.plant_settings import PlantSettings
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,12 +55,32 @@ async def _get_lan_ip() -> str:
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
-        return ip
+        if ip and not ip.startswith("127."):
+            return ip
     except Exception:
-        try:
-            return socket.gethostbyname(socket.gethostname())
-        except Exception:
-            return "127.0.0.1"
+        pass
+        
+    try:
+        import psutil
+        for interface, snics in psutil.net_if_addrs().items():
+            iname = interface.lower()
+            if any(x in iname for x in ["loopback", "wsl", "vmware", "vbox", "virtual", "docker", "vpn", "tailscale", "zerotier"]):
+                continue
+            for snic in snics:
+                if snic.family == socket.AF_INET and not snic.address.startswith("127."):
+                    if not snic.address.startswith("169.254."):
+                        return snic.address
+    except Exception:
+        pass
+        
+    try:
+        fallback = socket.gethostbyname(socket.gethostname())
+        if fallback and not fallback.startswith("127.") and not fallback.startswith("169.254."):
+            return fallback
+    except Exception:
+        pass
+        
+    return "127.0.0.1"
 
 
 async def _check_internet() -> bool:
@@ -85,7 +105,7 @@ async def network_info():
 
 
 # ─── Reset / Clear Telemetry Data ─────────────────────────────────────────────
-@router.post("/reset-telemetry", dependencies=[Depends(require_admin)])
+@router.post("/reset-telemetry", dependencies=[Depends(require_super_admin)])
 async def reset_telemetry(db: AsyncSession = Depends(get_db)):
     """
     Wipe all telemetry data (live_data, historical_data, averages, alarms)
@@ -170,7 +190,7 @@ async def factory_reset_core(*, restart: bool = True):
             log.error(f"Restart setup failed: {e}")
 
 
-@router.post("/reset-all", dependencies=[Depends(require_admin)])
+@router.post("/reset-all", dependencies=[Depends(require_super_admin)])
 async def reset_all_data():
     """
     Drop and recreate all tables — full factory reset.
@@ -215,7 +235,7 @@ async def polling_status():
 
 
 # ─── Restart UltrON Application ────────────────────────────────────────────────
-@router.post("/restart-app", dependencies=[Depends(require_admin)])
+@router.post("/restart-app", dependencies=[Depends(require_super_admin)])
 async def restart_app():
     """
     Restart the UltrON desktop application (frozen PyInstaller exe only).
@@ -364,7 +384,7 @@ async def get_rajapi_settings():
         "rajapi_sync_enabled": settings.RAJAPI_SYNC_ENABLED,
     }
 
-@router.post("/rajapi", dependencies=[Depends(require_admin)])
+@router.post("/rajapi", dependencies=[Depends(require_super_admin)])
 async def save_rajapi_settings(payload: RajapiSettingsSchema):
     try:
         # Update settings singleton dynamically
@@ -490,7 +510,7 @@ async def check_firmware():
 
 
 # ─── Trigger CPCB File Write Now ─────────────────────────────────────────────
-@router.post("/trigger-cpcb", dependencies=[Depends(require_admin)])
+@router.post("/trigger-cpcb", dependencies=[Depends(require_super_admin)])
 async def trigger_cpcb_now():
     """
     Immediately run the CPCB flat-file write for all active CPCB/both servers.
@@ -613,7 +633,7 @@ def _do_firmware_download(custom_url: str | None = None) -> None:
         _fw_download_state = {"state": "error", "percent": 0, "message": str(e), "restart_required": False}
 
 
-@router.post("/firmware/download", dependencies=[Depends(require_admin)])
+@router.post("/firmware/download", dependencies=[Depends(require_super_admin)])
 async def start_firmware_download():
     """
     Start a background download of the latest UltrON.exe from GitHub Releases.
@@ -628,7 +648,7 @@ async def start_firmware_download():
     return {"state": "downloading", "percent": 0, "message": "Download started…", "restart_required": False}
 
 
-@router.post("/firmware/download-url", dependencies=[Depends(require_admin)])
+@router.post("/firmware/download-url", dependencies=[Depends(require_super_admin)])
 async def start_firmware_download_url(payload: dict):
     """
     Start a background download of UltrON.exe from a custom URL.
@@ -652,7 +672,7 @@ async def get_firmware_download_status():
     return _fw_download_state
 
 
-@router.post("/firmware/cancel", dependencies=[Depends(require_admin)])
+@router.post("/firmware/cancel", dependencies=[Depends(require_super_admin)])
 async def cancel_firmware_download():
     """Cancel an in-progress firmware download."""
     global _fw_download_state
@@ -661,3 +681,6 @@ async def cancel_firmware_download():
     _fw_download_state["state"] = "cancelled"
     audit.info("Firmware download cancelled by user")
     return {"state": "cancelled", "message": "Download cancelled."}
+
+
+

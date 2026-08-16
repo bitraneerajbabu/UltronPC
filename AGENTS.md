@@ -35,13 +35,21 @@
 - **API keys:** Static, stored in DB plaintext. No JWTs.
 - **Login:** Returns `admin_key` in response body (plaintext echo)
 
-## Latest Session (2026-07-07) — UltrON v1.0.69 Release & Fixes
-- **APP_VERSION:** `1.0.69` — EXE built at `client/backend/ultron_backend/dist/UltrON.exe` (40.0 MB)
-- **PyInstaller Hidden Imports:** Added `psutil` system monitoring library to PyInstaller hidden imports list in `UltrON.spec` to fix `ModuleNotFoundError` on client PC.
-- **SQLite Concurrency & Write Contention:** Integrated semaphores, randomized backoffs, and jitter in the polling engine to prevent database write conflicts.
-- **Header Cleanups:** Removed the duplicate logo in `App.tsx` header (keeping it only in the navigation-rail sidebar).
-- **Server Fleet Monitoring & OTA:** Implemented modern dashboards, fleet tracking, and OTA updates with appropriate fallback routes for legacy clients.
-- **Pi Security Hardening & MQTT Proxy (v1.0.66):** Restricted MQTT listener ports (1883/9001) to loopback `127.0.0.1`, set up Nginx WebSocket reverse-proxy for dashboard connectivity, and fixed `.rajapi_secrets.env` VAPID loading.
+## Latest Session (2026-08-16) — UltrON v1.1 Official Production Release
+- **APP_VERSION:** `1.1` (Frontend + Backend synced)
+- **Reports & Trends Screen Redesign:**
+  - Standard industrial time-series line chart as default visualization (straight lines, `tension: 0`, genuine telemetry timestamps, zero artificial spline smoothing).
+  - Step mode support for totalizers, discrete/digital states, and counters.
+  - Live summary statistics header (`Current`, `Min`, `Max`, `Avg`) calculated directly from true telemetry values.
+  - Quick time range presets (`1 Hr`, `6 Hr`, `12 Hr`, `1 Day`, `7 Days`, `30 Days`, `Custom`) with instant dynamic updates.
+  - Real communication gap representation (`spanGaps: false`).
+  - Alarm limit threshold reference lines (`H/H`, `High`, `Low`, `L/L`).
+  - Comprehensive export capabilities in PDF, CSV, and Excel.
+- **Orphan Device & Station Auto-Cleanup:**
+  - Deleting parameters/rules automatically purges empty devices and stations to prevent ghost polling loops.
+  - Polling loop synchronization keeps background acquisition strictly 1:1 with active devices.
+
+## Previous Session (2026-07-07) — UltrON v1.0.69 Release & Fixes
 
 ## Previous Session (2026-06-30) — Edit Gateway Rule Fixes
 - **Fixed `handleChange` NaN bug in `DevicesScreen.tsx:129-137`:** Number inputs (`scale_factor`, `offset`, etc.) stored raw string value instead of `Number(value)`. `Number("-")` → `NaN` → React renders blank, losing negative sign. Now converts to number only at save time.
@@ -52,4 +60,5 @@
 - Removed hardcoded `host: '192.168.1.101'`/`port: '502'`/`slave_id: '1'` from DEFAULT_PARAM (`:33`)
 
 ## Guardrails
-- **Master password (Master/Ultronpoiu) is LOCKED.** Never change it via API or direct DB edit unless Dev explicitly says "change the Master password". The PATCH `/users/{id}` endpoint rejects password changes for user Master. Intentional — manual DB update only.
+- **Login accounts (2026-08-09):** `Master`/`Ultron123.0` (admin, no server mgmt page) and `SuperMaster`/`Ultron@9493` (admin, server mgmt page). Manually inserted into DB via script — no API path. The old "Ultronpoiu" password is dead; do not restore it.
+- **Role hierarchy (2026-08-13):** `SuperMaster` is the ULTIMATE main admin — full control of everything (user mgmt, Server Management, resets, firmware, restart). `Master` is 2nd in rank with LIMITED usage (devices/params/calibration/logs/reports/settings — NO user mgmt, NO Server Management, NO resets/firmware/restart). `client` login = Dashboard + Reports ONLY (enforced: `App.tsx` allowedScreens + nav roles; calibration/contact removed for client). Backend enforcement: `require_super_admin` (new dep, `User.is_super_admin` column) on users router + settings reset/restart/firmware/rajapi/trigger-cpcb; `require_server_mgmt` on server_config + rajapi + cpcb routers; `require_admin` elsewhere. Frontend: `isSuperAdmin` from login response gates User Management tab + reset/firmware/restart buttons; `allowServerMgmt` gates Server Management nav. Master password locked (DB-only change, `users.py:108`).

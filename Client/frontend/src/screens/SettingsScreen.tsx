@@ -57,7 +57,7 @@ function UserModal({ mode, user, onClose, onSave }: { mode: 'add' | 'edit'; user
 }
 
 export const SettingsScreen = React.memo(() => {
-  const { API_BASE, showToast, loadAllData, authFetch, pendingStatus, usersList, loadUsers, addUser, editUser, deleteUser, currentUser, parseUtcDate } = useContext(AppContext);
+  const { API_BASE, showToast, loadAllData, authFetch, pendingStatus, usersList, loadUsers, addUser, editUser, deleteUser, currentUser, parseUtcDate, isSuperAdmin } = useContext(AppContext);
   const [settingsTab, setSettingsTab] = useState('system');
 
   // ─── User Management state ───
@@ -455,7 +455,7 @@ export const SettingsScreen = React.memo(() => {
   const SUB_TABS = [
     { key: 'system', label: 'System Settings', icon: 'var(--primary-600)' },
     { key: 'license', label: 'License', icon: 'var(--warning)' },
-    { key: 'users', label: 'User Management', icon: 'var(--danger)' },
+    ...(isSuperAdmin ? [{ key: 'users', label: 'User Management', icon: 'var(--danger)' }] : []),
   ];
 
   const sectionTitleS: React.CSSProperties = {
@@ -502,12 +502,12 @@ export const SettingsScreen = React.memo(() => {
         <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
           <button style={BTN.primary} onClick={loadInfo} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</button>
           <button style={BTN.ghost} onClick={handleReloadPolling} disabled={!!actionLoading}>{actionLoading === 'reload' ? '…' : 'Reload Polling'}</button>
-          <button style={{ ...BTN.error, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>{actionLoading === 'restart' ? 'Restarting…' : 'Restart App'}</button>
+          {isSuperAdmin && <button style={{ ...BTN.error, marginLeft: 'auto' }} onClick={handleRestartApp} disabled={actionLoading === 'restart'}>{actionLoading === 'restart' ? 'Restarting…' : 'Restart App'}</button>}
         </div>
       </div>
 
       {/* Software Update */}
-      <div style={{ ...GLASS_CARD, padding: '20px' }}>
+      {isSuperAdmin && (<div style={{ ...GLASS_CARD, padding: '20px' }}>
         <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>Software Update</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', marginBottom: '12px' }}>
           <div>
@@ -581,8 +581,7 @@ export const SettingsScreen = React.memo(() => {
             <button style={BTN.primary} onClick={startUrlDownload} disabled={fwProgress?.state === 'downloading'}>Download & Install</button>
           </div>
         </div>
-      </div>
-
+      </div>)}
       {/* Settings Form */}
       <div style={{ ...GLASS_CARD, padding: '20px' }}>
         <div style={{ fontSize: '16px', fontWeight: '700', color: T.text, marginBottom: '14px' }}>System Settings</div>
@@ -633,9 +632,9 @@ export const SettingsScreen = React.memo(() => {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px', flexWrap: 'wrap', gap: '10px' }}>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button style={BTN.error} onClick={handleResetTelemetry} disabled={!!actionLoading}>{actionLoading === 'resetTel' ? '…' : 'Clear Telemetry'}</button>
-            <button style={BTN.error} onClick={handleFactoryReset} disabled={!!actionLoading}>{actionLoading === 'resetAll' ? '…' : 'Factory Reset'}</button>
-            <button style={BTN.error} onClick={handleShutdown}>{'Shutdown Server'}</button>
+            {isSuperAdmin && <button style={BTN.error} onClick={handleResetTelemetry} disabled={!!actionLoading}>{actionLoading === 'resetTel' ? '…' : 'Clear Telemetry'}</button>}
+            {isSuperAdmin && <button style={BTN.error} onClick={handleFactoryReset} disabled={!!actionLoading}>{actionLoading === 'resetAll' ? '…' : 'Factory Reset'}</button>}
+            {isSuperAdmin && <button style={BTN.error} onClick={handleShutdown}>{'Shutdown Server'}</button>}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button style={BTN.ghost} onClick={handleResetFrontend}>Reset UI</button>

@@ -11,7 +11,7 @@ from typing import List
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdate, UserOut
-from app.core.security import hash_password, require_admin, get_current_user
+from app.core.security import hash_password, require_super_admin, get_current_user
 from app.core.logger import get_logger, get_audit_logger
 
 log = get_logger("ultron.users")
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 
 # ─── List Users ───────────────────────────────────────────────────────────────
-@router.get("/", response_model=List[UserOut], dependencies=[Depends(require_admin)])
+@router.get("/", response_model=List[UserOut], dependencies=[Depends(require_super_admin)])
 async def list_users(db: AsyncSession = Depends(get_db)):
     """List all users (admin only)."""
     result = await db.execute(select(User).order_by(User.created_at))
@@ -32,7 +32,7 @@ async def list_users(db: AsyncSession = Depends(get_db)):
 async def create_user(
     payload: UserCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_super_admin),
 ):
     """Create a new user account (admin only)."""
     # Check for duplicate username
@@ -50,6 +50,7 @@ async def create_user(
         full_name=payload.full_name,
         is_active=payload.is_active,
         allow_server_mgmt=payload.allow_server_mgmt,
+        is_super_admin=payload.is_super_admin,
         created_by=current_user.username,
     )
     db.add(new_user)
@@ -84,7 +85,7 @@ async def update_user(
     user_id: int,
     payload: UserUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_super_admin),
 ):
     """Update a user's password, name, role or active status (admin only)."""
     result = await db.execute(select(User).where(User.id == user_id))
@@ -119,6 +120,10 @@ async def update_user(
         user.is_active = payload.is_active
     if payload.role is not None:
         user.role = payload.role
+    if payload.allow_server_mgmt is not None:
+        user.allow_server_mgmt = payload.allow_server_mgmt
+    if payload.is_super_admin is not None:
+        user.is_super_admin = payload.is_super_admin
 
     await db.commit()
     await db.refresh(user)
@@ -131,7 +136,7 @@ async def update_user(
 async def delete_user(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_super_admin),
 ):
     """Delete a user (admin only). Cannot delete yourself."""
     if current_user.id == user_id:
@@ -154,3 +159,4 @@ async def delete_user(
     await db.delete(user)
     await db.commit()
     audit.info(f"User deleted: '{user.username}' by admin '{current_user.username}'")
+

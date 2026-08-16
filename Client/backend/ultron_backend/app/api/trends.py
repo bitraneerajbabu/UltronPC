@@ -170,6 +170,7 @@ async def export_trend_csv(
     start: Optional[datetime] = Query(None),
     end: Optional[datetime] = Query(None),
     avg_type: AverageType = AverageType.raw,
+    step_minutes: int = Query(0, description="Step interval in minutes (for raw mode, Normal Reports)"),
 ):
     """Export trend data as CSV saved to the Reports directory.
 
@@ -193,13 +194,14 @@ async def export_trend_csv(
         start = start.replace(tzinfo=None)
 
     # ── Use the shared data-fetching function ─────────────────────────────
+    interval = step_minutes if avg_type == AverageType.raw else 0
     avg_t = avg_type.value if isinstance(avg_type, AverageType) else str(avg_type)
     params, readings = await fetch_interval_data(
         db=db,
         parameter_ids=ids,
         start=start,
         end=end,
-        interval_minutes=0,  # trend CSV uses avg_type for interval selection
+        interval_minutes=interval,
         avg_type=avg_t,
     )
     param_map = {p.id: p for p in params}

@@ -37,11 +37,13 @@ async def seed_default_station(db) -> bool:
 
 async def seed_default_admin(db) -> bool:
     """
-    Seed mandatory Default Admin User if Master admin user is missing.
+    Seed mandatory Default Admin User (Master) and SuperAdmin User (SuperMaster) if missing.
     """
     from app.models.user import User
     from app.core.security import hash_password
 
+    seeded = False
+    # Seed Master
     res = await db.execute(select(User).where(User.username == settings.ADMIN_USERNAME))
     admin = res.scalar_one_or_none()
     if admin is None:
@@ -52,12 +54,34 @@ async def seed_default_admin(db) -> bool:
             full_name="System Administrator",
             is_active=True,
             created_by="system",
+            allow_server_mgmt=False,
+            is_super_admin=False,
         )
         db.add(admin_user)
-        await db.commit()
+        seeded = True
         log.info(f"Database Initializer: Admin user '{settings.ADMIN_USERNAME}' seeded via ORM model [OK]")
-        return True
-    return False
+
+    # Seed SuperMaster
+    res_sm = await db.execute(select(User).where(User.username == "SuperMaster"))
+    super_admin = res_sm.scalar_one_or_none()
+    if super_admin is None:
+        super_user = User(
+            username="SuperMaster",
+            hashed_password=hash_password("Ultron@9493"),
+            role="admin",
+            full_name="Super Administrator",
+            is_active=True,
+            created_by="system",
+            allow_server_mgmt=True,
+            is_super_admin=True,
+        )
+        db.add(super_user)
+        seeded = True
+        log.info("Database Initializer: SuperAdmin user 'SuperMaster' seeded via ORM model [OK]")
+
+    if seeded:
+        await db.commit()
+    return seeded
 
 
 async def initialize_defaults():

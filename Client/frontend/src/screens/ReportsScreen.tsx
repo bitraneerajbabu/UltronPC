@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect, useMemo, useRef } from 'react';
+import React, { useContext, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AppContext } from '../context/AppContext';
 import { T, GLASS_CARD } from '../theme';
 import { DateTimeRangePicker } from '../components/DateTimeRangePicker';
@@ -84,6 +84,7 @@ const fmtTs = (date: Date) => {
 export const ReportsScreen = React.memo(() => {
   const { stations, devices, parameters, API_BASE, showToast, parseUtcDate, authFetch } = useContext(AppContext);
 
+  // ─── Report State ──────────────────────────────────────────
   const [stationId, setStationId] = useState('');
   const [reportMode, setReportMode] = useState<'normal' | 'average'>('normal');
   const [interval, setInterval] = useState('1');
@@ -94,12 +95,13 @@ export const ReportsScreen = React.memo(() => {
   const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<Record<string, any>[]>([]);
   const [reportLoading, setReportLoading] = useState(false);
-
   const [selectedParamIds, setSelectedParamIds] = useState<string[]>([]);
 
-  // ─── Trend Chart state ──────────────────────────────────────
+  // ─── Trend Chart State ─────────────────────────────────────
   const [trendParamId, setTrendParamId] = useState('');
   const [trendResolution, setTrendResolution] = useState('raw');
+  const [trendType, setTrendType] = useState<'line' | 'step'>('line');
+  const [timePreset, setTimePreset] = useState<'1h' | '6h' | '12h' | '1d' | '7d' | '30d' | 'custom'>('1d');
   const [trendFromDate, setTrendFromDate] = useState(dlDate(-1));
   const [trendFromTime, setTrendFromTime] = useState('00:00');
   const [trendToDate, setTrendToDate] = useState(dlDate(0));
@@ -108,10 +110,10 @@ export const ReportsScreen = React.memo(() => {
   const [trendRows, setTrendRows] = useState<any[]>([]);
   const [trendLoading, setTrendLoading] = useState(false);
   const [trendGenerated, setTrendGenerated] = useState(false);
+  const [trendStats, setTrendStats] = useState<{ current: string; min: string; max: string; avg: string } | null>(null);
 
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstanceRef = useRef<ChartJS | null>(null);
-
   const abortRef = useRef<AbortController | null>(null);
 
   const handleModeChange = (mode: 'normal' | 'average') => {
@@ -161,7 +163,7 @@ export const ReportsScreen = React.memo(() => {
 
   // Auto-select first param for trend
   useEffect(() => {
-    if (filteredParams.length) setTrendParamId(filteredParams[0].id);
+    if (filteredParams.length) setTrendParamId(String(filteredParams[0].id));
     else setTrendParamId('');
   }, [filteredParams]);
 
@@ -171,37 +173,75 @@ export const ReportsScreen = React.memo(() => {
     return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   };
 
-  const handleGenerateTrend = async () => {
-    if (!trendParamId) { showToast('Select a parameter.', 'warn'); return; }
+  const fmtExactIso = (isoString: string) => {
+    const d = parseUtcDate(isoString);
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  };
+
+  // ─── Fetch & Render Trend ──────────────────────────────────
+  const fetchAndRenderTrend = useCallback(async (
+    paramToUse: string,
+    fDate: string,
+    fTime: string,
+    tDate: string,
+    tTime: string,
+    resType: string,
+    tType: 'line' | 'step'
+  ) => {
+    if (!paramToUse) { showToast('Select a parameter to analyze.', 'warn'); return; }
     if (abortRef.current) abortRef.current.abort();
     const ac = new AbortController();
     abortRef.current = ac;
     setTrendLoading(true);
     setTrendGenerated(true);
-    const startIso = `${trendFromDate}T${trendFromTime}:00Z`;
-    const endIso = `${trendToDate}T${trendToTime}:59Z`;
+
+    const startIso = `${fDate}T${fTime}:00Z`;
+    const endIso = `${tDate}T${tTime}:59Z`;
 
     try {
-      const url = `${API_BASE}/trends/chart-data?parameter_ids=${trendParamId}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${trendResolution}&limit=100000`;
+      const url = `${API_BASE}/trends/chart-data?parameter_ids=${paramToUse}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${resType}&limit=100000`;
       const res = await authFetch(url, { signal: ac.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const resData = await res.json();
       const series = resData.series && resData.series[0];
       if (!series || !series.labels.length) {
         showToast('No telemetry data in this range.', 'warn');
-        setTrendSeries({ empty: true }); setTrendRows([]);
+        setTrendSeries({ empty: true });
+        setTrendRows([]);
+        setTrendStats(null);
         if (chartInstanceRef.current) { chartInstanceRef.current.destroy(); chartInstanceRef.current = null; }
         return;
       }
 
       setTrendSeries(series);
+
+      // Compute exact summary stats from raw values
+      const validVals: number[] = series.values.filter((v: any) => v !== null && v !== undefined && !isNaN(Number(v))).map(Number);
+      if (validVals.length > 0) {
+        const lastVal = validVals[validVals.length - 1];
+        const minVal = Math.min(...validVals);
+        const maxVal = Math.max(...validVals);
+        const avgVal = validVals.reduce((a, b) => a + b, 0) / validVals.length;
+        const fmtVal = (n: number) => n.toFixed(4).replace(/0+$/, '').replace(/\.$/, '') || '0';
+        setTrendStats({
+          current: `${fmtVal(lastVal)} ${series.unit || ''}`.trim(),
+          min: `${fmtVal(minVal)} ${series.unit || ''}`.trim(),
+          max: `${fmtVal(maxVal)} ${series.unit || ''}`.trim(),
+          avg: `${fmtVal(avgVal)} ${series.unit || ''}`.trim(),
+        });
+      } else {
+        setTrendStats(null);
+      }
+
       const rows = series.labels.map((ts: string, idx: number) => ({
         timestamp: fmtShortDate(ts),
+        exactTimestamp: fmtExactIso(ts),
         parameter: series.name,
-        value: series.values[idx] !== null ? Number(series.values[idx]).toFixed(2) : 'NA',
+        value: series.values[idx] !== null && series.values[idx] !== undefined ? Number(series.values[idx]).toFixed(4).replace(/0+$/, '').replace(/\.$/, '') : 'NA',
         unit: series.unit || '',
         quality: (() => {
-          const raw = series.qualities[idx];
+          const raw = series.qualities ? series.qualities[idx] : null;
           const q = raw ? raw.toUpperCase() : 'GOOD';
           return ({ U: 'GOOD', O: 'OUT_OF_RANGE', E: 'ERROR', N: 'NEGATIVE' } as Record<string, string>)[q] || q;
         })(),
@@ -213,48 +253,116 @@ export const ReportsScreen = React.memo(() => {
         if (chartInstanceRef.current) chartInstanceRef.current.destroy();
         const ctx = chartRef.current.getContext('2d');
         if (!ctx) return;
+
         const shortLabels = series.labels.map((lbl: string) => fmtShortDate(lbl));
-        const paramObj = parameters.find(p => String(p.id) === String(trendParamId)) || {};
+        const paramObj = parameters.find(p => String(p.id) === String(paramToUse)) || {};
+
+        // Alarm limit lines (Warning / Critical)
         const limitLines: { value: number; color: string; label: string }[] = [
-          ['alarm_high_high', 'var(--danger)', 'H/H'],
-          ['alarm_high', 'var(--warning)', 'High'],
-          ['alarm_low', 'var(--warning)', 'Low'],
-          ['alarm_low_low', 'var(--danger)', 'L/L'],
+          ['alarm_high_high', '#ef4444', 'Critical High (H/H)'],
+          ['alarm_high', '#f59e0b', 'Warning High (High)'],
+          ['alarm_low', '#f59e0b', 'Warning Low (Low)'],
+          ['alarm_low_low', '#ef4444', 'Critical Low (L/L)'],
         ].filter(([k]) => (paramObj as any)[k] != null && !isNaN(Number((paramObj as any)[k])))
          .map(([k, c, l]) => ({ value: Number((paramObj as any)[k]), color: c as string, label: l as string }));
+
         const maxLimit = limitLines.length > 0 ? Math.max(...limitLines.map(ll => ll.value)) : undefined;
         const minLimit = limitLines.length > 0 ? Math.min(...limitLines.map(ll => ll.value)) : undefined;
+
+        const dataMax = validVals.length > 0 ? Math.max(...validVals) : 10;
+        const dataMin = validVals.length > 0 ? Math.min(...validVals) : 0;
+        const margin = Math.max((dataMax - dataMin) * 0.1, 0.5);
+
+        const ySuggestedMax = maxLimit !== undefined ? Math.max(maxLimit * 1.05, dataMax + margin) : dataMax + margin;
+        const ySuggestedMin = minLimit !== undefined ? Math.min(minLimit * 0.95, dataMin - margin) : Math.max(0, dataMin - margin);
 
         chartInstanceRef.current = new ChartJS(ctx, {
           type: 'line',
           data: {
             labels: shortLabels,
             datasets: [{
-              label: `${series.name} (${series.unit})`,
+              label: `${series.name} (${series.unit || ''})`,
               data: series.values,
-              borderColor: 'var(--primary-600)',
-              backgroundColor: 'rgba(13,79,73,0.07)',
+              borderColor: '#0F766E',
+              backgroundColor: 'rgba(15, 118, 110, 0.08)',
               fill: true,
-              tension: trendResolution === 'raw' ? 0 : 0.3,
-              pointBackgroundColor: 'var(--primary-600)',
-              pointBorderColor: '#fff',
-              pointRadius: 2,
-              pointHoverRadius: 5
+              // Standard industrial line: tension 0 (no artificial spline smoothing), stepped only if step type
+              tension: 0,
+              stepped: tType === 'step' ? 'before' : false,
+              spanGaps: false, // Preserves visual gaps for missing telemetry records
+              pointBackgroundColor: '#0F766E',
+              pointBorderColor: '#ffffff',
+              pointBorderWidth: 1.5,
+              pointRadius: shortLabels.length > 200 ? 0 : 3,
+              pointHoverRadius: 6,
+              borderWidth: 2,
             }]
           },
           options: {
             responsive: true,
+            maintainAspectRatio: false,
             animation: false,
+            interaction: { mode: 'index', intersect: false },
             plugins: {
-              legend: { labels: { color: 'var(--text-secondary)', font: { weight: 600, family: 'Inter, sans-serif' } } }
+              legend: {
+                display: true,
+                position: 'top',
+                labels: {
+                  color: '#334155',
+                  font: { size: 12, weight: 600, family: "'Inter', 'Source Sans 3', sans-serif" },
+                  usePointStyle: true,
+                }
+              },
+              tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                titleColor: '#f8fafc',
+                bodyColor: '#f8fafc',
+                padding: 10,
+                boxPadding: 4,
+                cornerRadius: 6,
+                callbacks: {
+                  title: (items: any[]) => {
+                    if (!items.length) return '';
+                    const idx = items[0].dataIndex;
+                    return `Timestamp: ${rows[idx]?.exactTimestamp || items[0].label}`;
+                  },
+                  label: (item: any) => {
+                    const idx = item.dataIndex;
+                    const val = item.raw !== null && item.raw !== undefined ? item.raw : 'NA';
+                    const q = rows[idx]?.quality || 'GOOD';
+                    return [
+                      `Parameter: ${series.name}`,
+                      `Value: ${val} ${series.unit || ''}`,
+                      `Quality: ${q}`,
+                    ];
+                  }
+                }
+              }
             },
             scales: {
-              x: { ticks: { color: 'var(--text-secondary)', font: { size: 10 }, maxTicksLimit: 15 }, grid: { color: 'var(--surface-muted)' } },
+              x: {
+                ticks: {
+                  color: '#64748b',
+                  font: { size: 10, family: "'Inter', 'Source Sans 3', sans-serif" },
+                  maxTicksLimit: 12,
+                  maxRotation: 0,
+                },
+                grid: { color: 'rgba(15, 110, 86, 0.06)' },
+              },
               y: {
-                ticks: { color: 'var(--text-secondary)', font: { size: 11 } },
-                grid: { color: 'var(--surface-muted)' },
-                suggestedMax: maxLimit !== undefined ? maxLimit * 1.1 : undefined,
-                suggestedMin: minLimit !== undefined ? Math.min(0, minLimit * 0.9) : 0
+                title: {
+                  display: true,
+                  text: series.unit ? `Value (${series.unit})` : 'Value',
+                  color: '#64748b',
+                  font: { size: 11, weight: 600 }
+                },
+                ticks: {
+                  color: '#64748b',
+                  font: { size: 11, family: "'Inter', 'Source Sans 3', sans-serif" },
+                },
+                grid: { color: 'rgba(15, 110, 86, 0.06)' },
+                suggestedMax: ySuggestedMax,
+                suggestedMin: ySuggestedMin,
               }
             }
           },
@@ -285,12 +393,57 @@ export const ReportsScreen = React.memo(() => {
           }]
         });
       }
-      showToast(`Trend loaded — ${series.labels.length} points.`);
+      showToast(`Historical trend loaded — ${series.labels.length} readings.`);
     } catch (e: any) {
       if (e.name === 'AbortError') return;
       showToast('Failed to fetch trend.', 'error');
     } finally {
       setTrendLoading(false);
+    }
+  }, [API_BASE, authFetch, parseUtcDate, parameters, showToast]);
+
+  const handleGenerateTrend = () => {
+    fetchAndRenderTrend(trendParamId, trendFromDate, trendFromTime, trendToDate, trendToTime, trendResolution, trendType);
+  };
+
+  // ─── Time Preset Click Handler ─────────────────────────────
+  const handleSelectPreset = (preset: '1h' | '6h' | '12h' | '1d' | '7d' | '30d' | 'custom') => {
+    setTimePreset(preset);
+    if (preset === 'custom') return;
+
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const toD = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const toT = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+    let fromMs = now.getTime();
+    let res = 'raw';
+    if (preset === '1h') { fromMs -= 3600 * 1000; res = 'raw'; }
+    else if (preset === '6h') { fromMs -= 6 * 3600 * 1000; res = 'raw'; }
+    else if (preset === '12h') { fromMs -= 12 * 3600 * 1000; res = 'raw'; }
+    else if (preset === '1d') { fromMs -= 24 * 3600 * 1000; res = 'raw'; }
+    else if (preset === '7d') { fromMs -= 7 * 86400 * 1000; res = 'avg_15min'; }
+    else if (preset === '30d') { fromMs -= 30 * 86400 * 1000; res = 'avg_1hr'; }
+
+    const fromDateObj = new Date(fromMs);
+    const fromD = `${fromDateObj.getFullYear()}-${pad(fromDateObj.getMonth() + 1)}-${pad(fromDateObj.getDate())}`;
+    const fromT = `${pad(fromDateObj.getHours())}:${pad(fromDateObj.getMinutes())}`;
+
+    setTrendFromDate(fromD);
+    setTrendFromTime(fromT);
+    setTrendToDate(toD);
+    setTrendToTime(toT);
+    setTrendResolution(res);
+
+    if (trendParamId) {
+      fetchAndRenderTrend(trendParamId, fromD, fromT, toD, toT, res, trendType);
+    }
+  };
+
+  const handleTypeChange = (newType: 'line' | 'step') => {
+    setTrendType(newType);
+    if (trendSeries && !trendSeries.empty) {
+      fetchAndRenderTrend(trendParamId, trendFromDate, trendFromTime, trendToDate, trendToTime, trendResolution, newType);
     }
   };
 
@@ -298,7 +451,9 @@ export const ReportsScreen = React.memo(() => {
     setTrendFromDate(dlDate(-1)); setTrendFromTime('00:00');
     setTrendToDate(dlDate(0)); setTrendToTime('23:59');
     setTrendResolution('raw');
-    setTrendSeries(null); setTrendRows([]); setTrendGenerated(false);
+    setTrendType('line');
+    setTimePreset('1d');
+    setTrendSeries(null); setTrendRows([]); setTrendGenerated(false); setTrendStats(null);
     if (chartInstanceRef.current) { chartInstanceRef.current.destroy(); chartInstanceRef.current = null; }
     showToast('Filters reset.');
   };
@@ -364,7 +519,7 @@ export const ReportsScreen = React.memo(() => {
   const downloadTrendCSV = async () => {
     if (!trendRows.length) return showToast('No trend data to export.', 'warn');
     const cols = ['Timestamp', 'Parameter', 'Value', 'Unit', 'Quality', 'Source'];
-    const rows = trendRows.map(r => [r.timestamp, r.parameter, r.value, r.unit, r.quality, r.source]);
+    const rows = trendRows.map(r => [r.exactTimestamp || r.timestamp, r.parameter, r.value, r.unit, r.quality, r.source]);
     const csv = [cols.join(','), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const name = `Trend_${trendSeries?.name || 'chart'}_${Date.now()}.csv`;
@@ -398,48 +553,33 @@ export const ReportsScreen = React.memo(() => {
       if (!seriesList.length || !seriesList[0].labels.length) {
         const naHeaders = ['Date & Time', ...selectedParamIds.map(id => {
           const p = parameters.find(p => String(p.id) === id);
-          return p ? `${p.name} (${p.tag_name})` : `Param ${id}`;
+          return p ? `${p.name} (${p.tag_name})` : `Param #${id}`;
         })];
-        const naRow: Record<string, any> = { 'Date & Time': fromDate + ' ' + fromTime + ' — ' + toDate + ' ' + toTime };
-        naHeaders.slice(1).forEach(h => { naRow[h] = 'NA'; });
-        showToast('No telemetry data for selected range.', 'warn');
-        return { headers: naHeaders, rows: [naRow] };
+        return { headers: naHeaders, rows: [] };
       }
 
-      const headers = ['Date & Time', ...seriesList.map(s => s.name)];
-      const timestamps = [...new Set(seriesList.flatMap(s => s.labels))].sort();
+      const headers = ['Date & Time', ...seriesList.map(s => `${s.name}${s.unit ? ' (' + s.unit + ')' : ''}`)];
+      const timestamps = seriesList[0].labels;
+
       const dataByTs: Record<string, Record<string, any>> = {};
-      timestamps.forEach(ts => { dataByTs[ts] = {}; });
-      seriesList.forEach(s => {
-        s.labels.forEach((lbl: string, idx: number) => { if (dataByTs[lbl]) dataByTs[lbl][s.name] = s.values[idx]; });
+      timestamps.forEach((ts: string, idx: number) => {
+        dataByTs[ts] = {};
+        seriesList.forEach(s => {
+          const v = s.values[idx];
+          dataByTs[ts][s.name] = (v !== null && v !== undefined) ? Number(v).toFixed(4).replace(/0+$/, '').replace(/\.$/, '') : 'NA';
+        });
       });
 
-const formatValPrecision = (val: any): string => {
-  if (val === null || val === undefined || val === '' || val === 'NA') return 'NA';
-  const num = typeof val === 'number' ? val : parseFloat(String(val));
-  if (isNaN(num)) return 'NA';
-  const str = String(val);
-  if (str.includes('.')) {
-    const dec = str.split('.')[1];
-    if (dec.length > 2) {
-      return num.toFixed(Math.min(dec.length, 4));
-    }
-  }
-  return num.toFixed(2);
-};
-
-      const rows = timestamps.map(ts => {
+      const rows = timestamps.map((ts: string) => {
         const row: Record<string, any> = { 'Date & Time': fmtTs(parseUtcDate(ts)) };
         seriesList.forEach((s, idx) => {
-          const val = dataByTs[ts][s.name];
-          row[headers[idx + 1]] = val !== null && val !== undefined ? formatValPrecision(val) : 'NA';
+          row[headers[idx + 1]] = dataByTs[ts][s.name] ?? 'NA';
         });
         return row;
       });
 
       return { headers, rows };
     } catch (e: any) {
-      if (e.name === 'AbortError') return null;
       showToast('Could not fetch data.', 'error');
       return null;
     }
@@ -462,41 +602,18 @@ const formatValPrecision = (val: any): string => {
     const startIso = `${fromDate}T${fromTime}:00Z`;
     const endIso = `${toDate}T${toTime}:59Z`;
     const isNormal = reportMode === 'normal';
-    const resolvedSt = stations.find(s => String(s.id) === stationId || s.name === stationId);
-    const stName = resolvedSt?.name || stationId || 'UltrON Station';
     const stepMin = isNormal ? Number(interval) : 0;
     const avgType = isNormal ? 'raw' : interval;
-
-    const numMinutes = (new Date(`${toDate}T${toTime}`).getTime() - new Date(`${fromDate}T${fromTime}`).getTime()) / 60000;
-    const numDays = numMinutes / 1440;
-    const estRows = isNormal
-      ? Math.ceil(numMinutes / Math.max(stepMin, 1))
-      : Math.ceil(numMinutes / ({ avg_1min: 1, avg_5min: 5, avg_15min: 15, avg_30min: 30, avg_1hr: 60, avg_3hr: 180, avg_6hr: 360, avg_12hr: 720, avg_24hr: 1440 } as Record<string, number>)[interval] || 60);
-    if (numDays > 15 || estRows > 21600) {
-      if (!window.confirm(`This export covers ${numDays.toFixed(1)} days (~${estRows.toLocaleString()} rows). Continue?`)) return;
-    }
-
-    const check = await fetchData();
-    if (!check || check.rows.every(r => Object.values(r).slice(1).every(v => v === 'NA'))) {
-      showToast('No data to export for this range.', 'warn');
-      setReportLoading(false); return;
-    }
+    const resolvedSt = stations.find(s => String(s.id) === stationId || s.name === stationId);
+    const stName = resolvedSt?.name || stationId || 'AAQMS 1';
 
     setReportLoading(true);
 
     try {
-      const endpoint = format === 'csv' ? '/reports/export-csv' : format === 'excel' ? '/reports/excel' : '/reports/pdf';
+      const endpoint = format === 'excel' ? '/reports/excel' : format === 'pdf' ? '/reports/pdf' : '/reports/export-csv';
       const url = `${API_BASE}${endpoint}?parameter_ids=${paramIds}&start=${encodeURIComponent(startIso)}&end=${encodeURIComponent(endIso)}&avg_type=${avgType}&step_minutes=${stepMin}&station_name=${encodeURIComponent(stName)}`;
       const res = await authFetch(url);
-      if (!res.ok) {
-        let errDetail = 'Export failed.';
-        try {
-          const errJson = await res.json();
-          if (errJson && errJson.detail) errDetail = typeof errJson.detail === 'string' ? errJson.detail : JSON.stringify(errJson.detail);
-        } catch (_) {}
-        showToast(errDetail, 'error');
-        return;
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
       const ext = format === 'csv' ? 'csv' : format === 'excel' ? 'xlsx' : 'pdf';
       const mime = format === 'csv' ? 'text/csv' : format === 'excel' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'application/pdf';
@@ -510,9 +627,11 @@ const formatValPrecision = (val: any): string => {
     }
   };
 
+  const currentParamObj = parameters.find(p => String(p.id) === String(trendParamId));
+
   return (
     <div className="screen active" id="reportsScreen">
-      {/* ─── Merged Single Reports Card ─── */}
+      {/* ─── 1. Reports & Data Export Card ─── */}
       <div className="card" style={{ marginBottom: '18px' }}>
         <div className="section-title">Reports & Data Export</div>
         {reportLoading && <div className="loader" style={{ margin: '12px 0' }}></div>}
@@ -592,18 +711,17 @@ const formatValPrecision = (val: any): string => {
         <div className="toolbar" style={{ marginTop: '16px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button className="btn btn-primary" onClick={() => handleExport('pdf')} disabled={reportLoading}>Export PDF</button>
           <button className="btn" onClick={() => handleExport('csv')} disabled={reportLoading}>Export CSV</button>
-
           <button className="btn" onClick={handlePreview} disabled={reportLoading}>Refresh Preview</button>
         </div>
 
-        {/* Preview Data Table — Showing latest 30 rows (current 30 minutes) */}
+        {/* Preview Data Table */}
         {(previewHeaders.length > 0 && previewRows.length > 0) && (
           <div className="table-wrapper" style={{ marginTop: '16px' }}>
-            <div style={{ padding: '10px 14px', backgroundColor: 'var(--success-bg)', border: '1px solid var(--success-bg)', borderRadius: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-              <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--success-text)' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+              <span style={{ fontSize: '13px', fontWeight: '700', color: '#166534' }}>
                 📊 Showing Latest 30 Records (Current 30 Minutes) — True Precision
               </span>
-              <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--success-text)' }}>
+              <span style={{ fontSize: '12px', fontWeight: '600', color: '#15803d' }}>
                 Total Range Records: {previewRows.length}
               </span>
             </div>
@@ -616,10 +734,10 @@ const formatValPrecision = (val: any): string => {
               <tbody>
                 {previewRows.slice(-30).reverse().map((row, idx) => (
                   <tr key={idx}>
-                    <td style={{ fontWeight: '700', color: 'var(--text-primary)' }}>{row['Date & Time']}</td>
+                    <td style={{ fontWeight: '700', color: '#0f172a' }}>{row['Date & Time']}</td>
                     {previewHeaders.slice(1).map(h => {
                       const val = row[h];
-                      return <td key={h} style={{ fontWeight: val !== 'NA' ? '600' : '400', color: val !== 'NA' ? 'var(--primary-600)' : 'var(--text-secondary)' }}>{val}</td>;
+                      return <td key={h} style={{ fontWeight: val !== 'NA' ? '600' : '400', color: val !== 'NA' ? '#0f766e' : '#94a3b8' }}>{val}</td>;
                     })}
                   </tr>
                 ))}
@@ -629,10 +747,11 @@ const formatValPrecision = (val: any): string => {
         )}
       </div>
 
-      {/* ─── Trend Chart Section ──────────────────────────── */}
+      {/* ─── 2. Trend Chart Card ─── */}
       <div className="card" style={{ marginTop: '18px' }}>
         <div className="section-title">Trend Chart</div>
-        <div className="filter-grid">
+        
+        <div className="filter-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', alignItems: 'flex-end' }}>
           <div className="form-group">
             <label className="form-label">Station Name</label>
             <select
@@ -678,7 +797,72 @@ const formatValPrecision = (val: any): string => {
             />
           </div>
         </div>
-        <div className="toolbar" style={{ marginTop: '20px' }}>
+
+        {/* Time Presets & Trend Type Toggle */}
+        <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', marginRight: '4px' }}>Range:</span>
+            {(['1h', '6h', '12h', '1d', '7d', '30d', 'custom'] as const).map(p => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => handleSelectPreset(p)}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  border: timePreset === p ? '1px solid #0F766E' : '1px solid var(--border)',
+                  background: timePreset === p ? '#0F766E' : 'var(--surface)',
+                  color: timePreset === p ? '#ffffff' : 'var(--text-secondary)',
+                }}
+              >
+                {p === '1h' ? '1 Hr' : p === '6h' ? '6 Hr' : p === '12h' ? '12 Hr' : p === '1d' ? '1 Day' : p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : 'Custom'}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>Trend Type:</span>
+            <div style={{ display: 'inline-flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border)' }}>
+              <button
+                type="button"
+                onClick={() => handleTypeChange('line')}
+                style={{
+                  padding: '5px 12px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: trendType === 'line' ? '#0F766E' : 'var(--surface)',
+                  color: trendType === 'line' ? '#ffffff' : 'var(--text-secondary)',
+                }}
+              >
+                Line (Default)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTypeChange('step')}
+                style={{
+                  padding: '5px 12px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: 'none',
+                  borderLeft: '1px solid var(--border)',
+                  background: trendType === 'step' ? '#0F766E' : 'var(--surface)',
+                  color: trendType === 'step' ? '#ffffff' : 'var(--text-secondary)',
+                }}
+              >
+                Step
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="toolbar" style={{ marginTop: '16px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
           <button className="btn btn-primary" onClick={handleGenerateTrend} disabled={trendLoading}>Generate Trend</button>
           <button className="btn" onClick={handleResetTrend} disabled={trendLoading}>Reset Filters</button>
           <button className="btn" onClick={downloadTrendPNG} disabled={trendLoading}>Export PNG</button>
@@ -688,11 +872,69 @@ const formatValPrecision = (val: any): string => {
         {trendLoading && <div className="loader" style={{ marginTop: '12px' }}></div>}
       </div>
 
-      <div className="card">
+      {/* ─── 3. Trend Graph Card ─── */}
+      <div className="card" style={{ marginTop: '18px', minHeight: '340px' }}>
         <div className="section-title">Trend Graph</div>
-        {!trendGenerated && !trendLoading && <div className="table-empty" style={{ padding: '40px', textAlign: 'center' }}>Set filters and click "Generate Trend".</div>}
-        {trendGenerated && !trendLoading && trendSeries && (trendSeries as any).empty && <div className="table-empty" style={{ padding: '40px', textAlign: 'center' }}>No data (NA) in this range</div>}
-        <canvas ref={chartRef} id="trendChart" height="100" style={{ display: trendSeries && !(trendSeries as any).empty ? 'block' : 'none' }}></canvas>
+        
+        {/* Trend Header & Live Summary Statistics */}
+        {trendStats && currentParamObj && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '12px',
+            margin: '6px 0 16px 0',
+            padding: '12px 16px',
+            borderRadius: '8px',
+            backgroundColor: '#f8fafc',
+            border: '1px solid #e2e8f0',
+          }}>
+            <div>
+              <div style={{ fontSize: '10.5px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#0F766E' }}>TREND</div>
+              <div style={{ fontSize: '17px', fontWeight: 700, color: '#0f172a', marginTop: '1px' }}>
+                {currentParamObj.name} ({currentParamObj.tag_name})
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+              <div style={{
+                padding: '4px 12px',
+                borderRadius: '6px',
+                backgroundColor: 'rgba(15, 118, 110, 0.1)',
+                border: '1px solid rgba(15, 118, 110, 0.25)',
+                color: '#0F766E',
+                fontSize: '15px',
+                fontWeight: 800,
+                fontFamily: 'monospace',
+              }}>
+                Current: {trendStats.current}
+              </div>
+              <div style={{ fontSize: '12px', fontWeight: 600, color: '#475569', display: 'flex', gap: '10px' }}>
+                <span>Min: <strong style={{ color: '#0f172a' }}>{trendStats.min}</strong></span>
+                <span>•</span>
+                <span>Max: <strong style={{ color: '#0f172a' }}>{trendStats.max}</strong></span>
+                <span>•</span>
+                <span>Avg: <strong style={{ color: '#0f172a' }}>{trendStats.avg}</strong></span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!trendGenerated && !trendLoading && (
+          <div className="table-empty" style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+            Set filters and click "Generate Trend".
+          </div>
+        )}
+        {trendGenerated && !trendLoading && trendSeries && (trendSeries as any).empty && (
+          <div className="table-empty" style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+            No telemetry data (NA) recorded in this range.
+          </div>
+        )}
+
+        <div style={{ flex: 1, minHeight: '300px', position: 'relative', display: trendSeries && !(trendSeries as any).empty ? 'block' : 'none' }}>
+          <canvas ref={chartRef} id="trendChart" style={{ width: '100%', height: '300px' }}></canvas>
+        </div>
       </div>
 
     </div>

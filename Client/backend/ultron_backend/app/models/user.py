@@ -18,6 +18,7 @@ class User(Base):
     created_by  = Column(String(80), nullable=True)
     last_login  = Column(DateTime, nullable=True)
     allow_server_mgmt = Column(Boolean, default=True)
+    is_super_admin = Column(Boolean, default=False)
 
     failed_login_attempts = Column(Integer, default=0)
     locked_until          = Column(DateTime, nullable=True)

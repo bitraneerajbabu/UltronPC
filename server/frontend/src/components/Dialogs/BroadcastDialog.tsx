@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import { IconMessage } from '@tabler/icons-react';
 
-interface SiteOption { id: number; name: string; location?: string; }
+interface SiteOption { id: number; name: string; location?: string | null; }
 
 interface BroadcastDialogProps {
   open: boolean;

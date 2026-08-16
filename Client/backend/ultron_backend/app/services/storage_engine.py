@@ -65,7 +65,6 @@ class SQLiteStorageEngine(BaseStorageEngine):
                     raw_value=raw_val,
                     quality=quality_enum,
                     source=r.get("source", "poll"),
-                    created_at=now,  # Storage Timestamp
                 )
             )
 

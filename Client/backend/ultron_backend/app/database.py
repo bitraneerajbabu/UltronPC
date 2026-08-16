@@ -161,6 +161,10 @@ async def init_db():
                     ("timezone", "VARCHAR(50) DEFAULT 'Asia/Kolkata'"),
                     ("retention_count", "INTEGER DEFAULT 97"),
                 ],
+                "pending_uploads": [
+                    ("server_config_id", "INTEGER"),
+                    ("protocol", "VARCHAR(20) DEFAULT 'spcb'"),
+                ],
             }.items():
                 try:
                     existing = await conn.run_sync(get_columns, table)
@@ -181,7 +185,14 @@ async def init_db():
                 cols = {col["name"] for col in inspector.get_columns("users")}
             except Exception:
                 return
-            sec_cols = {"failed_login_attempts", "locked_until", "password_changed_at", "require_password_change"}
+            sec_cols = {
+                "failed_login_attempts",
+                "locked_until",
+                "password_changed_at",
+                "require_password_change",
+                "allow_server_mgmt",
+                "is_super_admin",
+            }
             missing = sec_cols - cols
             for col_name in missing:
                 col_type = {
@@ -189,6 +200,8 @@ async def init_db():
                     "locked_until": "DATETIME",
                     "password_changed_at": "DATETIME",
                     "require_password_change": "BOOLEAN DEFAULT FALSE",
+                    "allow_server_mgmt": "BOOLEAN DEFAULT TRUE",
+                    "is_super_admin": "BOOLEAN DEFAULT FALSE",
                 }[col_name]
                 sync_conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
                 log.info(f"Security migration: added '{col_name}' to users")
@@ -213,6 +226,63 @@ async def init_db():
                     log.info(f"Serial ASCII migration: added '{col_name}' to devices")
 
         await conn.run_sync(_ensure_serial_ascii_columns)
+
+        # 2.14 Always-checked: PendingUpload schema migration (added v1.0.70+)
+        def _ensure_pending_upload_columns(sync_conn):
+            from sqlalchemy import inspect, text
+            inspector = inspect(sync_conn)
+            try:
+                columns = inspector.get_columns("pending_uploads")
+            except Exception:
+                return
+            col_names = {col["name"] for col in columns}
+
+            if "protocol" not in col_names:
+                sync_conn.execute(text("ALTER TABLE pending_uploads ADD COLUMN protocol VARCHAR(20) DEFAULT 'spcb'"))
+                log.info("PendingUpload migration: added 'protocol' to pending_uploads")
+
+            server_cfg_col = next((col for col in columns if col["name"] == "server_config_id"), None)
+            if server_cfg_col and not server_cfg_col.get("nullable", True):
+                log.info("PendingUpload migration: rebuilding table to make server_config_id nullable …")
+                sync_conn.execute(text("""
+                    CREATE TABLE pending_uploads_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        server_config_id INTEGER,
+                        url VARCHAR(500) NOT NULL,
+                        payload JSON NOT NULL,
+                        mode VARCHAR(20) DEFAULT 'live',
+                        protocol VARCHAR(20) DEFAULT 'spcb',
+                        retry_count INTEGER DEFAULT 0,
+                        last_error VARCHAR(500),
+                        created_at DATETIME,
+                        updated_at DATETIME
+                    )
+                """))
+                sync_conn.execute(text("""
+                    INSERT INTO pending_uploads_new (id, server_config_id, url, payload, mode, protocol, retry_count, last_error, created_at, updated_at)
+                    SELECT id, server_config_id, url, payload, mode, COALESCE(protocol, 'spcb'), retry_count, last_error, created_at, updated_at
+                    FROM pending_uploads
+                """))
+                sync_conn.execute(text("DROP TABLE pending_uploads"))
+                sync_conn.execute(text("ALTER TABLE pending_uploads_new RENAME TO pending_uploads"))
+                log.info("PendingUpload migration: server_config_id rebuilt to nullable [OK]")
+
+        await conn.run_sync(_ensure_pending_upload_columns)
+
+        # 2.15 Always-checked: Broadcast schema migration (added v1.0.70+)
+        def _ensure_broadcast_columns(sync_conn):
+            from sqlalchemy import inspect, text
+            inspector = inspect(sync_conn)
+            try:
+                columns = inspector.get_columns("broadcasts")
+            except Exception:
+                return
+            col_names = {col["name"] for col in columns}
+            if "server_id" not in col_names:
+                sync_conn.execute(text("ALTER TABLE broadcasts ADD COLUMN server_id VARCHAR(100)"))
+                log.info("Broadcast migration: added 'server_id' to broadcasts")
+
+        await conn.run_sync(_ensure_broadcast_columns)
 
         # 2.13 Centralized ORM-driven database defaults initializer
         from app.database_initializer import initialize_defaults

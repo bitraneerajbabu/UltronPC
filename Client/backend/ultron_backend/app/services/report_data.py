@@ -105,27 +105,11 @@ async def fetch_interval_data(
     is_avg_mode = avg_type != AverageType.raw.value and avg_type in AVG_TYPE_TO_MINUTES
 
     if is_avg_mode:
-        # ── Average mode: try Averages table first ────────────────────────
-        query = select(Averages).where(
-            and_(
-                Averages.parameter_id.in_(parameter_ids),
-                Averages.timestamp >= start,
-                Averages.timestamp <= end,
-                Averages.avg_type == avg_type,
-            )
+        step = AVG_TYPE_TO_MINUTES[avg_type]
+        readings = await _bucket_historical_data(
+            db, parameter_ids, start, end, step, limit,
+            compute_mean=True,
         )
-        result = await db.execute(query.order_by(Averages.timestamp))
-        readings: list = list(result.scalars().all())
-
-        # Fallback: if Averages table has no rows for this type, bucket
-        # HistoricalData at the matching interval.  This ensures preview
-        # and export never return empty when data exists.
-        if not readings:
-            step = AVG_TYPE_TO_MINUTES[avg_type]
-            readings = await _bucket_historical_data(
-                db, parameter_ids, start, end, step, limit,
-                keep_first=True,
-            )
 
     elif interval_minutes > 0:
         # ── Step mode: bucket HistoricalData ──────────────────────────────
@@ -135,18 +119,11 @@ async def fetch_interval_data(
         )
 
     else:
-        # ── Raw mode: HistoricalData up to limit ──────────────────────────
-        query = select(HistoricalData).where(
-            and_(
-                HistoricalData.parameter_id.in_(parameter_ids),
-                HistoricalData.timestamp >= start,
-                HistoricalData.timestamp <= end,
-            )
+        # ── 1-Minute / Raw mode: bucket HistoricalData at 1-minute intervals ───
+        readings = await _bucket_historical_data(
+            db, parameter_ids, start, end, 1, limit,
+            keep_first=True,
         )
-        result = await db.execute(
-            query.order_by(HistoricalData.timestamp).limit(limit)
-        )
-        readings = list(result.scalars().all())
 
     return params, readings
 
@@ -159,17 +136,12 @@ async def _bucket_historical_data(
     interval_minutes: int,
     limit: int,
     keep_first: bool = True,
+    compute_mean: bool = False,
 ) -> list:
     """
     Query all ``HistoricalData`` rows in the time range, then keep exactly
     one reading per ``interval_minutes`` bucket per parameter.
-
-    Parameters
-    ----------
-    keep_first : bool
-        If True, keep the **first** reading in each bucket (used by
-        Normal Reports / step mode).  If False, keep the **last** reading
-        (used by some preview paths — kept for flexibility).
+    If compute_mean is True, computes the arithmetic mean of all readings in the bucket.
     """
     from datetime import timezone
 
@@ -200,10 +172,25 @@ async def _bucket_historical_data(
         key = (r.parameter_id, bucket_start)
         bucket_map.setdefault(key, []).append(r)
 
-    if keep_first:
-        readings = [rows[0] for rows in bucket_map.values()]
-    else:
-        readings = [rows[-1] for rows in bucket_map.values()]
+    readings = []
+    for (pid, b_start), rows in bucket_map.items():
+        if compute_mean:
+            valid_vals = [r.value for r in rows if r.value is not None]
+            avg_val = round(sum(valid_vals) / len(valid_vals), 2) if valid_vals else None
+            readings.append(
+                HistoricalData(
+                    parameter_id=pid,
+                    timestamp=b_start,
+                    value=avg_val,
+                    raw_value=avg_val,
+                    quality=rows[0].quality,
+                    source="calc",
+                )
+            )
+        elif keep_first:
+            readings.append(rows[0])
+        else:
+            readings.append(rows[-1])
 
     # Sort chronologically for deterministic output
     readings.sort(key=lambda r: (r.parameter_id, r.timestamp))

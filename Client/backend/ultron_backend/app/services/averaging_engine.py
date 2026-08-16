@@ -143,22 +143,19 @@ async def run_averaging_for_all_parameters():
     log.info(f"Averaging run started at {now.isoformat()}")
 
     async with AsyncSessionLocal() as db:
-        # Get all active parameter IDs
-        result = await db.execute(
-            select(HistoricalData.parameter_id).distinct()
-        )
-        param_ids = [row[0] for row in result.all()]
-
-        if not param_ids:
-            log.info("No parameters found — skipping averaging")
-            return
-
-        # Load parameters definitions to detect wind direction parameters
+        # Get all active parameters
         from app.models.parameter import Parameter
         param_result = await db.execute(
-            select(Parameter).where(Parameter.id.in_(param_ids))
+            select(Parameter).where(Parameter.is_active == True)
         )
-        parameters = {p.id: p for p in param_result.scalars().all()}
+        params_list = param_result.scalars().all()
+
+        if not params_list:
+            log.info("No active parameters found — skipping averaging")
+            return
+
+        param_ids = [p.id for p in params_list]
+        parameters = {p.id: p for p in params_list}
 
         for avg_type, delta in WINDOWS:
             # Round 'now' down to the nearest window boundary

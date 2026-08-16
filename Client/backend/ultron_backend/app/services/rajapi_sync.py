@@ -297,38 +297,131 @@ async def send_heartbeat():
                 # Phase 2: Record successful validation for license grace period
                 await set_last_successful_validation()
 
-                # Handle broadcasts
-                broadcasts = data.get("broadcasts") or data.get("broadcast", [])
-                if broadcasts:
-                    new_count = 0
-                    if isinstance(broadcasts, list):
-                        for msg in broadcasts:
-                            text = msg.get("message", str(msg)) if isinstance(msg, dict) else str(msg)
-                            expires_raw = msg.get("expires_at") if isinstance(msg, dict) else None
-                            sev = msg.get("severity", "info") if isinstance(msg, dict) else "info"
-                            expires = None
-                            if expires_raw:
-                                try:
-                                    expires = datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
-                                except Exception:
-                                    pass
-                            async with AsyncSessionLocal() as sdb:
-                                # Deduplication: skip if identical active message already exists
-                                existing = await sdb.execute(
-                                    select(Broadcast).where(
-                                        Broadcast.message == text,
-                                        Broadcast.is_active == True,
-                                    )
-                                )
-                                if existing.scalar_one_or_none() is None:
-                                    sdb.add(Broadcast(message=text, severity=sev, expires_at=expires))
-                                    await sdb.commit()
-                                    new_count += 1
+                # ─── 1. Reconcile Server Broadcasts ─────────────────────────────────
+                # RajAPI is authoritative. Synchronize incoming active broadcasts with local DB.
+                # If a broadcast is deactivated or deleted on RajAPI, mark local active row as is_active=False.
+                raw_broadcasts = data.get("broadcasts")
+                if raw_broadcasts is None:
+                    raw_broadcasts = data.get("broadcast", [])
 
-                    if new_count > 0:
-                        log.info(f"[RajAPI] Stored {new_count} new broadcast(s)")
-                    else:
-                        log.debug("[RajAPI] Broadcasts already up to date — no new entries")
+                active_broadcast_payloads = raw_broadcasts if isinstance(raw_broadcasts, list) else []
+                active_server_ids = set()
+                active_server_texts = set()
+                ws_broadcasts = []
+
+                async with AsyncSessionLocal() as sdb:
+                    # Query all current local active broadcasts
+                    local_active_res = await sdb.execute(
+                        select(Broadcast).where(Broadcast.is_active == True)
+                    )
+                    local_active_list = local_active_res.scalars().all()
+                    local_by_server_id = {b.server_id: b for b in local_active_list if b.server_id}
+                    local_by_text = {b.message: b for b in local_active_list if not b.server_id}
+
+                    new_count = 0
+                    for msg in active_broadcast_payloads:
+                        s_id = str(msg.get("id")) if isinstance(msg, dict) and msg.get("id") is not None else None
+                        text = msg.get("message", str(msg)) if isinstance(msg, dict) else str(msg)
+                        sev = msg.get("message_type") or msg.get("severity", "info") if isinstance(msg, dict) else "info"
+                        expires_raw = msg.get("expires_at") if isinstance(msg, dict) else None
+                        expires = None
+                        if expires_raw:
+                            try:
+                                expires = datetime.fromisoformat(str(expires_raw).replace("Z", "+00:00"))
+                            except Exception:
+                                pass
+
+                        if s_id:
+                            active_server_ids.add(s_id)
+                        active_server_texts.add(text)
+
+                        # Match by server_id or text
+                        existing_bc = None
+                        if s_id and s_id in local_by_server_id:
+                            existing_bc = local_by_server_id[s_id]
+                        elif not s_id and text in local_by_text:
+                            existing_bc = local_by_text[text]
+                        else:
+                            # Also check DB for previously deactivated row to avoid duplicate creation
+                            stmt = select(Broadcast)
+                            if s_id:
+                                stmt = stmt.where(Broadcast.server_id == s_id)
+                            else:
+                                stmt = stmt.where(Broadcast.message == text)
+                            match_res = await sdb.execute(stmt)
+                            existing_bc = match_res.scalars().first()
+
+                        if existing_bc:
+                            # Update fields and reactivate if necessary
+                            existing_bc.message = text
+                            existing_bc.severity = sev
+                            existing_bc.expires_at = expires
+                            existing_bc.is_active = True
+                            if s_id:
+                                existing_bc.server_id = s_id
+                        else:
+                            sdb.add(Broadcast(
+                                server_id=s_id,
+                                message=text,
+                                severity=sev,
+                                is_active=True,
+                                expires_at=expires
+                            ))
+                            new_count += 1
+
+                    # Reconcile: Mark local active broadcasts as inactive if not in active server list
+                    deactivated_count = 0
+                    for local_bc in local_active_list:
+                        if local_bc.server_id:
+                            if local_bc.server_id not in active_server_ids:
+                                local_bc.is_active = False
+                                deactivated_count += 1
+                        else:
+                            if local_bc.message not in active_server_texts:
+                                local_bc.is_active = False
+                                deactivated_count += 1
+
+                    await sdb.commit()
+
+                    # Fetch final reconciled active broadcasts for live WebSocket broadcast
+                    now_utc = datetime.utcnow()
+                    final_active_res = await sdb.execute(
+                        select(Broadcast).where(
+                            Broadcast.is_active == True,
+                            (Broadcast.expires_at == None) | (Broadcast.expires_at > now_utc)
+                        ).order_by(Broadcast.created_at.desc())
+                    )
+                    final_active_list = final_active_res.scalars().all()
+                    ws_broadcasts = [
+                        {
+                            "id": b.id,
+                            "server_id": b.server_id,
+                            "message": b.message,
+                            "severity": b.severity,
+                            "is_active": b.is_active,
+                            "created_at": b.created_at.isoformat() if b.created_at else None,
+                            "expires_at": b.expires_at.isoformat() if b.expires_at else None,
+                        }
+                        for b in final_active_list
+                    ]
+
+                if new_count > 0 or deactivated_count > 0:
+                    log.info(f"[RajAPI] Broadcasts reconciled: {new_count} new/reactivated, {deactivated_count} deactivated")
+
+                # ─── 2. Live WebSocket Push to Connected UI Clients ──────────────────
+                # Pushes updated lock_status, lock_reason, amc_expiry, and active broadcasts
+                try:
+                    from app.websocket_manager import ws_manager
+                    await ws_manager.broadcast({
+                        "type": "sync_update",
+                        "lock_status": data.get("lock_status", "unlocked"),
+                        "lock_reason": data.get("lock_reason"),
+                        "amc_expiry": data.get("amc_expiry"),
+                        "amc_expired": data.get("amc_expired", False),
+                        "broadcasts": ws_broadcasts,
+                    })
+                except Exception as ws_err:
+                    log.debug(f"[RajAPI] WS push skipped/error: {ws_err}")
 
                 # Execute pending commands
                 commands = data.get("commands", [])
@@ -337,7 +430,7 @@ async def send_heartbeat():
                     for cmd in commands:
                         await _execute_command(cmd)
 
-                log.debug(f"[RajAPI] Heartbeat OK — {len(commands)} cmd(s), {len(broadcasts) if isinstance(broadcasts, list) else 0} broadcast(s)")
+                log.debug(f"[RajAPI] Heartbeat OK — {len(commands)} cmd(s), {len(ws_broadcasts)} active broadcast(s)")
 
             elif resp.status_code == 401:
                 log.warning("[RajAPI] Heartbeat rejected (401) — check GATEWAY_ID and DEVICE_SECRET")

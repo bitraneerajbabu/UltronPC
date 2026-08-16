@@ -19,6 +19,12 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload, selectinload
 from collections import defaultdict
+import io
+import zipfile
+import base64
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
 
 from app.config import settings
 from app.database import AsyncSessionLocal
@@ -57,7 +63,73 @@ def _cpcb_row(station_name: str, param_code: str, local_from: datetime, value: f
 # SPCB — JSON HTTP Push
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _build_spcb_payloads(db, server_id: int, mode: str = "live") -> list:
+def _parse_spcb_response(res: httpx.Response) -> tuple[bool, str, bool]:
+    """
+    Parses SPCB response for HTTP status and JSON body status validation.
+    Returns: (is_success: bool, error_details: str, is_permanent: bool)
+    """
+    if res.status_code >= 300:
+        err_msg = f"HTTP {res.status_code}: {res.text[:200]}"
+        is_permanent = res.status_code in (400, 401, 403, 404)
+        return False, err_msg, is_permanent
+
+    body_json = None
+    try:
+        body_json = res.json()
+    except Exception:
+        return True, "", False
+
+    if isinstance(body_json, dict):
+        if "status" in body_json:
+            st = body_json["status"]
+            st_str = str(st).strip().lower()
+            if st_str in ("0", "0.0", "false", "error", "fail", "failed", "invalid"):
+                msg = body_json.get("msg") or body_json.get("message") or body_json.get("error") or str(st)
+                err_msg = f"HTTP {res.status_code} | JSON status={st}: {msg}"
+                msg_lower = str(msg).lower()
+                is_perm = any(k in msg_lower for k in ("invalid device", "invalid station", "invalid param", "unauthorized", "invalid key", "wrong key", "not configured"))
+                return False, err_msg, is_perm
+
+        if "success" in body_json:
+            succ = body_json["success"]
+            if succ is False or str(succ).strip().lower() in ("false", "0"):
+                msg = body_json.get("msg") or body_json.get("message") or body_json.get("error") or "success=false"
+                err_msg = f"HTTP {res.status_code} | JSON success=False: {msg}"
+                msg_lower = str(msg).lower()
+                is_perm = any(k in msg_lower for k in ("invalid device", "invalid station", "invalid param", "unauthorized", "invalid key", "wrong key", "not configured"))
+                return False, err_msg, is_perm
+
+        if "code" in body_json:
+            code = body_json["code"]
+            code_str = str(code).strip()
+            if code_str in ("400", "401", "403", "404", "500", "error", "fail"):
+                msg = body_json.get("msg") or body_json.get("message") or str(code)
+                err_msg = f"HTTP {res.status_code} | JSON code={code}: {msg}"
+                is_perm = code_str in ("400", "401", "403", "404")
+                return False, err_msg, is_perm
+
+        if "ResultCode" in body_json:
+            rc = body_json["ResultCode"]
+            rc_str = str(rc).strip().lower()
+            if rc_str in ("0", "0.0", "-1", "false", "error", "fail", "failed", "invalid"):
+                msg = body_json.get("Message") or body_json.get("msg") or body_json.get("message") or str(rc)
+                err_msg = f"HTTP {res.status_code} | ResultCode={rc}: {msg}"
+                msg_lower = str(msg).lower()
+                is_perm = any(k in msg_lower for k in ("invalid device", "invalid station", "invalid param", "unauthorized", "invalid key", "wrong key", "not configured"))
+                return False, err_msg, is_perm
+
+    return True, "", False
+
+
+async def _build_spcb_payloads(
+    db,
+    server_id: int,
+    mode: str = "live",
+    parameter_id: Optional[int] = None,
+    api_id: Optional[str] = None,
+    device_id: Optional[int] = None,
+    station_name: Optional[str] = None,
+) -> list:
     """
     Build SPCB-style JSON payload list.
     Groups parameters by (api_id, api_name, api_password) → one payload per group.
@@ -67,10 +139,20 @@ async def _build_spcb_payloads(db, server_id: int, mode: str = "live") -> list:
     """
     stmt = (
         select(ServerParameterMapping)
-        .options(selectinload(ServerParameterMapping.parameter))
+        .options(selectinload(ServerParameterMapping.parameter).joinedload(Parameter.device).joinedload(Device.station))
         .filter(ServerParameterMapping.server_id == server_id)
         .filter(ServerParameterMapping.is_active == True)
     )
+    if parameter_id is not None:
+        stmt = stmt.filter(ServerParameterMapping.parameter_id == parameter_id)
+    if api_id is not None:
+        stmt = stmt.filter(ServerParameterMapping.api_id == str(api_id))
+    if device_id is not None:
+        stmt = stmt.filter(ServerParameterMapping.parameter.has(Parameter.device_id == device_id))
+    if station_name is not None:
+        stmt = stmt.filter(ServerParameterMapping.parameter.has(
+            Parameter.device.has(Device.station.has(Station.name == station_name))
+        ))
     res = await db.execute(stmt)
     mappings = res.scalars().all()
 
@@ -123,7 +205,8 @@ async def _build_spcb_payloads(db, server_id: int, mode: str = "live") -> list:
         }
 
         for m in maps:
-            val = ""
+            val = None
+            quality = "E"
             if mode == "delay":
                 # Get the latest 15-minute average for this parameter
                 avg_res = await db.execute(
@@ -138,6 +221,7 @@ async def _build_spcb_payloads(db, server_id: int, mode: str = "live") -> list:
                         val = round(float(avg.value), 2)
                     except (ValueError, TypeError):
                         val = avg.value
+                    quality = _quality_str(avg) or "U"
             else:
                 # LiveData holds exactly one row per parameter
                 ld_res = await db.execute(
@@ -149,6 +233,11 @@ async def _build_spcb_payloads(db, server_id: int, mode: str = "live") -> list:
                         val = round(float(ld.value), 2)
                     except (ValueError, TypeError):
                         val = ld.value
+                    quality = str(ld.quality.value if hasattr(ld.quality, 'value') else ld.quality) if ld and ld.quality else "U"
+
+            # Skip parameter entirely on failed read or None value
+            if val is None or val == "" or quality == "E":
+                continue
 
             param = m.parameter
             payload["Variables"].append({
@@ -164,17 +253,23 @@ async def _build_spcb_payloads(db, server_id: int, mode: str = "live") -> list:
 
 
 async def _check_server_reachable(url: str, timeout: float = 5.0) -> bool:
-    """Quick HEAD check if server is reachable before pushing."""
+    """Quick HEAD/GET check if server is reachable before pushing."""
+    if not _last_net_ok:
+        return False
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            await client.head(url, follow_redirects=True)
-        return True
+            res = await client.head(url, follow_redirects=True)
+            if res.status_code < 500:
+                return True
+            res = await client.get(url, follow_redirects=True)
+            return res.status_code < 500
     except Exception:
         return False
 
 
-async def _push_spcb(config: ServerConfig, db, mode: str):
-    """HTTP POST each payload to the configured SPCB URL."""
+async def _push_spcb(config: ServerConfig, db, mode: str) -> str:
+    """HTTP POST each payload to the configured SPCB URL. Returns a status line
+    per payload (OK/FAIL/QUEUED/SKIPPED) for per-minute push response logging."""
     if not await is_cpcb_upload_allowed(db):
         log.warning(f"[SPCB/{mode.upper()}] Push blocked by license — queuing to PendingUpload")
         payloads = await _build_spcb_payloads(db, config.id, mode)
@@ -189,7 +284,7 @@ async def _push_spcb(config: ServerConfig, db, mode: str):
             ))
         await db.commit()
         log.info(f"[SPCB/{mode.upper()}] Queued {len(payloads)} payload(s)")
-        return
+        return f"QUEUED (license blocked, {len(payloads)} payload(s))"
 
     target_url = config.live_url if mode == "live" else config.delay_url
     if not target_url:
@@ -197,18 +292,30 @@ async def _push_spcb(config: ServerConfig, db, mode: str):
             f"[SPCB/{mode.upper()}] ⚠ Server '{config.name}' has no {'Live' if mode == 'live' else 'Delay'} URL configured — "
             f"{mode} push skipped."
         )
-        return
+        return "SKIPPED (no URL configured)"
 
     # Quick per-server connectivity check
-    if not await _check_server_reachable(target_url):
-        log.warning(f"[SPCB/{mode.upper()}] Server '{config.name}' unreachable at {target_url} — skipping push.")
-        return
+    if not _last_net_ok or not await _check_server_reachable(target_url):
+        log.warning(f"[SPCB/{mode.upper()}] Server '{config.name}' unreachable at {target_url} — queuing as pending.")
+        payloads = await _build_spcb_payloads(db, config.id, mode)
+        for payload in payloads:
+            db.add(PendingUpload(
+                server_config_id=config.id,
+                url=target_url,
+                payload=payload,
+                mode=mode,
+                protocol="spcb",
+                last_error="offline - server unreachable",
+            ))
+        await db.commit()
+        return f"QUEUED (server unreachable, {len(payloads)} payload(s))"
 
+    results = []
     try:
         payloads = await _build_spcb_payloads(db, config.id, mode)
         if not payloads:
             log.debug(f"[SPCB/{mode.upper()}] No active mappings for '{config.name}' — skipping.")
-            return
+            return "SKIPPED (no active mappings)"
 
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             for payload in payloads:
@@ -226,17 +333,38 @@ async def _push_spcb(config: ServerConfig, db, mode: str):
 
                 try:
                     res = await client.post(target_url, json=payload)
-                    if res.status_code < 300:
+                    is_ok, err_msg, is_perm = _parse_spcb_response(res)
+                    if is_ok:
+                        results.append(f"DeviceID={device_id} OK (HTTP {res.status_code})")
                         log.info(
                             f"[SPCB/{mode.upper()}] [OK] DeviceID={device_id} → '{config.name}' HTTP {res.status_code}. "
                             f"Parameters Posted: [{param_summary}]"
                         )
                     else:
-                        log.warning(
-                            f"[SPCB/{mode.upper()}] [FAIL] DeviceID={device_id} → '{config.name}' HTTP {res.status_code}: {res.text[:200]}. "
-                            f"Parameters Attempted: [{param_summary}]"
-                        )
+                        if is_perm:
+                            err_msg += " [PERMANENT FAILURE]"
+                            results.append(f"DeviceID={device_id} PERMANENT FAIL ({err_msg})")
+                            log.error(
+                                f"[SPCB/{mode.upper()}] 🚨 PERMANENT CONFIG ERROR: SPCB endpoint rejected payload/auth for DeviceID={device_id} "
+                                f"({err_msg}). Manual configuration update required."
+                            )
+                        else:
+                            results.append(f"DeviceID={device_id} FAIL ({err_msg})")
+                            log.warning(
+                                f"[SPCB/{mode.upper()}] [FAIL] DeviceID={device_id} → '{config.name}' {err_msg}. "
+                                f"Parameters Attempted: [{param_summary}]"
+                            )
+                        db.add(PendingUpload(
+                            server_config_id=config.id,
+                            url=target_url,
+                            payload=payload,
+                            mode=mode,
+                            protocol="spcb",
+                            last_error=err_msg[:500],
+                        ))
+                        await db.commit()
                 except Exception as e:
+                    results.append(f"DeviceID={device_id} ERROR ({str(e)[:120]})")
                     log.error(
                         f"[SPCB/{mode.upper()}] Push error DeviceID={device_id} → "
                         f"'{config.name}' (Parameters: [{param_summary}]): {e}"
@@ -247,18 +375,35 @@ async def _push_spcb(config: ServerConfig, db, mode: str):
                         url=target_url,
                         payload=payload,
                         mode=mode,
+                        protocol="spcb",
                         last_error=str(e)[:500],
                     ))
                     await db.commit()
     except Exception as e:
         log.error(f"[SPCB/{mode.upper()}] Build/push failed for '{config.name}': {e}")
+        return f"ERROR ({str(e)[:120]})"
+
+    return "; ".join(results) if results else "SKIPPED (no payloads sent)"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TNPCB — OCEMS REST API Push (Tamil Nadu Pollution Control Board)
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _build_tnpcb_payloads(db, server_id: int, mode: str = "live") -> list:
+TNPCB_STATUS_DESCRIPTIONS = {
+    1: "Success",
+    0: "Unknown error / invalid data format",
+    10: "Wrong API Key",
+    11: "Invalid JSON format / schema mismatch",
+    101: "Invalid Industry ID",
+    102: "Invalid Station ID",
+    108: "Invalid Device ID (not configured with CPCB for this station)",
+}
+
+TNPCB_PERMANENT_CODES = {10, 11, 101, 102, 108}
+
+
+async def _build_tnpcb_payloads(db, server_id: int, mode: str = "live", parameter_id: Optional[int] = None) -> list:
     """
     Build TNPCB-style JSON payload array grouped by deviceId.
     Specification:
@@ -283,6 +428,8 @@ async def _build_tnpcb_payloads(db, server_id: int, mode: str = "live") -> list:
         .filter(ServerParameterMapping.server_id == server_id)
         .filter(ServerParameterMapping.is_active == True)
     )
+    if parameter_id is not None:
+        stmt = stmt.filter(ServerParameterMapping.parameter_id == parameter_id)
     res = await db.execute(stmt)
     mappings = res.scalars().all()
 
@@ -302,8 +449,8 @@ async def _build_tnpcb_payloads(db, server_id: int, mode: str = "live") -> list:
             if not param:
                 continue
 
-            val_str = "0.00"
-            quality_flag = "U"
+            val_obj = None
+            quality_flag = "E"
             ts_obj = datetime.utcnow()
 
             if mode == "delay":
@@ -315,13 +462,7 @@ async def _build_tnpcb_payloads(db, server_id: int, mode: str = "live") -> list:
                 )
                 avg = avg_res.scalars().first()
                 if avg and avg.value is not None:
-                    try:
-                        f_val = float(avg.value)
-                        val_str = f"{f_val:.4f}".rstrip('0').rstrip('.') if '.' in f"{f_val:.4f}" else f"{f_val:.2f}"
-                        if val_str.endswith('.'):
-                            val_str = f"{f_val:.2f}"
-                    except (ValueError, TypeError):
-                        val_str = str(avg.value)
+                    val_obj = avg.value
                     quality_flag = _quality_str(avg) or "U"
                     if avg.timestamp:
                         ts_obj = avg.timestamp
@@ -331,16 +472,22 @@ async def _build_tnpcb_payloads(db, server_id: int, mode: str = "live") -> list:
                 )
                 ld = ld_res.scalars().first()
                 if ld and ld.value is not None:
-                    try:
-                        f_val = float(ld.value)
-                        val_str = f"{f_val:.4f}".rstrip('0').rstrip('.') if '.' in f"{f_val:.4f}" else f"{f_val:.2f}"
-                        if val_str.endswith('.'):
-                            val_str = f"{f_val:.2f}"
-                    except (ValueError, TypeError):
-                        val_str = str(ld.value)
+                    val_obj = ld.value
                     quality_flag = str(ld.quality.value if hasattr(ld.quality, 'value') else ld.quality) if ld.quality else "U"
                     if ld.timestamp and isinstance(ld.timestamp, datetime):
                         ts_obj = ld.timestamp
+
+            # Skip parameter entirely on failed read or None value or 'E' quality
+            if val_obj is None or quality_flag == "E":
+                continue
+
+            try:
+                f_val = float(val_obj)
+                val_str = f"{f_val:.4f}".rstrip('0').rstrip('.') if '.' in f"{f_val:.4f}" else f"{f_val:.2f}"
+                if val_str.endswith('.'):
+                    val_str = f"{f_val:.2f}"
+            except (ValueError, TypeError):
+                val_str = str(val_obj)
 
             epoch_ms_str = str(int(ts_obj.timestamp() * 1000))
             param_code = m.api_vname or param.tag_name.lower()
@@ -390,6 +537,19 @@ async def _push_tnpcb(config: ServerConfig, db, mode: str):
         log.debug(f"[TNPCB/{mode.upper()}] No active mappings for TNPCB '{config.name}' — skipping.")
         return
 
+    if not _last_net_ok:
+        log.warning(f"[TNPCB/{mode.upper()}] Network offline — queueing TNPCB payload.")
+        db.add(PendingUpload(
+            server_config_id=config.id,
+            url=target_url,
+            payload=payloads,
+            mode=mode,
+            protocol="tnpcb",
+            last_error="offline - server unreachable",
+        ))
+        await db.commit()
+        return
+
     token = (config.cpcb_file_path or "").strip()
     headers = {
         "Content-Type": "application/json",
@@ -402,18 +562,48 @@ async def _push_tnpcb(config: ServerConfig, db, mode: str):
     try:
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             res = await client.post(target_url, json=payloads, headers=headers)
+            status_code = None
+            msg = ""
             try:
                 res_json = res.json()
                 status_code = res_json.get("status")
-                msg = res_json.get("msg")
-                if res.status_code == 200 and status_code == 1:
-                    log.info(f"[TNPCB/{mode.upper()}] [SUCCESS] Pushed {len(payloads)} device(s) to TNPCB at {target_url} — status: 1 ({msg})")
-                else:
-                    log.warning(f"[TNPCB/{mode.upper()}] [RESPONSE] HTTP {res.status_code} | Code {status_code} | Msg: {msg}")
+                msg = res_json.get("msg") or ""
             except Exception:
-                log.info(f"[TNPCB/{mode.upper()}] Pushed to TNPCB at {target_url} — HTTP {res.status_code}")
+                pass
+
+            if res.status_code == 200 and status_code == 1:
+                log.info(f"[TNPCB/{mode.upper()}] [SUCCESS] Pushed {len(payloads)} device(s) to TNPCB at {target_url} — status: 1 ({msg})")
+            else:
+                desc = TNPCB_STATUS_DESCRIPTIONS.get(status_code, "Unknown status code")
+                err_msg = f"HTTP {res.status_code} | Status {status_code} ({desc}): {msg}"
+                if status_code in TNPCB_PERMANENT_CODES:
+                    err_msg += " [PERMANENT FAILURE]"
+                    if status_code in (102, 108):
+                        log.error(
+                            f"[TNPCB/{mode.upper()}] 🚨 PERMANENT CONFIG ERROR: Station/Device ID rejected by TNPCB "
+                            f"(status {status_code}: {desc} — {msg}). Manual configuration update required."
+                        )
+                log.warning(f"[TNPCB/{mode.upper()}] [FAIL] {err_msg}")
+                db.add(PendingUpload(
+                    server_config_id=config.id,
+                    url=target_url,
+                    payload=payloads,
+                    mode=mode,
+                    protocol="tnpcb",
+                    last_error=err_msg[:500],
+                ))
+                await db.commit()
     except Exception as e:
         log.error(f"[TNPCB/{mode.upper()}] Failed to push to TNPCB: {e}")
+        db.add(PendingUpload(
+            server_config_id=config.id,
+            url=target_url,
+            payload=payloads,
+            mode=mode,
+            protocol="tnpcb",
+            last_error=str(e)[:500],
+        ))
+        await db.commit()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -613,6 +803,190 @@ async def _push_cpcb(config: ServerConfig, db):
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# APPCB — Encrypted Zip Protocol
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Creates an in-memory ZIP file containing:
+#   1. metadata.csv (Mapping details)
+#   2. site_{SITE_UID}_{TIMESTAMP}.csv (AES Encrypted data)
+#
+# Pushes the ZIP via multipart/form-data to the configured live_url or delay_url.
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _push_appcb(config: ServerConfig, db, mode: str, bypass_license: bool = False) -> dict:
+    """
+    Generate AES encrypted Zip payload and POST to APPCB server.
+    Matches the official APPCB/Glens specification:
+      - Packaged per MONITORING_UNIT_ID
+      - 13 columns per row
+      - 32-byte '#' padding
+      - AES-256-CBC with zero IV
+      - Basic Auth signature with encrypted site/version/timestamp/key
+    """
+    if not bypass_license and not await is_cpcb_upload_allowed(db):
+        log.warning(f"[APPCB/{mode.upper()}] Push blocked by license — deferring")
+        return {"success": False, "status_code": 403, "response": "Push blocked by license state (LOCKED)"}
+
+    target_url = config.delay_url if mode == "delay" and config.delay_url else config.live_url
+    if not target_url:
+        log.warning(f"[APPCB/{mode.upper()}] No URL configured for '{config.name}' in mode {mode} — skipped.")
+        return {"success": False, "status_code": 400, "response": "No URL configured"}
+
+    stmt = (
+        select(ServerParameterMapping)
+        .options(
+            selectinload(ServerParameterMapping.parameter).selectinload(Parameter.device).selectinload(Device.station)
+        )
+        .filter(ServerParameterMapping.server_id == config.id)
+        .filter(ServerParameterMapping.is_active == True)
+    )
+    res = await db.execute(stmt)
+    mappings = res.scalars().all()
+
+    if not mappings:
+        log.debug(f"[APPCB/{mode.upper()}] No active mappings for '{config.name}' — skipped.")
+        return {"success": False, "status_code": 400, "response": "No active parameter mappings found"}
+
+    site_id = config.appcb_site_id or "UNKNOWN"
+    site_uid = config.appcb_site_uid or site_id
+    key_str = config.appcb_encryption_key or ""
+    enc_key = key_str.encode("utf-8")
+    
+    if len(enc_key) not in (16, 24, 32):
+        err_msg = f"Encryption key must be 16, 24, or 32 bytes (got {len(enc_key)})"
+        log.error(f"[APPCB/{mode.upper()}] {err_msg}")
+        return {"success": False, "status_code": 400, "response": err_msg}
+
+    # Timestamps
+    import time
+    from datetime import timedelta
+    now_local = datetime.now()
+    dt_iso = now_local.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # If delay mode, data timestamp is 15 minutes prior; otherwise current time
+    data_time = (now_local - timedelta(minutes=15)) if mode == "delay" else now_local
+    epoch = int(data_time.timestamp())
+    fdt = data_time.strftime("%Y%m%d%H%M%S")
+
+    # Group mappings by Monitoring Unit ID
+    mon_groups = defaultdict(list)
+    for m in mappings:
+        mon_id = m.appcb_monitoring_unit_id or "DEFAULT"
+        mon_groups[mon_id].append(m)
+
+    metadata_header = "SITE_ID,SITE_UID,MONITORING_UNIT_ID,ANALYZER_ID,PARAMETER_ID,PARAMETER_NAME,READING,UNIT_ID,DATA_QUALITY_CODE,RAW_READING,UNIX_TIMESTAMP,CALIBRATION_FLAG,MAINTENANCE_FLAG\n"
+    iv = b"\x00" * 16
+    
+    # 1. Compute Auth Header Signature (using current request time)
+    auth_str = f"{site_id},ver_2.0,{dt_iso},{key_str}"
+    auth_bytes = auth_str.encode("utf-8")
+    auth_pad_len = (32 - (len(auth_bytes) % 32)) % 32
+    if auth_pad_len == 0:
+        auth_pad_len = 32
+    padded_auth = auth_bytes + (b"#" * auth_pad_len)
+
+    cipher_auth = Cipher(algorithms.AES(enc_key), modes.CBC(iv), backend=default_backend())
+    enc_auth = cipher_auth.encryptor().update(padded_auth) + cipher_auth.encryptor().finalize()
+    sauth = "Basic " + base64.b64encode(enc_auth).decode("utf-8")
+
+    headers = {
+        "Authorization": sauth,
+        "siteId": site_id,
+        "Timestamp": dt_iso
+    }
+
+    results = []
+    last_response = {}
+
+    for mon_id, group_mappings in mon_groups.items():
+        data_lines = []
+        for m in group_mappings:
+            val = None
+            if mode == "delay":
+                avg_res = await db.execute(
+                    select(Averages)
+                    .where(Averages.parameter_id == m.parameter_id, Averages.avg_type == AverageType.avg_15min)
+                    .order_by(Averages.timestamp.desc())
+                    .limit(1)
+                )
+                avg = avg_res.scalars().first()
+                if avg and avg.value is not None:
+                    val = avg.value
+                    if avg.timestamp:
+                        epoch = int(avg.timestamp.timestamp())
+                        fdt = avg.timestamp.strftime("%Y%m%d%H%M%S")
+            else:
+                ld_res = await db.execute(select(LiveData).where(LiveData.parameter_id == m.parameter_id))
+                ld = ld_res.scalars().first()
+                if ld and ld.value is not None:
+                    val = ld.value
+
+            if val is None:
+                val = 0.0
+                
+            try:
+                val_rounded = round(float(val), 2)
+            except (ValueError, TypeError):
+                val_rounded = val
+
+            # Format: SITE_ID,SITE_UID,MONITORING_UNIT_ID,ANALYZER_ID,PARAMETER_ID,PARAMETER_NAME,READING,UNIT_ID,DATA_QUALITY_CODE,RAW_READING,UNIX_TIMESTAMP,CALIBRATION_FLAG,MAINTENANCE_FLAG
+            anal_id = m.appcb_analyzer_id or ""
+            param_id = m.appcb_parameter_id or ""
+            param_name = m.appcb_parameter_name or (m.parameter.tag_name if m.parameter else "")
+            unit_id = m.appcb_unit_id or ""
+            
+            row = f"{site_id},{site_uid},{mon_id},{anal_id},{param_id},{param_name},{val_rounded},{unit_id},U,{val_rounded},{epoch},0,0"
+            data_lines.append(row)
+
+        if not data_lines:
+            continue
+
+        raw_data = "\n".join(data_lines)
+        raw_bytes = raw_data.encode("utf-8")
+        pad_len = (32 - (len(raw_bytes) % 32)) % 32
+        if pad_len == 0:
+            pad_len = 32
+        padded_data = raw_bytes + (b"#" * pad_len)
+
+        cipher = Cipher(algorithms.AES(enc_key), modes.CBC(iv), backend=default_backend())
+        enc_data = cipher.encryptor().update(padded_data) + cipher.encryptor().finalize()
+        senpt = base64.b64encode(enc_data).decode("utf-8")
+
+        csv_filename = f"{site_id}_{mon_id}_{fdt}.csv"
+        zip_filename = f"{site_id}_{mon_id}_{fdt}.zip"
+
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("metadata.csv", metadata_header)
+            zf.writestr(csv_filename, senpt)
+
+        zip_bytes = zip_buffer.getvalue()
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                files = {"file": (zip_filename, zip_bytes, "application/zip")}
+                res = await client.post(target_url, headers=headers, files=files)
+                is_ok = res.status_code < 300
+                if is_ok:
+                    log.info(f"[APPCB/{mode.upper()}] [SUCCESS] Pushed {zip_filename} ({len(data_lines)} params) to {target_url} -> {res.text}")
+                else:
+                    log.error(f"[APPCB/{mode.upper()}] [FAIL] HTTP {res.status_code}: {res.text[:200]}")
+                last_response = {
+                    "success": is_ok,
+                    "status_code": res.status_code,
+                    "response": res.text,
+                    "zip_filename": zip_filename
+                }
+                results.append(last_response)
+        except Exception as e:
+            log.error(f"[APPCB/{mode.upper()}] Failed to push APPCB zip: {e}")
+            last_response = {"success": False, "status_code": 0, "response": str(e), "zip_filename": zip_filename}
+            results.append(last_response)
+
+    return last_response if last_response else {"success": False, "status_code": 400, "response": "No monitoring groups processed"}
+
+
 async def generate_historical_cpcb_file(db, config: ServerConfig, date_str: str) -> str:
     """
     Generates a historical makeup data file content for the given date (YYYY-MM-DD local time)
@@ -751,6 +1125,11 @@ async def retry_pending_uploads(db):
     if not await is_cpcb_upload_allowed(db):
         log.warning(f"[RETRY] Upload blocked by license — deferring retry")
         return
+
+    if not _last_net_ok:
+        log.info("[RETRY] skipping retry — offline")
+        return
+
     result = await db.execute(
         select(PendingUpload).order_by(PendingUpload.created_at.asc())
     )
@@ -762,7 +1141,7 @@ async def retry_pending_uploads(db):
     log.info(f"[RETRY] Attempting {len(pending)} pending upload(s)...")
 
     # Preload server configs for delay URL lookup
-    config_ids = {p.server_config_id for p in pending}
+    config_ids = {p.server_config_id for p in pending if p.server_config_id is not None}
     configs = {}
     for cid in config_ids:
         c_res = await db.execute(select(ServerConfig).where(ServerConfig.id == cid))
@@ -772,26 +1151,76 @@ async def retry_pending_uploads(db):
 
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         for p in pending:
-            cfg = configs.get(p.server_config_id)
+            if p.last_error and "PERMANENT FAILURE" in p.last_error:
+                log.warning(f"[RETRY] Skipping pending #{p.id} ({p.protocol}) due to permanent failure: {p.last_error}")
+                continue
+
+            cfg = configs.get(p.server_config_id) if p.server_config_id else None
             target_url = cfg.delay_url if (cfg and cfg.delay_url) else p.url
             if not target_url:
                 continue
 
             headers = {}
-            if target_url == settings.CENTRAL_API_URL or "api/v1/sync" in target_url:
+            if p.protocol == "rajapi" or target_url == settings.CENTRAL_API_URL or "api/v1/sync" in target_url:
                 api_key, _ = await _load_rajapi_config(db)
                 if api_key:
                     headers["X-API-Key"] = api_key
+            elif p.protocol == "tnpcb":
+                headers["Content-Type"] = "application/json"
+                token = (cfg.cpcb_file_path or "").strip() if cfg else ""
+                if token:
+                    if not token.lower().startswith("basic "):
+                        token = f"Basic {token}"
+                    headers["Authorization"] = token
 
             try:
                 res = await client.post(target_url, json=p.payload, headers=headers)
-                if res.status_code < 300:
+                is_success = False
+                err_details = f"HTTP {res.status_code}"
+
+                if p.protocol == "tnpcb":
+                    try:
+                        rj = res.json()
+                        st = rj.get("status")
+                        m = rj.get("msg") or ""
+                        desc = TNPCB_STATUS_DESCRIPTIONS.get(st, "Unknown status code")
+                        if res.status_code == 200 and st == 1:
+                            is_success = True
+                        else:
+                            err_details = f"HTTP {res.status_code} | Status {st} ({desc}): {m}"
+                            if st in TNPCB_PERMANENT_CODES:
+                                err_details += " [PERMANENT FAILURE]"
+                                if st in (102, 108):
+                                    log.error(
+                                        f"[RETRY/TNPCB] 🚨 PERMANENT CONFIG ERROR: Station/Device ID rejected by TNPCB "
+                                        f"(status {st}: {desc} — {m}). Manual configuration update required."
+                                    )
+                    except Exception:
+                        if res.status_code < 300:
+                            is_success = True
+                elif p.protocol in ("spcb", "tspcb"):
+                    is_ok, err_msg, is_perm = _parse_spcb_response(res)
+                    if is_ok:
+                        is_success = True
+                    else:
+                        err_details = err_msg
+                        if is_perm:
+                            err_details += " [PERMANENT FAILURE]"
+                            log.error(
+                                f"[RETRY/SPCB] 🚨 PERMANENT CONFIG ERROR: SPCB endpoint rejected retry for PendingUpload #{p.id} "
+                                f"({err_details}). Manual configuration update required."
+                            )
+                else:
+                    if res.status_code < 300:
+                        is_success = True
+
+                if is_success:
                     await db.delete(p)
                     log.info(f"[RETRY] [OK] Delivered pending #{p.id} via {target_url}")
                 else:
                     p.retry_count += 1
-                    p.last_error = f"HTTP {res.status_code}"
-                    log.warning(f"[RETRY] [FAIL] Pending #{p.id} HTTP {res.status_code}")
+                    p.last_error = err_details[:500]
+                    log.warning(f"[RETRY] [FAIL] Pending #{p.id} ({p.protocol}): {err_details}")
             except Exception as e:
                 p.retry_count += 1
                 p.last_error = str(e)[:500]
@@ -825,11 +1254,15 @@ async def _push_telemetry_to_rajapi(db, mode: str):
             live_data_list = ld_res.scalars().all()
             for ld in live_data_list:
                 if ld.parameter:
+                    q = ld.quality.value if hasattr(ld.quality, "value") else str(ld.quality)
+                    if ld.value is None or q == "E":
+                        continue
                     try:
                         v = float(ld.value) if ld.value is not None else None
                     except (ValueError, TypeError):
                         v = None
-                    q = ld.quality.value if hasattr(ld.quality, "value") else str(ld.quality)
+                    if v is None:
+                        continue
                     st_name = (
                         ld.parameter.device.station.name
                         if ld.parameter.device and ld.parameter.device.station
@@ -856,11 +1289,15 @@ async def _push_telemetry_to_rajapi(db, mode: str):
             averages_list = avg_res.scalars().all()
             for avg in averages_list:
                 if avg.parameter:
+                    q = avg.quality.value if hasattr(avg.quality, "value") else str(avg.quality)
+                    if avg.value is None or q == "E":
+                        continue
                     try:
                         v = float(avg.value) if avg.value is not None else None
                     except (ValueError, TypeError):
                         v = None
-                    q = avg.quality.value if hasattr(avg.quality, "value") else str(avg.quality)
+                    if v is None:
+                        continue
                     st_name = (
                         avg.parameter.device.station.name
                         if avg.parameter.device and avg.parameter.device.station
@@ -884,6 +1321,19 @@ async def _push_telemetry_to_rajapi(db, mode: str):
             "points": points
         }
 
+        if not _last_net_ok:
+            log.warning(f"[RajAPI/{mode.upper()}] Network offline — queueing RajAPI payload.")
+            db.add(PendingUpload(
+                server_config_id=None,
+                url=target_url,
+                payload=payload,
+                mode=mode,
+                protocol="rajapi",
+                last_error="offline - server unreachable",
+            ))
+            await db.commit()
+            return
+
         headers = {"X-API-Key": api_key}
         async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
             res = await client.post(target_url, json=payload, headers=headers)
@@ -893,6 +1343,15 @@ async def _push_telemetry_to_rajapi(db, mode: str):
                 log.warning(f"[RajAPI/{mode.upper()}] [FAIL] RajAPI HTTP {res.status_code}: {res.text[:200]}")
     except Exception as e:
         log.error(f"[RajAPI/{mode.upper()}] Sync error: {e}")
+        db.add(PendingUpload(
+            server_config_id=None,
+            url=target_url,
+            payload=payload,
+            mode=mode,
+            protocol="rajapi",
+            last_error=str(e)[:500],
+        ))
+        await db.commit()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1243,51 +1702,74 @@ async def run_server_push(mode: str = "live"):
         )
         servers = conf_result.scalars().all()
 
+        server_results = {}
         for config in servers:
             try:
                 proto = (config.protocol or "tspcb").lower()
 
                 if proto == "cpcb":
-                    await _push_cpcb(config, db)
+                    r = await _push_cpcb(config, db)
+                    server_results[config.name] = r.get("response", "OK") if isinstance(r, dict) else str(r)
 
                 elif proto == "tnpcb":
-                    await _push_tnpcb(config, db, mode)
+                    r = await _push_tnpcb(config, db, mode)
+                    server_results[config.name] = r.get("response", "OK") if isinstance(r, dict) else str(r)
+
+                elif proto == "appcb":
+                    r = await _push_appcb(config, db, mode)
+                    resp_str = r.get("response", "") if isinstance(r, dict) else str(r)
+                    server_results[config.name] = f"HTTP {r.get('status_code', 200)} -> {resp_str[:100]}" if isinstance(r, dict) else str(r)
 
                 elif proto == "both":
                     if mode == "live":
-                        await _push_spcb(config, db, "live")
+                        r = await _push_spcb(config, db, "live")
                     elif mode == "delay":
-                        await _push_spcb(config, db, "delay")
+                        r = await _push_spcb(config, db, "delay")
+                    server_results[config.name] = r
                     await _push_cpcb(config, db)
 
                 else:
-                    await _push_spcb(config, db, mode)
+                    r = await _push_spcb(config, db, mode)
+                    server_results[config.name] = r
             except Exception as e:
                 log.error(f"[PUSH] Server '{config.name}' push failed: {e}")
+                server_results[config.name] = f"ERROR: {e}"
 
         # Sync telemetry to RajAPI
         await _push_telemetry_to_rajapi(db, mode)
 
         if mode == "live":
-            ld_stmt = select(LiveData).options(selectinload(LiveData.parameter))
-            ld_res = await db.execute(ld_stmt)
-            live_data_list = ld_res.scalars().all()
-            param_vals = []
-            for ld in live_data_list:
-                if ld.parameter and ld.value is not None:
-                    try:
-                        v = round(float(ld.value), 2)
-                    except (ValueError, TypeError):
-                        v = ld.value
-                    param_vals.append(f"{ld.parameter.tag_name}={v}")
-            if param_vals:
+            if server_results:
+                # Per-minute server push response summary (shown in Active Server Logs)
+                summary = "; ".join(f"'{name}' -> {res}" for name, res in server_results.items())
+                level = "ERROR" if any("FAIL" in str(r).upper() or "ERROR" in str(r).upper() for r in server_results.values()) else "INFO"
                 db.add(SystemLog(
                     log_type="comm",
-                    level="INFO",
-                    source="ultron.server_push",
-                    message=f"Live parameters: {', '.join(param_vals)}",
+                    level=level,
+                    source="ultron.server_push.response",
+                    message=f"Server push (live): {summary}",
                 ))
                 await db.commit()
+            else:
+                ld_stmt = select(LiveData).options(selectinload(LiveData.parameter))
+                ld_res = await db.execute(ld_stmt)
+                live_data_list = ld_res.scalars().all()
+                param_vals = []
+                for ld in live_data_list:
+                    if ld.parameter and ld.value is not None:
+                        try:
+                            v = round(float(ld.value), 2)
+                        except (ValueError, TypeError):
+                            v = ld.value
+                        param_vals.append(f"{ld.parameter.tag_name}={v}")
+                if param_vals:
+                    db.add(SystemLog(
+                        log_type="comm",
+                        level="INFO",
+                        source="ultron.server_push",
+                        message=f"Live parameters: {', '.join(param_vals)}",
+                    ))
+                    await db.commit()
 
         if mode == "delay":
             await retry_pending_uploads(db)

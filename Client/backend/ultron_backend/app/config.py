@@ -22,7 +22,9 @@ IS_FROZEN = getattr(sys, "frozen", False)
 
 # Resolve execution directory containing config files
 if IS_FROZEN:
-    APP_DIR = Path(sys.executable).parent.resolve()
+    program_data = os.environ.get("PROGRAMDATA", "C:\\ProgramData")
+    APP_DIR = Path(program_data) / "UltrON"
+    APP_DIR.mkdir(parents=True, exist_ok=True)
 else:
     # Use parent of the app package (ultron_backend/)
     APP_DIR = Path(__file__).parent.parent.resolve()
@@ -346,12 +348,43 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context):
         if not self.ADMIN_PASSWORD:
-            print(
-                "[UltrON] FATAL: ADMIN_PASSWORD is not set in .env! "
-                "Set a strong password before starting the server.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+            # First run on a fresh machine: generate a strong password, persist
+            # it into .env.enc so the client boots without manual config.
+            import secrets as _secrets
+            generated = _secrets.token_urlsafe(16)
+            self.ADMIN_PASSWORD = generated
+            try:
+                from app.core.config_crypt import write_env_enc_from_dict, get_fernet_key
+                existing = {}
+                if ENV_ENC_FILE.is_file():
+                    try:
+                        from app.core.config_crypt import decrypt_file_to_string
+                        import dotenv as _dotenv
+                        existing = _dotenv.dotenv_values(
+                            stream=io.StringIO(decrypt_file_to_string(str(ENV_ENC_FILE)))
+                        ) or {}
+                    except Exception:
+                        existing = {}
+                existing["ADMIN_PASSWORD"] = generated
+                write_env_enc_from_dict(existing, str(ENV_ENC_FILE))
+                os.environ["ADMIN_PASSWORD"] = generated
+                try:
+                    (APP_DIR / "first_boot_admin.txt").write_text(
+                        f"UltrON first-boot credentials\n"
+                        f"username : {self.ADMIN_USERNAME}\n"
+                        f"password : {generated}\n"
+                        f"Change the password after first login.\n",
+                        encoding="utf-8",
+                    )
+                except Exception:
+                    pass
+                print(
+                    "[UltrON] No ADMIN_PASSWORD in config — generated one on first boot. "
+                    f"See first_boot_admin.txt next to the executable.",
+                    file=sys.stderr,
+                )
+            except Exception as gen_err:
+                print(f"[UltrON] Could not persist generated ADMIN_PASSWORD: {gen_err}", file=sys.stderr)
 
     def ensure_dirs(self):
         """Create all required storage directories on startup."""

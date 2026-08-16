@@ -154,6 +154,16 @@ async def require_server_mgmt(current_user=Depends(require_admin)):
     return current_user
 
 
+async def require_super_admin(current_user=Depends(require_admin)):
+    """Dependency: top-rank admin (SuperMaster) — full control (user mgmt, resets, firmware)."""
+    if not getattr(current_user, "is_super_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super admin access required",
+        )
+    return current_user
+
+
 async def optional_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),

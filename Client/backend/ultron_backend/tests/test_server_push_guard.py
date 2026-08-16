@@ -67,14 +67,14 @@ class TestPushSPCBGuard(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(self.db.commit.called)
 
     async def _assert_allowed(self, mode: str):
-        """Allowed state → passes guard, reaches connectivity check."""
+        """Allowed state → passes guard, reaches connectivity check. Queues if unreachable."""
         with patch("app.services.server_push.is_cpcb_upload_allowed", return_value=True):
             with patch("app.services.server_push._check_server_reachable", return_value=False):
-                self.db.reset_mock()
-                await _push_spcb(self.config, self.db, mode)
-                # Guard passed — add should NOT have been called (no PendingUpload)
-                self.db.add.assert_not_called()
-                # Should have reached connectivity check (the function doesn't error)
+                with patch("app.services.server_push._build_spcb_payloads", return_value=[{"DeviceID": 1, "Variables": []}]):
+                    self.db.reset_mock()
+                    await _push_spcb(self.config, self.db, mode)
+                    # When unreachable, PendingUpload is added to queue
+                    self.assertTrue(self.db.add.called)
 
     # ── 3 blocked states × 2 modes = 6 tests ──────────────────────────────
 

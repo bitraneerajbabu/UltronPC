@@ -13,10 +13,15 @@ class ServerConfigBase(BaseModel):
 
     led_station_name: Optional[str] = None        # Station label on the LED board
 
+    # APPCB (Encrypted Zip Protocol)
+    appcb_site_id: Optional[str] = None
+    appcb_site_uid: Optional[str] = None
+    appcb_encryption_key: Optional[str] = None
+
     @field_validator("protocol")
     @classmethod
     def validate_protocol(cls, v):
-        allowed = {"tspcb", "cpcb", "tnpcb", "both", "led"}
+        allowed = {"tspcb", "cpcb", "tnpcb", "appcb", "both", "led"}
         if v not in allowed:
             raise ValueError(f"protocol must be one of {allowed}")
         return v
@@ -44,6 +49,13 @@ class ServerMappingBase(BaseModel):
     cpcb_station_name: Optional[str] = None
     cpcb_parameter: Optional[str] = None
 
+    # APPCB (Encrypted Zip Protocol)
+    appcb_monitoring_unit_id: Optional[str] = None
+    appcb_analyzer_id: Optional[str] = None
+    appcb_parameter_id: Optional[str] = None
+    appcb_parameter_name: Optional[str] = None
+    appcb_unit_id: Optional[str] = None
+
     # LED Board (LAN)
     led_channel_name: Optional[str] = None  # Label on LED display (e.g. "NOX", "PM10")
     led_unit: Optional[str] = None          # Unit override for LED display
@@ -59,6 +71,8 @@ class ParameterMappingResponse(BaseModel):
     parameter_id: int
     parameter_name: str
     station_name: str
+    device_id: Optional[int] = None
+    device_name: Optional[str] = None
     channel_no: int
     mappings: Dict[int, ServerMappingBase]  # server_id → mapping fields
 

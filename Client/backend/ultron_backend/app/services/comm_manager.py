@@ -287,6 +287,9 @@ class CommunicationManager:
                 {"parameter_id": p.id, "value": None, "raw_value": None, "quality": "E"}
                 for p in parameters
             ]
+            # Surface the real driver error to the caller for logging
+            if readings:
+                readings[0]["poll_error"] = err_msg.splitlines()[0][:400] if err_msg else "Driver Error"
 
         return readings
 

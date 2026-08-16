@@ -26,6 +26,7 @@ export const AppProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(localStorage.getItem('ultron_user') || null);
   const [currentUserRole, setCurrentUserRole] = useState(localStorage.getItem('ultron_role') || null);
   const [allowServerMgmt, setAllowServerMgmt] = useState(() => localStorage.getItem('ultron_allow_sm') !== '0');
+  const [isSuperAdmin, setIsSuperAdmin] = useState(() => localStorage.getItem('ultron_super') === '1');
   const [authToken, setAuthToken] = useState(localStorage.getItem('ultron_token') || null);
   const [loading, setLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -165,14 +166,19 @@ export const AppProvider = ({ children }) => {
 
   // ─── Shared API error extractor ───────────────────────────────────────────
   // Reads the JSON body from a non-ok response and returns the detail string.
-  const extractApiError = async (res, fallback = 'An error occurred.') => {
+  const extractApiError = async (res: Response, fallback = 'An error occurred.') => {
     try {
       const body = await res.json();
       if (body && body.detail) {
         if (typeof body.detail === 'string') return body.detail;
-        if (Array.isArray(body.detail)) return body.detail.map(d => d.msg || JSON.stringify(d)).join('; ');
+        if (Array.isArray(body.detail)) return body.detail.map((d: any) => d.msg || JSON.stringify(d)).join('; ');
       }
+      if (body && body.message && typeof body.message === 'string') return body.message;
     } catch (_) { /* ignore parse errors */ }
+    if (res.status === 401) return 'Session expired or invalid credentials.';
+    if (res.status === 403) return 'Access denied.';
+    if (res.status === 404) return 'Resource not found.';
+    if (res.status >= 500) return `Server error (HTTP ${res.status}).`;
     return fallback;
   };
 
@@ -350,12 +356,16 @@ export const AppProvider = ({ children }) => {
             if (param) {
               const prevPt = (prev || {})[param.tag_name];
               const isOnline = p.quality === 'good' || p.quality === 'out_of_range' || p.quality === 'uncertain' || p.quality === 'U' || p.quality === 'O' || p.quality === 'N';
+              const prevTs = prevPt?.timestamp;
+              const hadTs = prevTs && prevTs !== '—';
+              // Offline: freeze at the last timestamp ever seen (last good reading,
+              // or backend-stamped config time for never-online params) — never poll time.
               newLiveData[param.tag_name] = {
                 value: p.value,
                 raw_value: p.raw_value,
                 unit: param.unit || '',
                 status: isOnline ? 'online' : 'offline',
-                timestamp: !isOnline && prevPt?.timestamp ? prevPt.timestamp : formatTimestamp(parseUtcDate(p.timestamp))
+                timestamp: !isOnline && hadTs ? prevTs : formatTimestamp(parseUtcDate(p.timestamp))
               };
             }
           });
@@ -555,10 +565,9 @@ export const AppProvider = ({ children }) => {
           points.forEach(pt => {
               const isOnline = pt.quality === 'good' || pt.quality === 'out_of_range' || pt.quality === 'uncertain' || pt.quality === 'U' || pt.quality === 'O' || pt.quality === 'N';
               const prevPoint = (prev || {})[pt.tag_name];
-              let ts = formatTimestamp(parseUtcDate(pt.timestamp));
-              if (!isOnline && prevPoint && prevPoint.timestamp) {
-                ts = prevPoint.timestamp;
-              }
+              const prevTs = prevPoint && prevPoint.timestamp && prevPoint.timestamp !== '—' ? prevPoint.timestamp : '';
+              // Offline: freeze at the last timestamp ever seen — never WS poll time
+              let ts = isOnline ? formatTimestamp(parseUtcDate(pt.timestamp)) : (prevTs || '—');
               const prevVal = prevPoint?.value;
               const frozenVal = (!isOnline && (pt.value == null || pt.value === '')) ? prevVal : pt.value;
               next[pt.tag_name] = {
@@ -602,6 +611,14 @@ export const AppProvider = ({ children }) => {
             },
             ...prev
           ]);
+
+        } else if (msg.type === 'sync_update') {
+          // RajAPI heartbeat response — server-authoritative state pushed via WS.
+          // Updates lock screen and broadcasts immediately without page reload.
+          if (msg.lock_status !== undefined) setLockStatus(msg.lock_status);
+          if (msg.lock_reason !== undefined) setLockReason(msg.lock_reason);
+          if (msg.amc_expiry !== undefined) setAmcExpiry(msg.amc_expiry);
+          if (Array.isArray(msg.broadcasts)) setBroadcasts(msg.broadcasts);
         }
       } catch (e) {
         console.error('[AppContext] WS parse error:', e);
@@ -680,10 +697,12 @@ export const AppProvider = ({ children }) => {
       localStorage.setItem('ultron_user', data.username);
       localStorage.setItem('ultron_role', data.role);
       localStorage.setItem('ultron_allow_sm', data.allow_server_mgmt === undefined || data.allow_server_mgmt ? '1' : '0');
+      localStorage.setItem('ultron_super', data.is_super_admin ? '1' : '0');
       setAuthToken(data.access_token);
       setCurrentUser(data.username);
       setCurrentUserRole(data.role);
       setAllowServerMgmt(data.allow_server_mgmt === undefined || data.allow_server_mgmt);
+      setIsSuperAdmin(!!data.is_super_admin);
 
       // Reset to dashboard on login
       setActiveScreen('dashboardScreen');
@@ -714,6 +733,7 @@ export const AppProvider = ({ children }) => {
     localStorage.removeItem('ultron_user');
     localStorage.removeItem('ultron_role');
     localStorage.removeItem('ultron_allow_sm');
+    localStorage.removeItem('ultron_super');
     setAuthToken(null);
     setCurrentUser(null);
     setCurrentUserRole(null);
@@ -936,7 +956,7 @@ export const AppProvider = ({ children }) => {
     <AppContext.Provider value={{
       stations, refreshStations, devices, parameters, logs, liveData, kpis,
       activeScreen, setActiveScreen,
-      currentUser, currentUserRole, allowServerMgmt, authToken, login, logout,
+      currentUser, currentUserRole, allowServerMgmt, isSuperAdmin, authToken, login, logout,
       usersList, loadUsers, addUser, editUser, deleteUser,
       addStation, editStation, deleteStation,
       addDevice, editDevice, deleteDevice,
