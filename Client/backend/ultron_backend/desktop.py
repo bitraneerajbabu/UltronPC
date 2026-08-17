@@ -10,6 +10,16 @@ so errors are visible even when console=False.
 import sys
 import io
 import os
+import multiprocessing
+
+# Critical for PyInstaller frozen executables on Windows
+if __name__ == "__main__" or getattr(sys, "frozen", False):
+    multiprocessing.freeze_support()
+
+# Clean leaked PyInstaller subprocess variables to prevent bootloader parent validation errors
+for _k in list(os.environ.keys()):
+    if _k.startswith("_MEI") or _k.startswith("_PYI"):
+        os.environ.pop(_k, None)
 
 # Make sys.argv[0] absolute immediately to prevent pywebview base_uri/get_app_root chdir bugs
 if sys.argv and sys.argv[0]:
