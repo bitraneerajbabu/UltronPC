@@ -241,10 +241,15 @@ async def restart_app():
 
     current_exe = os.path.abspath(sys.executable)
     exe_dir = os.path.dirname(current_exe)
-    exe_name = os.path.basename(current_exe)
-    new_exe = os.path.join(exe_dir, "UltrON_new.exe")
+    from app.config import APP_DIR
+    new_exe_candidates = [
+        os.path.join(exe_dir, "UltrON_new.exe"),
+        os.path.join(str(APP_DIR), "UltrON_new.exe"),
+        os.path.join(tempfile.gettempdir(), "UltrON_new.exe"),
+    ]
+    new_exe = next((p for p in new_exe_candidates if os.path.exists(p)), new_exe_candidates[0])
     old_exe = os.path.join(exe_dir, "UltrON_old.exe")
-    flag_path = os.path.join(exe_dir, "update_pending.flag")
+    flag_path = os.path.join(os.path.dirname(new_exe), "update_pending.flag")
 
     def _do_restart():
         import time
@@ -609,13 +614,24 @@ def _do_firmware_download(custom_url: str | None = None) -> None:
         else:
             install_dir = os.getcwd()
 
+        # Check write permissions in install_dir; fallback to ProgramData or temp if protected
+        target_download_dir = install_dir
+        test_file = os.path.join(install_dir, ".write_test")
+        try:
+            with open(test_file, "w") as f:
+                f.write("test")
+            os.remove(test_file)
+        except (PermissionError, OSError):
+            from app.config import APP_DIR
+            target_download_dir = str(APP_DIR) if os.path.exists(str(APP_DIR)) else tempfile.gettempdir()
+
         new_exe_name = "UltrON_new.exe"
         if getattr(sys, "frozen", False):
             base, ext = os.path.splitext(current_exe_name)
             new_exe_name = f"{base}_new{ext}"
 
-        new_exe_path = os.path.join(install_dir, new_exe_name)
-        flag_path = os.path.join(install_dir, "update_pending.flag")
+        new_exe_path = os.path.join(target_download_dir, new_exe_name)
+        flag_path = os.path.join(target_download_dir, "update_pending.flag")
 
         download_req = urllib.request.Request(download_url, headers={"User-Agent": "UltrON-Updater/1.0"})
         with urlopen_with_ssl_fallback(download_req, timeout=120) as resp:
