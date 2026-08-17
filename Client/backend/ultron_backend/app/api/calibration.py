@@ -271,3 +271,18 @@ async def get_control_chart_data(
         chart_data.ewma = cc.get("ewma")
 
     return chart_data
+
+
+@router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_calibration_job(
+    job_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Delete a calibration job (cascades to results and approvals)."""
+    job = await db.get(CalibrationJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Calibration job not found")
+    await db.delete(job)
+    await db.commit()
+    return None

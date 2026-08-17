@@ -16,8 +16,11 @@ class ServerConfig(Base):
     is_active = Column(Boolean, default=True)
     is_cpcb_active = Column(Boolean, default=True)
 
-    # ─── LED Board (LAN) ──────────────────────────────────────────────────────
-    led_channel_id = Column(Integer, nullable=True)      # PCB/ChannelId integer (e.g. 7003)
+    # ─── APPCB (Encrypted Zip Protocol) ───────────────────────────────────────
+    appcb_site_id = Column(String(100), nullable=True)
+    appcb_site_uid = Column(String(100), nullable=True)
+    appcb_encryption_key = Column(String(100), nullable=True)
+
     led_station_name = Column(String(100), nullable=True) # Station label on LED board
 
     mappings = relationship("ServerParameterMapping", back_populates="server", cascade="all, delete-orphan")
@@ -40,6 +43,13 @@ class ServerParameterMapping(Base):
     api_unit = Column(String(50), nullable=True)      # unit override
     cpcb_station_name = Column(String(100), nullable=True)
     cpcb_parameter = Column(String(100), nullable=True)
+
+    # ─── APPCB (Encrypted Zip Protocol) ───────────────────────────────────────
+    appcb_monitoring_unit_id = Column(String(100), nullable=True)
+    appcb_analyzer_id = Column(String(100), nullable=True)
+    appcb_parameter_id = Column(String(100), nullable=True)
+    appcb_parameter_name = Column(String(100), nullable=True)
+    appcb_unit_id = Column(String(50), nullable=True)
 
     # ─── LED Board (LAN) ──────────────────────────────────────────────────────
     led_channel_name = Column(String(100), nullable=True)  # Label shown on LED (e.g. "NOX", "PM10")

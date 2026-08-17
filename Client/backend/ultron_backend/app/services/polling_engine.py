@@ -1,498 +1,191 @@
-"""
-UltrON — Polling Engine (Central Orchestrator)
-Manages the polling lifecycle for all active devices.
-Dispatches to the correct protocol service based on device.protocol.
-Persists telemetry, runs data quality, triggers alarm checks, and live pushes.
-"""
-
 import asyncio
-import random
+import math
+import time
 from datetime import datetime
 from typing import Dict, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, func
-from sqlalchemy.orm import selectinload
-import httpx
 
-from app.database import AsyncSessionLocal
-from app.models.station import Station, StationStatus
-from app.models.device import Device, DeviceProtocol
-from app.models.parameter import Parameter
-from app.models.telemetry import LiveData, HistoricalData, AverageType, DataQuality, SystemLog
-
-from app.services.modbus_tcp import ModbusTCPReader
-from app.services.modbus_rtu import ModbusRTUReader
-from app.services.tcp_custom import TCPCustomReader
-from app.services.udp_custom import UDPCustomReader
-from app.services.csv_watcher import CSVWatcher, DailyCSVWatcher, SmartWatcher, DailySmartWatcher
-from app.services.data_quality import dq_engine
-from app.services.alarm_engine import alarm_engine
-from app.websocket_manager import ws_manager
 from app.config import settings
 from app.core.logger import get_logger
+from app.database import AsyncSessionLocal
+from app.services.comm_manager import comm_manager
+from app.services.config_cache import CachedDeviceSpec, config_cache
+from app.services.data_quality import dq_engine
+from app.services.live_cache import DeviceState
+from app.services.telemetry_service import telemetry_service
+from app.services.time_sync import get_utc_now
+from app.websocket_manager import ws_manager
 
 log = get_logger("ultron.polling_engine")
 
-# ─── Valid DataQuality values ─────────────────────────────────────────────────
-_VALID_QUALITIES = {q.value for q in DataQuality}
-
-# ─── Concurrency guard for SQLite write contention ──────────────────────────────
-_device_semaphore = asyncio.Semaphore(2)
-
-# ─── Reader Pool ──────────────────────────────────────────────────────────────
-# Keep one reader instance per device to maintain persistent connections
-_tcp_readers:    Dict[int, ModbusTCPReader] = {}
-_rtu_readers:    Dict[str, ModbusRTUReader] = {}   # key = serial_port
-_tcp_custom:     Dict[int, TCPCustomReader] = {}
-_udp_custom:     Dict[int, UDPCustomReader] = {}
-_csv_watchers:   Dict[int, CSVWatcher] = {}
-
-
-def _get_modbus_tcp(device: Device) -> ModbusTCPReader:
-    if device.id not in _tcp_readers:
-        host = device.host or ""
-        port = device.port or 502
-        _tcp_readers[device.id] = ModbusTCPReader(host, port, device.slave_id or 1, device.timeout or 5)
-    return _tcp_readers[device.id]
-
-
-def _get_modbus_rtu(device: Device) -> ModbusRTUReader:
-    port_key = device.serial_port or "unknown"
-    if port_key not in _rtu_readers:
-        _rtu_readers[port_key] = ModbusRTUReader(
-            port=device.serial_port or "COM1",
-            baudrate=device.baud_rate or 9600,
-            data_bits=device.data_bits or 8,
-            parity=device.parity or "N",
-            stop_bits=device.stop_bits or 1,
-            timeout=device.timeout or 3,
-        )
-    return _rtu_readers[port_key]
-
-
-def _get_tcp_custom(device: Device) -> TCPCustomReader:
-    if device.id not in _tcp_custom:
-        _tcp_custom[device.id] = TCPCustomReader(
-            host=device.host or "",
-            port=device.port or 4001,
-            timeout=device.timeout or 5,
-            request_hex=device.request_hex,
-            response_delimiter=device.response_delimiter or "newline",
-        )
-    return _tcp_custom[device.id]
-
-
-def _get_udp_custom(device: Device) -> UDPCustomReader:
-    if device.id not in _udp_custom:
-        _udp_custom[device.id] = UDPCustomReader(
-            host=device.host or "",
-            port=device.port or 4001,
-            timeout=device.timeout or 5,
-            request_hex=device.request_hex,
-            response_delimiter=device.response_delimiter or "newline",
-        )
-    return _udp_custom[device.id]
-
-
-def _get_csv_watcher(device: Device) -> Optional[CSVWatcher]:
-    if not device.csv_folder and not device.csv_path:
-        return None
-    if device.id not in _csv_watchers:
-        if device.csv_folder:
-            # DailySmartWatcher auto-detects .csv vs .xlsx from the filename pattern
-            _csv_watchers[device.id] = DailySmartWatcher(
-                device.csv_folder,
-                device.csv_filename_pattern or "{YYYYMMDD}.csv",
-                device.csv_delimiter or ",",
-                device.poll_interval or 5,
-                device.csv_timestamp_col if device.csv_timestamp_col is not None else 0,
-            )
-        else:
-            # SmartWatcher auto-detects .csv vs .xlsx from the file path extension
-            _csv_watchers[device.id] = SmartWatcher(
-                device.csv_path,
-                device.csv_delimiter or ",",
-                device.poll_interval or 5,
-                device.csv_timestamp_col,
-            )
-    return _csv_watchers[device.id]
-
-
-def _cleanup_reader(device_id: int, protocol: str, device: Device = None):
-    """Remove stale reader instances from pool so fresh connections are made."""
-    _tcp_readers.pop(device_id, None)
-    _tcp_custom.pop(device_id, None)
-    _udp_custom.pop(device_id, None)
-    # RS485 RTU: shared by port key — also evict if the device's port is known
-    if device and device.serial_port:
-        old_reader = _rtu_readers.pop(device.serial_port, None)
-        if old_reader:
-            # Best-effort close; don't await here since we're in a sync context
-            log.info(f"Evicted stale RTU reader for port '{device.serial_port}' (device {device_id})")
-    _csv_watchers.pop(device_id, None)
-
-
-# ─── Core Poll Function ───────────────────────────────────────────────────────
-async def _poll_device(device: Device, parameters: list[Parameter]):
-    """
-    Poll a single device, persist results, run quality/alarm checks, push live data.
-    """
-    if not parameters:
-        return
-
-    param_dicts = [
-        {
-            "id":               p.id,
-            "tag_name":         p.tag_name,
-            "register_address": p.register_address,
-            "register_count":   p.register_count,
-            "register_type":    p.register_type,
-            "data_type":        p.data_type,
-            "byte_order":       p.byte_order,
-            "scale_factor":     p.scale_factor,
-            "offset":           p.offset,
-            "min_valid":        p.min_valid,
-            "max_valid":        p.max_valid,
-            "host":             p.host,
-            "port":             p.port,
-            "serial_port":      p.serial_port,
-            "baud_rate":        p.baud_rate,
-            "data_bits":        p.data_bits,
-            "parity":           p.parity,
-            "stop_bits":        p.stop_bits,
-            "slave_id":         p.slave_id,
-            "parse_method":     p.parse_method,
-            "parse_config":     p.parse_config,
-        }
-        for p in parameters
-    ]
-
-    protocol = device.protocol.value if hasattr(device.protocol, "value") else str(device.protocol)
-    if isinstance(protocol, str) and "." in protocol:
-        protocol = protocol.split(".")[-1]
-
-    readings = []
-
-    try:
-        if protocol == "modbus_tcp":
-            reader = _get_modbus_tcp(device)
-            readings = await reader.read_all_parameters(param_dicts)
-
-        elif protocol == "modbus_rtu":
-            reader = _get_modbus_rtu(device)
-            readings = await reader.read_all_parameters(device.slave_id or 1, param_dicts)
-            await reader.close()  # close RS485 after each poll — devices don't stream continuously
-
-        elif protocol == "tcp_custom":
-            reader = _get_tcp_custom(device)
-            readings = await reader.poll_parameters(param_dicts)
-
-        elif protocol == "udp_custom":
-            reader = _get_udp_custom(device)
-            readings = await reader.poll_parameters(param_dicts)
-
-        elif protocol == "csv":
-            watcher = _get_csv_watcher(device)
-            if watcher:
-                readings = watcher.get_latest_values(param_dicts)
-            else:
-                log.warning(f"Device {device.id}: CSV protocol but no CSV source configured")
-                readings = [
-                    {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "E"}
-                    for p in param_dicts
-                ]
-
-        elif protocol == "opc_ua":
-            # OPC-UA not yet implemented — mark all as E
-            log.warning(f"Device {device.id} ({device.name}): OPC-UA protocol not yet implemented")
-            readings = [
-                {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "E"}
-                for p in param_dicts
-            ]
-
-        else:
-            log.warning(f"Unknown protocol '{protocol}' for device {device.id}")
-            return
-
-    except Exception as e:
-        log.error(f"Poll error device={device.id} ({device.name}): {e}")
-        # Force reconnect next cycle by clearing the reader from pool
-        _cleanup_reader(device.id, protocol, device)
-        readings = [
-            {"parameter_id": p["id"], "value": None, "raw_value": None, "quality": "E"}
-            for p in param_dicts
-        ]
-
-    if not readings:
-        return
-
-    # ─── Data Quality ─────────────────────────────────────────────────────────
-    param_meta = {p.id: {"min_valid": p.min_valid, "max_valid": p.max_valid} for p in parameters}
-    readings = dq_engine.bulk_check(readings, param_meta)
-
-    # ─── Round Values to 2 Decimals ───────────────────────────────────────────
-    for r in readings:
-        if r.get("value") is not None and isinstance(r["value"], (int, float)):
-            r["value"] = round(float(r["value"]), 2)
-
-    # ─── Persist + Alarm Check ────────────────────────────────────────────────
-    now = datetime.utcnow()
-    param_by_id = {p.id: p for p in parameters}
-    live_points = []
-
-    async with AsyncSessionLocal() as db:
-        # Resolve station name safely from the db
-        station_name = ""
-        if device.station_id:
-            st_res = await db.execute(
-                select(Station.name).where(Station.id == device.station_id)
-            )
-            station_name = st_res.scalar() or ""
-
-        # Batch delete-then-insert live records
-        param_ids = [r["parameter_id"] for r in readings]
-        hist_rows = []
-        live_rows = []
-        alarm_tasks = []
-
-        if param_ids:
-            await db.execute(
-                delete(LiveData).where(LiveData.parameter_id.in_(param_ids))
-            )
-
-        for r in readings:
-            q_str = r.get("quality", "U")
-            quality_enum = DataQuality(q_str) if q_str in _VALID_QUALITIES else DataQuality.good
-            ts = r.get("timestamp") if r.get("timestamp") is not None else now
-
-            hist_rows.append(HistoricalData(
-                parameter_id=r["parameter_id"],
-                timestamp=ts,
-                value=r["value"],
-                raw_value=r.get("raw_value"),
-                quality=quality_enum,
-                source="poll",
-            ))
-
-            live_rows.append(LiveData(
-                parameter_id=r["parameter_id"],
-                timestamp=ts,
-                value=r["value"],
-                raw_value=r.get("raw_value"),
-                quality=quality_enum,
-                source="poll",
-            ))
-
-            param = param_by_id.get(r["parameter_id"])
-            if param:
-                alarm_tasks.append(alarm_engine.evaluate(db, param, r["value"], r.get("quality", "U")))
-                live_points.append({
-                    "parameter_id": param.id,
-                    "tag_name":     param.tag_name,
-                    "station_name": station_name,
-                    "device_name":  device.name,
-                    "value":        r["value"],
-                    "unit":         param.unit or "",
-                    "quality":      r.get("quality", "U"),
-                    "timestamp":    ts.isoformat(),
-                })
-
-        # Bulk insert historical and live data
-        if hist_rows:
-            db.add_all(hist_rows)
-        if live_rows:
-            db.add_all(live_rows)
-
-        # Evaluate alarms in parallel after bulk writes
-        for task in alarm_tasks:
-            await task
-
-        # Update device status
-        any_good = any(r.get("quality") in ("U", "O") for r in readings)
-        new_status = "online" if any_good else "offline"
-        await db.execute(
-            Device.__table__.update()
-            .where(Device.id == device.id)
-            .values(
-                status=new_status,
-                last_poll=now,
-                last_error=None if any_good else f"Poll failed at {now.isoformat()}",
-            )
-        )
-
-        # Update station status
-        if device.station_id:
-            station_status = "online" if any_good else "offline"
-            await db.execute(
-                Station.__table__.update()
-                .where(Station.id == device.station_id)
-                .values(status=station_status, last_seen=now)
-            )
-
-        # ─── SystemLog for device events ─────────────────────────────────────
-        if not any_good:
-            db.add(SystemLog(log_type="comm", level="ERROR", source="ultron.polling",
-                message=f"Device {device.name} ({device.id}): OFFLINE — no data"))
-        else:
-            bad_params = []
-            for r in readings:
-                q = r.get("quality")
-                if q == "E":
-                    p = param_by_id.get(r["parameter_id"])
-                    bad_params.append(p.tag_name if p else f"#{r['parameter_id']}")
-                elif q == "O":
-                    p = param_by_id.get(r["parameter_id"])
-                    bad_params.append(f"{p.tag_name if p else '#'+str(r['parameter_id'])}={r.get('value')} OOR")
-            if bad_params:
-                db.add(SystemLog(log_type="comm", level="WARNING", source="ultron.polling",
-                    message=f"Device {device.name} ({device.id}): {', '.join(bad_params)}"))
-
-        await db.commit()
-
-    # ─── WebSocket Live Push ──────────────────────────────────────────────────
-    if live_points:
-        await ws_manager.broadcast({
-            "type": "live_data",
-            "device_id": device.id,
-            "data": live_points,
-            "ts": now.isoformat(),
-        })
-
-
-# ─── Scheduler Loop ───────────────────────────────────────────────────────────
 _running: bool = False
 _device_tasks: Dict[int, asyncio.Task] = {}
 
+# Backward-compatibility pool aliases (mapped to central CommManager transport pools)
+_tcp_readers = comm_manager._tcp_readers
+_rtu_readers = comm_manager._rtu_readers
+_tcp_custom = comm_manager._tcp_custom
+_udp_custom = comm_manager._udp_custom
+_csv_watchers = comm_manager._csv_watchers
+_serial_ascii = comm_manager._serial_ascii
+
 
 async def _device_poll_loop(device_id: int, interval: int):
-    """Per-device polling loop — runs independently."""
+    """
+    Per-device deterministic polling loop.
+    Reads config from ConfigCache, executes I/O via CommManager,
+    updates LiveCache in memory, and sleeps until next clock-aligned tick.
+    Zero DB queries and zero disk writes inside this loop.
+    """
     log.info(f"Poll loop started: device_id={device_id} interval={interval}s")
-    consecutive_errors = 0
+    loop_start = time.monotonic()
+    cycle = 0
+
+    telemetry_service.set_device_state(device_id, DeviceState.STARTING)
+
     while _running:
+        cycle += 1
+        device_spec = config_cache.get_device(device_id)
+
+        if not device_spec or not device_spec.is_active:
+            log.warning(f"Device {device_id} not active or removed from cache — stopping loop")
+            telemetry_service.set_device_state(device_id, DeviceState.STOPPED)
+            break
+
+        active_params = [p for p in device_spec.parameters if p.is_active]
+
         try:
-            async with AsyncSessionLocal() as db:
-                result = await db.execute(
-                    select(Device)
-                    .where(Device.id == device_id, Device.is_active == True)
-                    .options(selectinload(Device.parameters), selectinload(Device.station))
-                )
-                device = result.scalar_one_or_none()
+            # 1. Execute hardware read via CommunicationManager
+            readings = await comm_manager.execute_poll(device_spec, active_params)
 
-            if not device:
-                log.warning(f"Device {device_id} not found or inactive — stopping loop")
-                break
+            # 2. Data Quality Check
+            if readings:
+                param_meta = {
+                    p.id: {
+                        "min_valid": p.min_valid,
+                        "max_valid": p.max_valid,
+                        "alarm_high": p.alarm_high,
+                    }
+                    for p in active_params
+                }
+                readings = dq_engine.bulk_check(readings, param_meta)
 
-            active_params = [p for p in device.parameters if p.is_active]
-            async with _device_semaphore:
-                await _poll_device(device, active_params)
-            consecutive_errors = 0  # reset on success
+                # 3. Update LiveCache via TelemetryService (In-Memory, Zero Disk I/O)
+                now = get_utc_now()
+                live_points = []
+                param_map = {p.id: p for p in active_params}
+
+                for r in readings:
+                    pid = r["parameter_id"]
+                    param = param_map.get(pid)
+                    pt = telemetry_service.record_reading(
+                        parameter_id=pid,
+                        tag_name=param.tag_name if param else f"PARAM_{pid}",
+                        station_name=device_spec.station_name,
+                        device_name=device_spec.name,
+                        device_id=device_spec.id,
+                        value=r.get("value"),
+                        raw_value=r.get("raw_value"),
+                        quality=r.get("quality", "U"),
+                        unit=param.unit if param else "",
+                        timestamp=now,
+                    )
+                    live_points.append(pt.to_dict())
+
+                # 4. WebSocket Live Push & Periodic Reading Log
+                if live_points:
+                    await ws_manager.broadcast({
+                        "type": "live_data",
+                        "device_id": device_spec.id,
+                        "data": live_points,
+                        "ts": now.isoformat(),
+                    })
+                    
+                    # Log to SystemLog (ultron.polling.read) for Device Reading Logs UI
+                    if cycle % max(1, int(10 / max(1, interval))) == 0:
+                        summary = ", ".join(f"{pt['tag_name']}={pt['value']}{pt['unit'] or ''}" for pt in live_points)
+                        try:
+                            from app.models.telemetry import SystemLog
+                            async with AsyncSessionLocal() as log_db:
+                                log_db.add(SystemLog(
+                                    log_type="comm",
+                                    level="INFO",
+                                    source="ultron.polling.read",
+                                    message=f"[{device_spec.name}] {summary}",
+                                ))
+                                await log_db.commit()
+                        except Exception:
+                            pass
 
         except asyncio.CancelledError:
             log.info(f"Device poll loop cancelled: device_id={device_id}")
+            telemetry_service.set_device_state(device_id, DeviceState.STOPPED)
             break
         except Exception as e:
-            err_str = str(e)
-            consecutive_errors += 1
-            # Transient errors (stale DB pool, SQLite locked) back off briefly
-            if any(word in err_str for word in ["no active connection", "database is locked", "database disk image"]):
-                backoff = min(5 * consecutive_errors, 30)
-                log.warning(f"Device loop transient error device={device_id} (retry #{consecutive_errors}, backoff {backoff}s): {err_str.splitlines()[0]}")
-                await asyncio.sleep(backoff)
-                continue
-            else:
-                log.error(f"Device loop error device={device_id}: {e}")
+            log.error(f"Error in device poll loop (device {device_id}): {e}")
+            telemetry_service.set_device_state(
+                device_id, DeviceState.ERROR, last_error=str(e).splitlines()[0]
+            )
 
-        # Add jitter (±10%) to prevent thundering herd
-        jitter = interval * random.uniform(-0.1, 0.1)
-        await asyncio.sleep(interval + jitter)
+        # 5. Deterministic Clock-Aligned Sleep & Poll Overrun Policy
+        curr_interval = device_spec.poll_interval or interval or 5
+        elapsed = time.monotonic() - loop_start
+        target_cycle = math.ceil(elapsed / curr_interval)
+        if target_cycle < cycle:
+            target_cycle = cycle
 
+        target_time = loop_start + (target_cycle * curr_interval)
+        sleep_duration = max(0.0, target_time - time.monotonic())
 
-async def _central_sync_worker():
-    """Background task to push telemetry data to RajAPI.com"""
-    log.info("Central Sync Worker started")
-    
-    from app.config import CENTRAL_API_URL
-    import os
-    central_url = CENTRAL_API_URL
+        if elapsed > (target_cycle * curr_interval):
+            log.warning(
+                f"Device {device_id} poll overrun: elapsed={elapsed:.2f}s > "
+                f"interval={curr_interval}s — skipping missed cycle(s)"
+            )
 
-    while _running:
-        api_key = os.environ.get("CENTRAL_API_KEY", "")
-        if not api_key:
-            # If AMC is expired or setup is pending, we don't sync, but we wait in the loop
-            log.debug("No CENTRAL_API_KEY configured or AMC pending. Central sync paused.")
-            await asyncio.sleep(60)
-            continue
-
-        try:
-            async with AsyncSessionLocal() as db:
-                result = await db.execute(select(LiveData).join(Parameter).options(selectinload(LiveData.parameter)))
-                live_data = result.scalars().all()
-                
-                if live_data:
-                    payload = {
-                        "client_id": "ultron_client_01",
-                        "points": [
-                            {
-                                "tag_name": ld.parameter.tag_name,
-                                "value": ld.value,
-                                "quality": ld.quality.value if hasattr(ld.quality, "value") else str(ld.quality),
-                                "timestamp": ld.timestamp.isoformat()
-                            } for ld in live_data
-                        ]
-                    }
-                    
-                    async with httpx.AsyncClient() as client:
-                        response = await client.post(
-                            central_url, 
-                            json=payload,
-                            headers={"X-API-Key": api_key},
-                            timeout=10.0
-                        )
-                        if response.status_code != 200:
-                            log.warning(f"Central sync failed: {response.status_code} {response.text}")
-                            # Important: the API key might have been deleted on the server (AMC expired)
-                            if response.status_code == 401:
-                                log.error("AMC Token expired or invalid! Locking out client.")
-                                if "CENTRAL_API_KEY" in os.environ:
-                                    del os.environ["CENTRAL_API_KEY"]
-                                
-                                from app.config import APP_DIR
-                                from app.core.config_crypt import write_env_enc_from_dict
-                                enc_file = str(APP_DIR / ".env.enc")
-                                write_env_enc_from_dict({"CENTRAL_API_KEY": ""}, enc_file)
-                        else:
-                            log.debug("Successfully synced telemetry to RajAPI")
-                            
-        except Exception as e:
-            log.error(f"Central sync error: {e}")
-            
-        await asyncio.sleep(60) # Sync every 60 seconds
-
-
+        await asyncio.sleep(sleep_duration)
 
 
 async def start_polling():
     """
-    Load all active devices from DB and start a poll loop per device.
+    Initialize ConfigurationCache and start an independent poll loop per device.
     Called on app startup.
     """
     global _running
     _running = True
     log.info("Polling engine starting …")
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(Device).where(Device.is_active == True)
-        )
-        devices = result.scalars().all()
+    # Step 1: Populate Configuration Cache from DB
+    await config_cache.load_all()
 
+    devices = config_cache.get_all_devices()
     if not devices:
-        log.warning("No active devices found — polling engine idle (add devices via the UI)")
+        log.warning("No active devices found — polling engine idle")
         return
 
+    # Initialize all parameters as OFFLINE in LiveCache until real hardware responses arrive
     for device in devices:
-        rtu_default = device.poll_interval or 5 if device.protocol == DeviceProtocol.modbus_rtu else None
-        interval = rtu_default or device.poll_interval or settings.POLLING_DEFAULT_INTERVAL
+        for param in device.parameters:
+            telemetry_service.record_reading(
+                parameter_id=param.id,
+                tag_name=param.tag_name,
+                station_name=device.station_name,
+                device_name=device.name,
+                device_id=device.id,
+                value=None,
+                raw_value=None,
+                quality="E",
+                unit=param.unit or "",
+                timestamp=get_utc_now(),
+            )
+        telemetry_service.set_device_state(
+            device_id=device.id,
+            state=DeviceState.STARTING,
+            device_name=device.name,
+        )
+
+    # Step 2: Start per-device poll loops
+    for device in devices:
+        interval = device.poll_interval or settings.POLLING_DEFAULT_INTERVAL
         task = asyncio.create_task(
             _device_poll_loop(device.id, interval),
             name=f"poll-device-{device.id}",
@@ -503,36 +196,32 @@ async def start_polling():
 
 
 async def stop_polling():
-    """Gracefully stop all polling loops."""
+    """Gracefully stop all polling loops and transition state to STOPPED."""
     global _running
     _running = False
-    for task in _device_tasks.values():
+    for dev_id, task in _device_tasks.items():
         task.cancel()
+        telemetry_service.set_device_state(dev_id, DeviceState.STOPPED)
     _device_tasks.clear()
     log.info("Polling engine stopped")
 
 
 async def reload_device(device_id: int):
     """
-    Restart the poll loop for a specific device (e.g., after config change).
+    Single Device Configuration Reload.
+    Reloads only the specified device in ConfigCache and restarts its loop.
+    Other devices continue polling uninterrupted.
     """
     if device_id in _device_tasks:
         _device_tasks[device_id].cancel()
         del _device_tasks[device_id]
 
-    # Clear cached readers so fresh connections are made with new config
-    _tcp_readers.pop(device_id, None)
-    _tcp_custom.pop(device_id, None)
-    _udp_custom.pop(device_id, None)
-    _csv_watchers.pop(device_id, None)
+    # Reload single device in ConfigCache & evict transport connection
+    device_spec = await config_cache.reload_device(device_id)
+    comm_manager.evict_device(device_id, device_spec.serial_port if device_spec else None)
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Device).where(Device.id == device_id))
-        device = result.scalar_one_or_none()
-
-    if device and device.is_active and _running:
-        rtu_default = device.poll_interval or 5 if device.protocol == DeviceProtocol.modbus_rtu else None
-        interval = rtu_default or device.poll_interval or settings.POLLING_DEFAULT_INTERVAL
+    if device_spec and device_spec.is_active and _running:
+        interval = device_spec.poll_interval or settings.POLLING_DEFAULT_INTERVAL
         task = asyncio.create_task(
             _device_poll_loop(device_id, interval),
             name=f"poll-device-{device_id}",
@@ -551,6 +240,13 @@ async def restart_polling():
     await start_polling()
 
 
+
+
+
+
+
+
+
 async def check_heartbeats():
     """
     Heartbeat monitor running every minute.
@@ -564,7 +260,8 @@ async def check_heartbeats():
     from app.models.station import Station, StationStatus
     from sqlalchemy import update
     
-    now = datetime.utcnow()
+    from app.services.time_sync import get_utc_now
+    now = get_utc_now()
     cutoff = now - timedelta(seconds=90)
     
     async with AsyncSessionLocal() as db:

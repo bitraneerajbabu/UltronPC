@@ -1,5 +1,5 @@
 import { TextField, InputAdornment } from '@mui/material';
-import Icon from './Icon';
+import { IconSearch } from '@tabler/icons-react';
 
 interface SearchBarProps {
   value: string;
@@ -16,14 +16,14 @@ export default function SearchBar({ value, onChange, placeholder = 'Search...' }
       size="small"
       sx={{
         width: '100%', maxWidth: 400,
-        '& .MuiOutlinedInput-root': { backgroundColor: '#FFFFFF', borderRadius: '10px' },
+        '& .MuiOutlinedInput-root': { backgroundColor: 'background.paper', borderRadius: '10px' },
         '& .MuiOutlinedInput-input': { fontSize: '14px', py: '8px' },
       }}
       slotProps={{
         input: {
           startAdornment: (
             <InputAdornment position="start">
-              <Icon name="Search" size={18} color="#9CA3AF" />
+              <IconSearch size={18} color="currentColor" style={{ opacity: 0.5 }} />
             </InputAdornment>
           ),
         },
@@ -31,4 +31,3 @@ export default function SearchBar({ value, onChange, placeholder = 'Search...' }
     />
   );
 }
-

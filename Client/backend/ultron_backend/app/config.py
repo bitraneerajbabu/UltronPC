@@ -22,7 +22,9 @@ IS_FROZEN = getattr(sys, "frozen", False)
 
 # Resolve execution directory containing config files
 if IS_FROZEN:
-    APP_DIR = Path(sys.executable).parent.resolve()
+    program_data = os.environ.get("PROGRAMDATA", "C:\\ProgramData")
+    APP_DIR = Path(program_data) / "UltrON"
+    APP_DIR.mkdir(parents=True, exist_ok=True)
 else:
     # Use parent of the app package (ultron_backend/)
     APP_DIR = Path(__file__).parent.parent.resolve()
@@ -58,14 +60,16 @@ if IS_FROZEN:
             except Exception as copy_err:
                 print(f"[UltrON] Failed to copy .env.template: {copy_err}", file=sys.stderr)
     
-    # Copy bundled DB template to APP_DIR on first run (fresh install)
-    if not DB_FILE.is_file() and BUNDLE_DB.is_file():
-        try:
-            import shutil
-            shutil.copy2(str(BUNDLE_DB), str(DB_FILE))
-            print(f"[UltrON] Extracted bundled database to {DB_FILE.name}", file=sys.stderr)
-        except Exception as copy_err:
-            print(f"[UltrON] Failed to extract bundled database: {copy_err}", file=sys.stderr)
+    # Copy bundled DB template to APP_DIR on first run (fresh install or empty stub)
+    if BUNDLE_DB.is_file():
+        dest_is_empty_stub = DB_FILE.is_file() and DB_FILE.stat().st_size < 50000 and BUNDLE_DB.stat().st_size > 50000
+        if not DB_FILE.is_file() or dest_is_empty_stub:
+            try:
+                import shutil
+                shutil.copy2(str(BUNDLE_DB), str(DB_FILE))
+                print(f"[UltrON] Extracted bundled database ({BUNDLE_DB.stat().st_size // 1024} KB) to {DB_FILE.name}", file=sys.stderr)
+            except Exception as copy_err:
+                print(f"[UltrON] Failed to extract bundled database: {copy_err}", file=sys.stderr)
 
 
 def _recover_config(is_frozen: bool, env_file: Path, env_enc_file: Path, app_dir: Path, bundled_env_enc: Path | None, bundled_env: Path | None = None) -> None:
@@ -215,12 +219,20 @@ def _load_or_create_secret_key() -> str:
         return secrets.token_urlsafe(32)
 
 
+# ─── Canonical Default Admin Credentials ──────────────────────────
+# ADMIN_USERNAME has a fixed default, but ADMIN_PASSWORD MUST be set
+# explicitly via .env / environment — there is no built-in default.
+# model_post_init (below) refuses to start the server without it.
+DEFAULT_ADMIN_USERNAME = "Master"
+
+
 class Settings(BaseSettings):
 
     # ─── App ─────────────────────────────────────────────────
     APP_NAME: str = "UltrON"
-    APP_VERSION: str = "1.0.69"
+    APP_VERSION: str = "1.1"
     DEBUG: bool = False
+    DB_TYPE: str = "sqlite"
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     CORS_ALLOW_ORIGINS: str = (
@@ -230,31 +242,23 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173"
     )
     # ─── Database ───────────────────────────
-    DB_TYPE: str = "sqlite"
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
-    DB_USER: str = "postgres"
-    DB_PASSWORD: str = ""
-    DB_NAME: str = "ultron"
 
     @property
     def DATABASE_URL(self) -> str:
-        if self.DB_TYPE == "postgresql":
-            return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        return f"sqlite+aiosqlite:///{APP_DIR}/ultron.db"
+        db_path = (APP_DIR / "ultron.db").as_posix()
+        return f"sqlite+aiosqlite:///{db_path}"
 
     @property
     def SYNC_DATABASE_URL(self) -> str:
-        if self.DB_TYPE == "postgresql":
-            return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        return f"sqlite:///{APP_DIR}/ultron.db"
+        db_path = (APP_DIR / "ultron.db").as_posix()
+        return f"sqlite:///{db_path}"
 
     # ─── Security ─────────────────────────────────────────────
     SECRET_KEY: str = Field(default_factory=lambda: _load_or_create_secret_key())
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 5256000  # 10 years — effectively never expires
-    ADMIN_USERNAME: str = Field(default="Master")
-    ADMIN_PASSWORD: str = Field(default="")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
+    ADMIN_USERNAME: str = Field(default=DEFAULT_ADMIN_USERNAME)
+    ADMIN_PASSWORD: str = ""
 
     @field_validator("SECRET_KEY", mode="before")
     @classmethod
@@ -271,7 +275,22 @@ class Settings(BaseSettings):
     # ─── WebSocket ────────────────────────────────────────────
     WS_LIVE_PUSH_INTERVAL: int = 5
 
+    # ─── RajAPI URLs (movable to .env; defaults for backward compatibility) ────
+    RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/heartbeat"
+    RAJAPI_COMMANDS_URL: str = "https://rajapi.com/api/v1/commands/pending"
+    CENTRAL_API_URL: str = "https://rajapi.com/api/v1/sync/"
+    # ─── Deployment Mode (online | offline_only) ────────────────
+    DEPLOYMENT_MODE: str = Field(default="online")
+
+    @field_validator("DEPLOYMENT_MODE", mode="before")
+    @classmethod
+    def validate_deployment_mode(cls, v):
+        if not v or str(v).strip().lower() not in ("online", "offline_only"):
+            return "online"
+        return str(v).strip().lower()
+
     # ─── RajAPI Central Sync (background, invisible to user) ────
+    CENTRAL_API_KEY: str = ""
     RAJAPI_API_KEY: str = ""                  # Legacy API key — kept for backward compatibility
     RAJAPI_SYNC_ENABLED: bool = True
 
@@ -282,17 +301,9 @@ class Settings(BaseSettings):
     DEVICE_SECRET: str = ""
 
     # ─── Polling Engine ───────────────────────────────────────
-    POLLING_DEFAULT_INTERVAL: int = 60
+    POLLING_DEFAULT_INTERVAL: int = 5
     POLLING_MAX_RETRIES: int = 3
     POLLING_RETRY_DELAY: int = 5
-
-    # ─── Averaging ────────────────────────────────────────────
-    AVG_1MIN: bool = True
-    AVG_5MIN: bool = True
-    AVG_15MIN: bool = True
-    AVG_1HR: bool = True
-    AVG_8HR: bool = True
-    AVG_DAILY: bool = True
 
     # ─── Alarm Engine ─────────────────────────────────────────
     ALARM_CHECK_INTERVAL: int = 30
@@ -304,12 +315,23 @@ class Settings(BaseSettings):
     UPLOADS_DIR: str = "./uploads"
 
     # ─── Security ────────────────────────────────────────────────────
-    EMAIL_ENABLED: bool = False
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    ALERT_RECIPIENTS: str = ""
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    MAX_FAILED_LOGIN_ATTEMPTS: int = 5
+    ACCOUNT_LOCKOUT_MINUTES: int = 15
+    PASSWORD_MIN_LENGTH: int = 8
+    PASSWORD_REQUIRE_UPPERCASE: bool = True
+    PASSWORD_REQUIRE_LOWERCASE: bool = True
+    PASSWORD_REQUIRE_DIGIT: bool = True
+    PASSWORD_REQUIRE_SPECIAL: bool = True
+    PASSWORD_HISTORY_COUNT: int = 5
+    SESSION_TIMEOUT_MINUTES: int = 0
+    JWT_BLACKLIST_ENABLED: bool = True
+
+    # ─── Pending Upload Flush (Phase 7) ─────────────────────────
+    # Rate limit for backlog flush on unlock transition (records/sec).
+    FLUSH_RATE_PER_SECOND: int = 5
+    # Max exponential backoff in seconds for HTTP 429/5xx during flush.
+    FLUSH_BACKOFF_CAP_SECONDS: int = 300
 
     # ─── LED Board LAN Endpoint ───────────────────────────────────
     # Auth is validated against active user usernames in the DB.
@@ -328,12 +350,43 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context):
         if not self.ADMIN_PASSWORD:
-            print(
-                "[UltrON] FATAL: ADMIN_PASSWORD is not set in .env! "
-                "Set a strong password before starting the server.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+            # First run on a fresh machine: generate a strong password, persist
+            # it into .env.enc so the client boots without manual config.
+            import secrets as _secrets
+            generated = _secrets.token_urlsafe(16)
+            self.ADMIN_PASSWORD = generated
+            try:
+                from app.core.config_crypt import write_env_enc_from_dict, get_fernet_key
+                existing = {}
+                if ENV_ENC_FILE.is_file():
+                    try:
+                        from app.core.config_crypt import decrypt_file_to_string
+                        import dotenv as _dotenv
+                        existing = _dotenv.dotenv_values(
+                            stream=io.StringIO(decrypt_file_to_string(str(ENV_ENC_FILE)))
+                        ) or {}
+                    except Exception:
+                        existing = {}
+                existing["ADMIN_PASSWORD"] = generated
+                write_env_enc_from_dict(existing, str(ENV_ENC_FILE))
+                os.environ["ADMIN_PASSWORD"] = generated
+                try:
+                    (APP_DIR / "first_boot_admin.txt").write_text(
+                        f"UltrON first-boot credentials\n"
+                        f"username : {self.ADMIN_USERNAME}\n"
+                        f"password : {generated}\n"
+                        f"Change the password after first login.\n",
+                        encoding="utf-8",
+                    )
+                except Exception:
+                    pass
+                print(
+                    "[UltrON] No ADMIN_PASSWORD in config — generated one on first boot. "
+                    f"See first_boot_admin.txt next to the executable.",
+                    file=sys.stderr,
+                )
+            except Exception as gen_err:
+                print(f"[UltrON] Could not persist generated ADMIN_PASSWORD: {gen_err}", file=sys.stderr)
 
     def ensure_dirs(self):
         """Create all required storage directories on startup."""
@@ -353,9 +406,4 @@ class Settings(BaseSettings):
 # Singleton instance — import this everywhere
 settings = Settings()
 
-# ─── Immutable RajAPI Server URL ──────────────────────────────
-# Hardcoded — cannot be overridden by .env. All UltrON clients
-# past, present, and future connect here.
-RAJAPI_SYNC_URL: str = "https://rajapi.com/api/v1/heartbeat"
-RAJAPI_COMMANDS_URL: str = "https://rajapi.com/api/v1/commands/pending"
-CENTRAL_API_URL: str = "https://rajapi.com/api/v1/sync/"
+

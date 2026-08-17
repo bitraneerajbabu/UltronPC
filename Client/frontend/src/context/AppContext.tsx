@@ -1,6 +1,8 @@
 import React, { createContext, useState, useEffect, useCallback, useRef } from 'react';
 
 export const AppContext = createContext(null);
+import { LiveDataContext } from './LiveDataContext';
+export { LiveDataContext };
 
 // When running via `npm run dev` (Vite dev server on :5173) or production, proxy/server handles routing.
 // Using relative/same-origin URLs makes it dynamically compatible with any local port (8000, 8765, etc.).
@@ -23,11 +25,16 @@ export const AppProvider = ({ children }) => {
   const [activeScreen, setActiveScreen] = useState('dashboardScreen');
   const [currentUser, setCurrentUser] = useState(localStorage.getItem('ultron_user') || null);
   const [currentUserRole, setCurrentUserRole] = useState(localStorage.getItem('ultron_role') || null);
+  const [allowServerMgmt, setAllowServerMgmt] = useState(() => localStorage.getItem('ultron_allow_sm') !== '0');
+  const [isSuperAdmin, setIsSuperAdmin] = useState(() => localStorage.getItem('ultron_super') === '1');
   const [authToken, setAuthToken] = useState(localStorage.getItem('ultron_token') || null);
   const [loading, setLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [broadcasts, setBroadcasts] = useState<any[]>([]);
   const [amcExpiry, setAmcExpiry] = useState<string | null>(null);
+  const [isLicensed, setIsLicensed] = useState<boolean>(true);
+  const [lockStatus, setLockStatus] = useState<string>('unlocked');
+  const [lockReason, setLockReason] = useState<string | null>(null);
 
   // User management state (admin only)
   const [usersList, setUsersList] = useState([]);
@@ -49,32 +56,76 @@ export const AppProvider = ({ children }) => {
     parametersRef.current = parameters;
   }, [parameters]);
 
-  // ─── Startup token validation ───────────────────────────────────────────────
-  // On first load, if we have a stored token, verify it is still valid against
-  // the server. If the server returns 401 (e.g. server was restarted with a
-  // different key), silently clear localStorage and force re-login.
+  const pendingRequestsRef = useRef<Record<string, AbortController>>({});
+  const [pendingStatus, setPendingStatus] = useState<Record<string, string>>({});
+
+  // ─── Startup token validation with auto-refresh ─────────────────────────────
+  // On first load, verify the stored token. If expired (401), try refresh.
+  // Only clear and force re-login if both token and refresh fail.
   useEffect(() => {
     const storedToken = localStorage.getItem('ultron_token');
     const storedUser  = localStorage.getItem('ultron_user');
-    if (!storedToken || !storedUser) return; // nothing to validate
+    if (!storedToken || !storedUser) return;
+    const doRefresh = async () => {
+      const rt = localStorage.getItem('ultron_refresh');
+      if (!rt) { clearAuth(); return; }
+      try {
+        const res = await fetch(`${API_BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: rt }),
+        });
+        if (!res.ok) { clearAuth(); return; }
+        const data = await res.json();
+        localStorage.setItem('ultron_token', data.access_token);
+        localStorage.setItem('ultron_refresh', data.refresh_token);
+        setAuthToken(data.access_token);
+      } catch { clearAuth(); }
+    };
+    const clearAuth = () => {
+      localStorage.removeItem('ultron_token');
+      localStorage.removeItem('ultron_refresh');
+      localStorage.removeItem('ultron_user');
+      localStorage.removeItem('ultron_role');
+      localStorage.removeItem('ultron_allow_sm');
+      localStorage.removeItem('ultron_super');
+      setAuthToken(null);
+      setCurrentUser(null);
+      setCurrentUserRole(null);
+      setAllowServerMgmt(true);
+      setIsSuperAdmin(false);
+    };
     fetch(`${API_BASE}/auth/me`, {
       headers: { 'Authorization': `Bearer ${storedToken}` },
     })
-      .then(res => {
+      .then(async res => {
         if (res.status === 401) {
-          // Token rejected by server — clear everything and go to login
-          localStorage.removeItem('ultron_token');
-          localStorage.removeItem('ultron_user');
-          localStorage.removeItem('ultron_role');
-          setAuthToken(null);
-          setCurrentUser(null);
-          setCurrentUserRole(null);
+          doRefresh();
+        } else if (res.ok) {
+          try {
+            const data = await res.json();
+            if (data.username) {
+              setCurrentUser(data.username);
+              localStorage.setItem('ultron_user', data.username);
+            }
+            if (data.role) {
+              setCurrentUserRole(data.role);
+              localStorage.setItem('ultron_role', data.role);
+            }
+            if (data.allow_server_mgmt !== undefined) {
+              setAllowServerMgmt(data.allow_server_mgmt);
+              localStorage.setItem('ultron_allow_sm', data.allow_server_mgmt ? '1' : '0');
+            }
+            if (data.is_super_admin !== undefined) {
+              setIsSuperAdmin(!!data.is_super_admin);
+              localStorage.setItem('ultron_super', data.is_super_admin ? '1' : '0');
+            }
+          } catch {}
         }
-        // If ok, state is already hydrated from localStorage — no action needed
       })
-      .catch(() => { /* server unreachable — leave as-is, user can retry */ });
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount only
+  }, []);
 
   // Show dynamic toast notifications
   const showToast = useCallback((msg, type = 'success') => {
@@ -91,41 +142,71 @@ export const AppProvider = ({ children }) => {
     }, 3800);
   }, []);
 
-  // ─── Authenticated fetch helper ────────────────────────────────────────────
-  const authFetch = useCallback(async (url: string, options: any = {}) => {
-    const token = localStorage.getItem('ultron_token');
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      ...(options.headers || {}),
-    };
+  // ─── Authenticated fetch helper with auto-refresh ──────────────────────────
+  const refreshToken = useCallback(async (): Promise<string | null> => {
+    const rt = localStorage.getItem('ultron_refresh');
+    if (!rt) return null;
     try {
-      const res = await fetch(url, { ...options, headers });
-      // Auto-logout on 401 — stale/invalid/expired token
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: rt }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      localStorage.setItem('ultron_token', data.access_token);
+      localStorage.setItem('ultron_refresh', data.refresh_token);
+      setAuthToken(data.access_token);
+      return data.access_token;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const authFetch = useCallback(async (url: string, options: any = {}) => {
+    const attempt = async (token: string | null): Promise<Response> => {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(options.headers || {}),
+      };
+      return fetch(url, { ...options, headers });
+    };
+    let token = localStorage.getItem('ultron_token');
+    let res = await attempt(token);
+    if (res.status === 401 && token) {
+      const newToken = await refreshToken();
+      if (newToken) {
+        res = await attempt(newToken);
+      }
       if (res.status === 401) {
         localStorage.removeItem('ultron_token');
+        localStorage.removeItem('ultron_refresh');
         localStorage.removeItem('ultron_user');
         localStorage.removeItem('ultron_role');
         setAuthToken(null);
         setCurrentUser(null);
         setCurrentUserRole(null);
       }
-      return res;
-    } catch (err) {
-      throw err;
     }
-  }, [showToast]);
+    return res;
+  }, [refreshToken]);
 
   // ─── Shared API error extractor ───────────────────────────────────────────
   // Reads the JSON body from a non-ok response and returns the detail string.
-  const extractApiError = async (res, fallback = 'An error occurred.') => {
+  const extractApiError = async (res: Response, fallback = 'An error occurred.') => {
     try {
       const body = await res.json();
       if (body && body.detail) {
         if (typeof body.detail === 'string') return body.detail;
-        if (Array.isArray(body.detail)) return body.detail.map(d => d.msg || JSON.stringify(d)).join('; ');
+        if (Array.isArray(body.detail)) return body.detail.map((d: any) => d.msg || JSON.stringify(d)).join('; ');
       }
+      if (body && body.message && typeof body.message === 'string') return body.message;
     } catch (_) { /* ignore parse errors */ }
+    if (res.status === 401) return 'Session expired or invalid credentials.';
+    if (res.status === 403) return 'Access denied.';
+    if (res.status === 404) return 'Resource not found.';
+    if (res.status >= 500) return `Server error (HTTP ${res.status}).`;
     return fallback;
   };
 
@@ -155,6 +236,108 @@ export const AppProvider = ({ children }) => {
       showToast('Local settings saved, but backend server is unreachable.', 'warn');
     }
   }, [showToast, authFetch, API_BASE]);
+
+  const optimisticEdit = useCallback(async <T,>(
+    resourceKey: string,
+    setter: React.Dispatch<React.SetStateAction<T[]>>,
+    items: T[],
+    itemId: number | string,
+    idField: string,
+    newItem: Partial<T>,
+    apiCall: (signal: AbortSignal) => Promise<Response>,
+    onSuccess: (res: Response) => Promise<void>,
+  ) => {
+    if (pendingRequestsRef.current[resourceKey]) {
+      pendingRequestsRef.current[resourceKey].abort();
+    }
+    const controller = new AbortController();
+    pendingRequestsRef.current[resourceKey] = controller;
+    setPendingStatus(prev => ({ ...prev, [resourceKey]: 'pending' }));
+    const snapshot = items;
+    setter(prev => prev.map(item => (item as any)[idField] === itemId ? { ...item, ...newItem } : item));
+    try {
+      const res = await apiCall(controller.signal);
+      if (controller.signal.aborted) return false;
+      if (res.ok) {
+        await onSuccess(res);
+        setPendingStatus(prev => ({ ...prev, [resourceKey]: '' }));
+        return true;
+      }
+      const errDetailEdit = await extractApiError(res, 'Failed to update item.');
+      showToast(errDetailEdit, 'error');
+      setter(snapshot);
+      setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
+      return false;
+    } catch {
+      if (controller.signal.aborted) return false;
+      setter(snapshot);
+      setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
+      return false;
+    } finally {
+      if (pendingRequestsRef.current[resourceKey] === controller) {
+        delete pendingRequestsRef.current[resourceKey];
+      }
+    }
+  }, [extractApiError, showToast]);
+
+  const optimisticAdd = useCallback(async <T,>(
+    resourceKey: string,
+    setter: React.Dispatch<React.SetStateAction<T[]>>,
+    newItem: T,
+    apiCall: (signal: AbortSignal) => Promise<Response>,
+    onSuccess: (res: Response) => Promise<T>,
+  ) => {
+    setPendingStatus(prev => ({ ...prev, [resourceKey]: 'pending' }));
+    setter(prev => [...prev, newItem]);
+    try {
+      const res = await apiCall(new AbortController().signal);
+      if (res.ok) {
+        const serverItem = await onSuccess(res);
+        setter(prev => prev.map(item => item === newItem ? serverItem : item));
+        setPendingStatus(prev => ({ ...prev, [resourceKey]: '' }));
+        return serverItem;
+      }
+      const errDetailAdd = await extractApiError(res, 'Failed to save item.');
+      showToast(errDetailAdd, 'error');
+      setter(prev => prev.filter(item => item !== newItem));
+      setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
+      return false;
+    } catch {
+      setter(prev => prev.filter(item => item !== newItem));
+      setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
+      return false;
+    }
+  }, [extractApiError, showToast]);
+
+  const optimisticRemove = useCallback(async <T,>(
+    resourceKey: string,
+    setter: React.Dispatch<React.SetStateAction<T[]>>,
+    items: T[],
+    itemId: number | string,
+    idField: string,
+    apiCall: (signal: AbortSignal) => Promise<Response>,
+    onSuccess: () => void,
+  ) => {
+    setPendingStatus(prev => ({ ...prev, [resourceKey]: 'pending' }));
+    const snapshot = items;
+    const removedItem = items.find(item => (item as any)[idField] === itemId);
+    setter(prev => prev.filter(item => (item as any)[idField] !== itemId));
+    try {
+      const res = await apiCall(new AbortController().signal);
+      if (res.ok) {
+        onSuccess();
+        setPendingStatus(prev => ({ ...prev, [resourceKey]: '' }));
+        return true;
+      }
+      if (removedItem) setter(prev => [...prev, removedItem]);
+      setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
+      return false;
+    } catch {
+      if (removedItem) setter(prev => [...prev, removedItem]);
+      setPendingStatus(prev => ({ ...prev, [resourceKey]: 'error' }));
+      return false;
+    }
+  }, []);
 
   // Helper mappings
   const parseUtcDate = (dateStr) => {
@@ -199,12 +382,18 @@ export const AppProvider = ({ children }) => {
           telemetryData.forEach(p => {
             const param = activeParams.find(paramObj => paramObj.id == p.parameter_id);
             if (param) {
+              const prevPt = (prev || {})[param.tag_name];
+              const isOnline = p.quality === 'good' || p.quality === 'out_of_range' || p.quality === 'uncertain' || p.quality === 'U' || p.quality === 'O' || p.quality === 'N';
+              const prevTs = prevPt?.timestamp;
+              const hadTs = prevTs && prevTs !== '—';
+              // Offline: freeze at the last timestamp ever seen (last good reading,
+              // or backend-stamped config time for never-online params) — never poll time.
               newLiveData[param.tag_name] = {
                 value: p.value,
                 raw_value: p.raw_value,
                 unit: param.unit || '',
-                status: (p.quality === 'good' || p.quality === 'out_of_range' || p.quality === 'uncertain' || p.quality === 'U' || p.quality === 'O' || p.quality === 'N') ? 'online' : 'offline',
-                timestamp: formatTimestamp(parseUtcDate(p.timestamp))
+                status: isOnline ? 'online' : 'offline',
+                timestamp: !isOnline && hadTs ? prevTs : formatTimestamp(parseUtcDate(p.timestamp))
               };
             }
           });
@@ -259,7 +448,7 @@ export const AppProvider = ({ children }) => {
       if (stationsRes.ok) {
         const stationsData = await stationsRes.json();
         setStations(stationsData || []);
-      } else {
+      } else if (stationsRes.status !== 401) {
         const errText = await extractApiError(stationsRes, 'Failed to load stations.');
         showToast(`Stations: ${errText}`, 'error');
       }
@@ -267,7 +456,7 @@ export const AppProvider = ({ children }) => {
       if (devicesRes.ok) {
         const devicesData = await devicesRes.json();
         setDevices(devicesData || []);
-      } else {
+      } else if (devicesRes.status !== 401) {
         const errText = await extractApiError(devicesRes, 'Failed to load devices.');
         showToast(`Devices: ${errText}`, 'error');
       }
@@ -277,7 +466,7 @@ export const AppProvider = ({ children }) => {
       if (parametersRes.ok) {
         parametersData = await parametersRes.json();
         setParameters(parametersData || []);
-      } else {
+      } else if (parametersRes.status !== 401) {
         const errText = await extractApiError(parametersRes, 'Failed to load parameters.');
         showToast(`Parameters: ${errText}`, 'error');
       }
@@ -294,7 +483,7 @@ export const AppProvider = ({ children }) => {
           status: l.level === 'WARNING' ? 'WARN' : l.level === 'INFO' ? 'INFO' : l.level === 'ERROR' ? 'ERROR' : 'SUCCESS'
         }));
         setLogs(formattedLogs);
-      } else {
+      } else if (logsRes.status !== 401) {
         const errText = await extractApiError(logsRes, 'Failed to load logs.');
         showToast(`Logs: ${errText}`, 'error');
       }
@@ -315,7 +504,10 @@ export const AppProvider = ({ children }) => {
         const licRes = await authFetch(`${API_BASE}/license/status`);
         if (licRes.ok) {
           const licData = await licRes.json();
+          setIsLicensed(licData.licensed);
           if (licData.amc_expiry) setAmcExpiry(licData.amc_expiry);
+          if (licData.lock_status) setLockStatus(licData.lock_status);
+          if (licData.lock_reason) setLockReason(licData.lock_reason);
         }
       } catch {}
 
@@ -326,6 +518,49 @@ export const AppProvider = ({ children }) => {
       setLoading(false);
     }
   }, [showToast, authFetch, fetchLatestTelemetryAndKpis]);
+
+  // ─── Screen Prefetch Manager ─────────────────────────────────────────────
+  const lastPrefetchedRef = useRef<Record<string, number>>({});
+
+  const prefetchScreen = useCallback(async (screenKey: string) => {
+    const now = Date.now();
+    const last = lastPrefetchedRef.current[screenKey] || 0;
+    if (now - last < 15000) return; // 15s TTL cache
+    lastPrefetchedRef.current[screenKey] = now;
+
+    try {
+      if (screenKey === 'dashboardScreen') {
+        await fetchLatestTelemetryAndKpis();
+      } else if (screenKey === 'devicesScreen') {
+        const [sRes, dRes, pRes] = await Promise.all([
+          authFetch(`${API_BASE}/stations/`),
+          authFetch(`${API_BASE}/devices/`),
+          authFetch(`${API_BASE}/parameters/`),
+        ]);
+        if (sRes.ok) setStations(await sRes.json());
+        if (dRes.ok) setDevices(await dRes.json());
+        if (pRes.ok) setParameters(await pRes.json());
+      } else if (screenKey === 'reportsScreen') {
+        const pRes = await authFetch(`${API_BASE}/parameters/`);
+        if (pRes.ok) setParameters(await pRes.json());
+      } else if (screenKey === 'cpcbScreen') {
+        await Promise.all([
+          authFetch(`${API_BASE}/server-config/`),
+          authFetch(`${API_BASE}/server-config/mappings`),
+        ]);
+      } else if (screenKey === 'calibrationScreen') {
+        await authFetch(`${API_BASE}/calibration/jobs?limit=200`);
+      } else if (screenKey === 'settingsScreen') {
+        await Promise.all([
+          authFetch(`${API_BASE}/settings/general`),
+          authFetch(`${API_BASE}/settings/plant`),
+          authFetch(`${API_BASE}/users/`).then(async r => { if (r.ok) setUsersList(await r.json()); }),
+        ]);
+      }
+    } catch (e) {
+      console.warn(`[Prefetch] Error prefetching for ${screenKey}:`, e);
+    }
+  }, [authFetch, fetchLatestTelemetryAndKpis]);
 
   // WebSocket Live telemetry channel
   const connectWebSocket = useCallback(() => {
@@ -340,10 +575,11 @@ export const AppProvider = ({ children }) => {
 
     wsIsClosing.current = false;
     const token = localStorage.getItem('ultron_token');
-    const ws = new WebSocket(`${WS_BASE}?token=${encodeURIComponent(token || '')}`);
+    const ws = new WebSocket(WS_BASE);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (token) ws.send(JSON.stringify({ type: 'auth', token }));
       console.log('[AppContext] Live WebSocket stream connected.');
     };
 
@@ -356,13 +592,14 @@ export const AppProvider = ({ children }) => {
             const next = { ...prev };
           points.forEach(pt => {
               const isOnline = pt.quality === 'good' || pt.quality === 'out_of_range' || pt.quality === 'uncertain' || pt.quality === 'U' || pt.quality === 'O' || pt.quality === 'N';
-              const prevPoint = prev[pt.tag_name];
-              let ts = formatTimestamp(parseUtcDate(pt.timestamp));
-              if (!isOnline && prevPoint && prevPoint.timestamp) {
-                ts = prevPoint.timestamp;
-              }
+              const prevPoint = (prev || {})[pt.tag_name];
+              const prevTs = prevPoint && prevPoint.timestamp && prevPoint.timestamp !== '—' ? prevPoint.timestamp : '';
+              // Offline: freeze at the last timestamp ever seen — never WS poll time
+              let ts = isOnline ? formatTimestamp(parseUtcDate(pt.timestamp)) : (prevTs || '—');
+              const prevVal = prevPoint?.value;
+              const frozenVal = (!isOnline && (pt.value == null || pt.value === '')) ? prevVal : pt.value;
               next[pt.tag_name] = {
-                value: pt.value,
+                value: frozenVal,
                 raw_value: pt.raw_value,
                 unit: pt.unit,
                 status: isOnline ? 'online' : 'offline',
@@ -402,6 +639,14 @@ export const AppProvider = ({ children }) => {
             },
             ...prev
           ]);
+
+        } else if (msg.type === 'sync_update') {
+          // RajAPI heartbeat response — server-authoritative state pushed via WS.
+          // Updates lock screen and broadcasts immediately without page reload.
+          if (msg.lock_status !== undefined) setLockStatus(msg.lock_status);
+          if (msg.lock_reason !== undefined) setLockReason(msg.lock_reason);
+          if (msg.amc_expiry !== undefined) setAmcExpiry(msg.amc_expiry);
+          if (Array.isArray(msg.broadcasts)) setBroadcasts(msg.broadcasts);
         }
       } catch (e) {
         console.error('[AppContext] WS parse error:', e);
@@ -476,11 +721,16 @@ export const AppProvider = ({ children }) => {
         return false;
       }
       localStorage.setItem('ultron_token', data.access_token);
+      localStorage.setItem('ultron_refresh', data.refresh_token);
       localStorage.setItem('ultron_user', data.username);
       localStorage.setItem('ultron_role', data.role);
+      localStorage.setItem('ultron_allow_sm', data.allow_server_mgmt === undefined || data.allow_server_mgmt ? '1' : '0');
+      localStorage.setItem('ultron_super', data.is_super_admin ? '1' : '0');
       setAuthToken(data.access_token);
       setCurrentUser(data.username);
       setCurrentUserRole(data.role);
+      setAllowServerMgmt(data.allow_server_mgmt === undefined || data.allow_server_mgmt);
+      setIsSuperAdmin(!!data.is_super_admin);
 
       // Reset to dashboard on login
       setActiveScreen('dashboardScreen');
@@ -507,11 +757,15 @@ export const AppProvider = ({ children }) => {
       // Ignore network errors on logout
     }
     localStorage.removeItem('ultron_token');
+    localStorage.removeItem('ultron_refresh');
     localStorage.removeItem('ultron_user');
     localStorage.removeItem('ultron_role');
+    localStorage.removeItem('ultron_allow_sm');
+    localStorage.removeItem('ultron_super');
     setAuthToken(null);
     setCurrentUser(null);
     setCurrentUserRole(null);
+    setAllowServerMgmt(true);
     if (wsRef.current) wsRef.current.close();
     showToast('Logged out of UltrON.');
   };
@@ -579,80 +833,99 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // ─── Station REST methods ──────────────────────────────────────────────────
+  // ─── Station REST methods (optimistic) ─────────────────────────────────────
   const addStation = async (payload) => {
-    const res = await authFetch(`${API_BASE}/stations/`, { method: 'POST', body: JSON.stringify(payload) });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to create station.'), 'error'); return false; }
-    const newStation = await res.json();
-    setStations(prev => [...prev, newStation]);
-    showToast('Station added successfully.');
-    loadAllData(); return true;
+    const tempId = Date.now();
+    const optimistic = { id: tempId, ...payload };
+    return optimisticAdd(
+      `station:new`, setStations, optimistic,
+      (signal) => authFetch(`${API_BASE}/stations/`, { method: 'POST', body: JSON.stringify(payload), signal }),
+      async (res) => { const s = await res.json(); showToast('Station added successfully.'); return s; },
+    );
   };
 
   const editStation = async (id, payload) => {
-    const res = await authFetch(`${API_BASE}/stations/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to update station.'), 'error'); return false; }
-    const updated = await res.json();
-    setStations(prev => prev.map(s => s.id === id ? updated : s));
-    showToast('Station updated successfully.');
-    loadAllData(); return true;
+    return optimisticEdit(
+      `station:${id}`, setStations, stations, id, 'id', payload,
+      (signal) => authFetch(`${API_BASE}/stations/${id}`, { method: 'PATCH', body: JSON.stringify(payload), signal }),
+      async (res) => { const updated = await res.json(); setStations(prev => prev.map(s => s.id === id ? updated : s)); showToast('Station updated successfully.'); },
+    );
   };
 
   const deleteStation = async (id) => {
-    const res = await authFetch(`${API_BASE}/stations/${id}`, { method: 'DELETE' });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to delete station.'), 'error'); return false; }
-    setStations(prev => prev.filter(s => s.id !== id));
-    showToast('Station deleted.'); loadAllData(); return true;
+    return optimisticRemove(
+      `station:${id}`, setStations, stations, id, 'id',
+      (signal) => authFetch(`${API_BASE}/stations/${id}`, { method: 'DELETE', signal }),
+      () => showToast('Station deleted.'),
+    );
   };
 
-  // ─── Device REST methods ───────────────────────────────────────────────────
+  // ─── Device REST methods (optimistic) ──────────────────────────────────────
   const addDevice = async (payload) => {
-    const res = await authFetch(`${API_BASE}/devices/`, { method: 'POST', body: JSON.stringify(payload) });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to create device.'), 'error'); return false; }
-    const newDevice = await res.json();
-    setDevices(prev => [...prev, newDevice]);
-    showToast('Device added successfully.'); return newDevice;
+    const tempId = Date.now();
+    const optimistic = { id: tempId, ...payload };
+    const result = await optimisticAdd(
+      `device:new`, setDevices, optimistic,
+      (signal) => authFetch(`${API_BASE}/devices/`, { method: 'POST', body: JSON.stringify(payload), signal }),
+      async (res) => {
+        const d = await res.json();
+        showToast('Device added successfully.');
+        // Refresh stations list
+        authFetch(`${API_BASE}/stations/`).then(r => { if (r.ok) r.json().then(s => setStations(s)); }).catch(() => {});
+        return d;
+      },
+    );
+    return result;
   };
 
   const editDevice = async (id, payload) => {
-    const res = await authFetch(`${API_BASE}/devices/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to update device.'), 'error'); return false; }
-    const updated = await res.json();
-    setDevices(prev => prev.map(d => d.id == id ? updated : d));
-    showToast('Device updated successfully.');
-    loadAllData(); return true;
+    return optimisticEdit(
+      `device:${id}`, setDevices, devices, id, 'id', payload,
+      (signal) => authFetch(`${API_BASE}/devices/${id}`, { method: 'PATCH', body: JSON.stringify(payload), signal }),
+      async (res) => {
+        const updated = await res.json();
+        setDevices(prev => prev.map(d => d.id == id ? updated : d));
+        showToast('Device updated successfully.');
+        // Refresh stations list
+        authFetch(`${API_BASE}/stations/`).then(r => { if (r.ok) r.json().then(s => setStations(s)); }).catch(() => {});
+      },
+    );
   };
 
   const deleteDevice = async (id) => {
-    const res = await authFetch(`${API_BASE}/devices/${id}`, { method: 'DELETE' });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to delete device.'), 'error'); return false; }
-    setDevices(prev => prev.filter(d => d.id != id));
-    showToast('Device deleted.'); loadAllData(); return true;
+    return optimisticRemove(
+      `device:${id}`, setDevices, devices, id, 'id',
+      (signal) => authFetch(`${API_BASE}/devices/${id}`, { method: 'DELETE', signal }),
+      () => showToast('Device deleted.'),
+    );
   };
 
-  // ─── Parameter REST methods ────────────────────────────────────────────────
+  // ─── Parameter REST methods (optimistic) ────────────────────────────────────
   const addParameter = async (payload) => {
-    const res = await authFetch(`${API_BASE}/parameters/`, { method: 'POST', body: JSON.stringify(payload) });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to map parameter.'), 'error'); return false; }
-    const newParam = await res.json();
-    setParameters(prev => [...prev, newParam]);
-    showToast('Parameter mapped successfully.');
-    loadAllData(); return true;
+    const tempId = Date.now();
+    const optimistic = { id: tempId, ...payload };
+    const result = await optimisticAdd(
+      `param:new`, setParameters, optimistic,
+      (signal) => authFetch(`${API_BASE}/parameters/`, { method: 'POST', body: JSON.stringify(payload), signal }),
+      async (res) => { const p = await res.json(); showToast('Parameter mapped successfully.'); return p; },
+    );
+    return result;
   };
 
   const editParameter = async (id, payload) => {
-    const res = await authFetch(`${API_BASE}/parameters/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to update parameter.'), 'error'); return false; }
-    const updated = await res.json();
-      setParameters(prev => prev.map(p => p.id == id ? updated : p));
-    showToast('Parameter updated.'); loadAllData(); return true;
+    return optimisticEdit(
+      `param:${id}`, setParameters, parameters, id, 'id', payload,
+      (signal) => authFetch(`${API_BASE}/parameters/${id}`, { method: 'PATCH', body: JSON.stringify(payload), signal }),
+      async (res) => { const updated = await res.json(); setParameters(prev => prev.map(p => p.id == id ? updated : p)); showToast('Parameter updated.'); },
+    );
   };
 
   const deleteParameter = async (id) => {
-    const res = await authFetch(`${API_BASE}/parameters/${id}`, { method: 'DELETE' });
-    if (!res.ok) { showToast(await extractApiError(res, 'Failed to delete parameter.'), 'error'); return false; }
-      setParameters(prev => prev.filter(p => p.id != id));
-    showToast('Parameter mapping deleted.'); loadAllData(); return true;
+    return optimisticRemove(
+      `param:${id}`, setParameters, parameters, id, 'id',
+      (signal) => authFetch(`${API_BASE}/parameters/${id}`, { method: 'DELETE', signal }),
+      () => showToast('Parameter mapping deleted.'),
+    );
   };
 
   const testDeviceConnection = async (id) => {
@@ -694,22 +967,41 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const refreshStations = useCallback(async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/stations/`);
+      if (res.ok) {
+        const data = await res.json();
+        setStations(data || []);
+        return data;
+      }
+    } catch (e) {
+      console.error('[AppContext] Failed to refresh stations:', e);
+    }
+  }, [authFetch]);
+
   return (
     <AppContext.Provider value={{
-      stations, devices, parameters, logs, liveData, kpis,
+      stations, refreshStations, devices, parameters, logs, liveData, kpis,
       activeScreen, setActiveScreen,
-      currentUser, currentUserRole, authToken, login, logout,
+      currentUser, currentUserRole, allowServerMgmt, isSuperAdmin, authToken, login, logout,
       usersList, loadUsers, addUser, editUser, deleteUser,
       addStation, editStation, deleteStation,
       addDevice, editDevice, deleteDevice,
       addParameter, editParameter, deleteParameter,
       testDeviceConnection, testParameterConnection,
-      loadAllData, fetchLatestTelemetryAndKpis, showToast, API_BASE, WS_BASE, authFetch,
-      plantName, plantAddress, plantLogo, saveLocalSettings,
+      loadAllData, fetchLatestTelemetryAndKpis, prefetchScreen, showToast, API_BASE, WS_BASE, authFetch,
+      plantName, plantAddress, plantLogo, saveLocalSettings, pendingStatus,
       loading, parseUtcDate, hasLoadedOnce,
-      broadcasts, amcExpiry
+      broadcasts, amcExpiry,
+      isLicensed, setIsLicensed, lockStatus, setLockStatus, lockReason, setLockReason
     }}>
-      {children}
+      <LiveDataContext.Provider value={{
+        liveData, kpis,
+        fetchLatestTelemetryAndKpis,
+      }}>
+        {children}
+      </LiveDataContext.Provider>
     </AppContext.Provider>
   );
 };

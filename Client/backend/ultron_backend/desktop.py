@@ -9,6 +9,11 @@ so errors are visible even when console=False.
 
 import sys
 import io
+import os
+
+# Make sys.argv[0] absolute immediately to prevent pywebview base_uri/get_app_root chdir bugs
+if sys.argv and sys.argv[0]:
+    sys.argv[0] = os.path.abspath(sys.argv[0])
 
 # ── Robust Stream Patch ───────────────────────────────────────────────────────
 # When packaged with console=False, standard streams (stdout, stderr) are None
@@ -24,10 +29,15 @@ class DummyStream:
     def encoding(self): return "utf-8"
 
 if getattr(sys, "frozen", False):
-    # Hide the console window immediately on Windows if running in console mode
+    # Set Windows DPI Awareness so PyWebView renders 1:1 crisp identical to browser localhost
     if sys.platform == "win32":
         try:
             import ctypes
+            # Per-Monitor DPI Aware V2 (2) or System Aware (1)
+            try:
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
+            except Exception:
+                ctypes.windll.user32.SetProcessDPIAware()
             hwnd = ctypes.windll.kernel32.GetConsoleWindow()
             if hwnd:
                 ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE = 0
@@ -59,7 +69,8 @@ import argparse
 # ─────────────────────────────────────────────────────────────────────────────
 if getattr(sys, "frozen", False):
     BUNDLE_DIR = sys._MEIPASS                          # extracted packages
-    APP_DIR    = os.path.dirname(sys.executable)       # dir holding the .exe
+    APP_DIR    = os.path.join(os.environ.get("PROGRAMDATA", "C:\\ProgramData"), "UltrON")
+    os.makedirs(APP_DIR, exist_ok=True)
 else:
     BUNDLE_DIR = os.path.dirname(os.path.abspath(__file__))
     APP_DIR    = BUNDLE_DIR
@@ -75,14 +86,12 @@ os.chdir(APP_DIR)
 # STEP 1.5 — Auto-Updater (Applies downloaded firmware)
 # ─────────────────────────────────────────────────────────────────────────────
 def _apply_pending_update():
+    """Clean up residual old executables safely on launch."""
     if not getattr(sys, "frozen", False):
         return
 
-    install_dir = APP_DIR
-    flag_path = os.path.join(install_dir, "update_pending.flag")
-    new_exe = os.path.join(install_dir, "UltrON_new.exe")
-    current_exe = sys.executable
-    old_exe = os.path.join(install_dir, "UltrON_old.exe")
+    exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+    old_exe = os.path.join(exe_dir, "UltrON_old.exe")
 
     # Clean up previous old exe if exists
     if os.path.exists(old_exe):
@@ -90,26 +99,6 @@ def _apply_pending_update():
             os.remove(old_exe)
         except Exception:
             pass
-
-    if os.path.exists(flag_path) and os.path.exists(new_exe):
-        try:
-            import subprocess
-            # Rename current exe to old_exe (Windows allows renaming running exes)
-            os.rename(current_exe, old_exe)
-            # Rename downloaded exe to current exe name
-            os.rename(new_exe, current_exe)
-            # Remove flag
-            os.remove(flag_path)
-            # Relaunch newly replaced exe
-            subprocess.Popen([current_exe] + sys.argv[1:])
-            sys.exit(0)
-        except Exception as e:
-            with open(os.path.join(install_dir, "ultron_update_error.log"), "w") as f:
-                f.write(f"Update failed: {e}\n")
-            try:
-                os.remove(flag_path)
-            except Exception:
-                pass
 
 _apply_pending_update()
 
@@ -222,32 +211,41 @@ def _check_and_download_update():
 
         downloaded_hash = sha256.hexdigest()
 
-        # Verify checksum if checksums.json exists in the release
+        # Verify checksum — fail CLOSED (reject update if checksums.json missing or mismatch)
         checksums_url = None
         for asset in assets:
             if asset.get("name", "").lower() == "checksums.json":
                 checksums_url = asset.get("browser_download_url")
                 break
 
-        if checksums_url:
-            try:
-                ck_req = urllib.request.Request(
-                    checksums_url,
-                    headers={"User-Agent": "UltrON-Updater/1.0"},
+        if not checksums_url:
+            _log_update.error("No checksums.json in release — rejecting update for safety.")
+            os.remove(partial_exe)
+            return
+
+        try:
+            ck_req = urllib.request.Request(
+                checksums_url,
+                headers={"User-Agent": "UltrON-Updater/1.0"},
+            )
+            with _urlopen_verified(ck_req, timeout=15) as ck_resp:
+                checksums = _json.loads(ck_resp.read().decode("utf-8"))
+            expected_hash = checksums.get("UltrON.exe", "")
+            if expected_hash and downloaded_hash != expected_hash:
+                _log_update.error(
+                    "Checksum mismatch! Expected %s, got %s — rejecting update.",
+                    expected_hash, downloaded_hash,
                 )
-                with _urlopen_verified(ck_req, timeout=15) as ck_resp:
-                    checksums = _json.loads(ck_resp.read().decode("utf-8"))
-                expected_hash = checksums.get("UltrON.exe", "")
-                if expected_hash and downloaded_hash != expected_hash:
-                    _log_update.error(
-                        "Checksum mismatch! Expected %s, got %s — rejecting update.",
-                        expected_hash, downloaded_hash,
-                    )
-                    os.remove(partial_exe)
-                    return
-                _log_update.info("Checksum verified [OK]")
-            except Exception as ck_err:
-                _log_update.warning("Checksum verification skipped (%s)", ck_err)
+                os.remove(partial_exe)
+                return
+            _log_update.info("Checksum verified [OK]")
+        except Exception as ck_err:
+            _log_update.error(
+                "Checksum fetch/parse failed (%s) — rejecting update for safety.",
+                ck_err,
+            )
+            os.remove(partial_exe)
+            return
 
         # Move .part → final
         if os.path.exists(new_exe):
@@ -429,6 +427,8 @@ def _run_server() -> None:
         server.run()
     except Exception:
         log.critical("Server thread crashed:\n%s", traceback.format_exc())
+    except BaseException:
+        log.critical("Server thread terminated (BaseException):\n%s", traceback.format_exc())
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 5 — Windows Startup Registration
@@ -578,7 +578,7 @@ def main() -> None:
     # 3. Wait for server
     log.info("Waiting for API server at %s …", URL)
     if not _wait_for_server(HOST, PORT, timeout=60):
-        log.error("Server did not start within 30 s")
+        log.error("Server did not start within 60 s")
         try:
             import ctypes
             ctypes.windll.user32.MessageBoxW(
@@ -614,7 +614,8 @@ def main() -> None:
             y=win_y,
             resizable=True,
             fullscreen=False,
-            min_size=(900, 600),
+            zoomable=True,
+            min_size=(600, 500),
             confirm_close=False,
         )
 

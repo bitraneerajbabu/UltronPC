@@ -20,6 +20,8 @@ log = get_logger("ultron.averaging")
 
 # ─── Wind Direction Detection ─────────────────────────────────────────────────
 def _is_wind_direction(param) -> bool:
+    if not param:
+        return False
     name_lower = (param.name or "").lower()
     tag_lower = (param.tag_name or "").lower()
     unit_lower = (param.unit or "").lower()
@@ -136,26 +138,24 @@ async def run_averaging_for_all_parameters():
     Called by the scheduler at the end of each averaging window.
     Computes averages for all parameters × all window types.
     """
-    now = datetime.utcnow()
+    from app.services.time_sync import get_utc_now
+    now = get_utc_now()
     log.info(f"Averaging run started at {now.isoformat()}")
 
     async with AsyncSessionLocal() as db:
-        # Get all active parameter IDs
-        result = await db.execute(
-            select(HistoricalData.parameter_id).distinct()
-        )
-        param_ids = [row[0] for row in result.all()]
-
-        if not param_ids:
-            log.info("No parameters found — skipping averaging")
-            return
-
-        # Load parameters definitions to detect wind direction parameters
+        # Get all active parameters
         from app.models.parameter import Parameter
         param_result = await db.execute(
-            select(Parameter).where(Parameter.id.in_(param_ids))
+            select(Parameter).where(Parameter.is_active == True)
         )
-        parameters = {p.id: p for p in param_result.scalars().all()}
+        params_list = param_result.scalars().all()
+
+        if not params_list:
+            log.info("No active parameters found — skipping averaging")
+            return
+
+        param_ids = [p.id for p in params_list]
+        parameters = {p.id: p for p in params_list}
 
         for avg_type, delta in WINDOWS:
             # Round 'now' down to the nearest window boundary
@@ -189,25 +189,33 @@ async def run_averaging_for_all_parameters():
             )
             batch_rows = batch_result.all()
 
+            # ─── Batch fetch raw values for wind direction parameters ───
+            wind_param_ids = [pid for pid, _, _ in batch_rows
+                              if _is_wind_direction(parameters.get(pid))]
+            wind_raw_map = {}  # pid -> [raw_values]
+            if wind_param_ids:
+                wind_result = await db.execute(
+                    select(HistoricalData.parameter_id, HistoricalData.value)
+                    .where(
+                        and_(
+                            HistoricalData.parameter_id.in_(wind_param_ids),
+                            HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range, DataQuality.uncertain)),
+                            HistoricalData.timestamp >= start,
+                            HistoricalData.timestamp < end,
+                        )
+                    )
+                )
+                for wpid, wval in wind_result.all():
+                    if wval is not None:
+                        wind_raw_map.setdefault(wpid, []).append(float(wval))
+
             for pid, avg_val, count in batch_rows:
                 if avg_val is None or count == 0:
                     continue
 
                 param = parameters.get(pid)
                 if param and _is_wind_direction(param):
-                    # Recalculate vector average for wind direction
-                    raw_result = await db.execute(
-                        select(HistoricalData.value)
-                        .where(
-                            and_(
-                                HistoricalData.parameter_id == pid,
-                                HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range, DataQuality.uncertain)),
-                                HistoricalData.timestamp >= start,
-                                HistoricalData.timestamp < end,
-                            )
-                        )
-                    )
-                    raw_vals = [float(r[0]) for r in raw_result.all() if r[0] is not None]
+                    raw_vals = wind_raw_map.get(pid, [])
                     if raw_vals:
                         sin_sum = sum(math.sin(math.radians(v)) for v in raw_vals)
                         cos_sum = sum(math.cos(math.radians(v)) for v in raw_vals)

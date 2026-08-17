@@ -1,9 +1,10 @@
 import React, { useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { AppContext } from '../context/AppContext';
+import { AppContext, LiveDataContext } from '../context/AppContext';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, LineController, Filler } from 'chart.js';
 import { T, GLASS_CARD, getParamState, getParamTheme } from '../theme';
 import { Sparkline } from '../components/Sparkline';
 import { AlarmsInspectorModal } from '../components/AlarmsInspectorModal';
+import { IconBuildingFactory, IconShieldCheck, IconShieldX, IconBell, IconDeviceDesktop, IconTemperature, IconDroplet, IconWind, IconCloudFog, IconFlask2, IconAtom2, IconActivity, IconX, IconGauge, IconGaugeFilled, IconSum, IconTestPipe, IconDroplets, IconCloudStorm, IconBuildingFactory2, IconCloudRain, IconCompass, IconAlertOctagon, IconAlertTriangle, IconInfoCircle, IconRefresh, IconReportAnalytics, IconMail } from '@tabler/icons-react';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, LineController, Filler);
 
@@ -13,83 +14,36 @@ const formatCurrentTime = () => {
   return `${p(date.getDate())}-${p(date.getMonth()+1)}-${date.getFullYear()} ${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
 };
 
-const StackIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: T.primaryLight }}>
-    <path d="M2 22h20" />
-    <path d="M17 22l-2-12h-6l-2 12" />
-    <path d="M11 10h2" />
-    <path d="M10 14h4" />
-    <path d="M9 18h6" />
-    <path d="M12 7c.2-.8.8-.8 1 0s.8.8 1 0" />
-    <path d="M10 5c.2-.8.8-.8 1 0s.8.8 1 0" />
-  </svg>
-);
+const StationIcon = () => <IconBuildingFactory size={14} stroke={1.5} style={{ color: T.primary }} />;
 
-const StationIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
-    <path d="M22 22H2" />
-    <path d="M17 22V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v17" />
-  </svg>
-);
+const OnlineIcon = () => <IconShieldCheck size={14} stroke={1.5} style={{ color: T.success }} />;
 
-const OnlineIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    <path d="m9 11 2 2 4-4" />
-  </svg>
-);
+const AlarmIcon = () => <IconBell size={14} stroke={1.5} style={{ color: T.warningDark }} />;
 
-const OfflineIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
-    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-);
+const NetworkIcon = () => <IconDeviceDesktop size={14} stroke={1.5} style={{ color: T.info }} />;
 
-const AlarmIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9z" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-  </svg>
-);
+const stationIconFor = (name: string) => {
+  const n = (name || '').toLowerCase();
+  const size = 16;
+  if (n.includes('aaqms')) return <IconWind size={size} stroke={1.75} color={T.primary} />;
+  if (n.includes('cems')) return <IconBuildingFactory2 size={size} stroke={1.75} color={T.primary} />;
+  if (n.includes('eqms')) return <IconDroplet size={size} stroke={1.75} color={T.primary} />;
+  if (n.includes('weather')) return <IconCloudStorm size={size} stroke={1.75} color={T.primary} />;
+  return null;
+};
 
-const NetworkIcon = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'rgba(255,255,255,0.85)' }}>
-    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-    <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-    <line x1="6" y1="6" x2="6.01" y2="6" />
-    <line x1="6" y1="18" x2="6.01" y2="18" />
-  </svg>
-);
-
-const getTimeAgo = (timestampStr, currentTimeStr) => {
-  if (!timestampStr || timestampStr === '—') return '—';
-  try {
-    const parts = timestampStr.split(' ');
-    const dateParts = parts[0].split('-');
-    const timeParts = parts[1].split(':');
-    const tsDate = new Date(
-      parseInt(dateParts[2]),
-      parseInt(dateParts[1]) - 1,
-      parseInt(dateParts[0]),
-      parseInt(timeParts[0]),
-      parseInt(timeParts[1]),
-      parseInt(timeParts[2])
-    );
-    const diffMs = Date.now() - tsDate.getTime();
-    if (isNaN(diffMs) || diffMs < 0) return 'Just now';
-    const diffSec = Math.floor(diffMs / 1000);
-    if (diffSec < 60) return `${diffSec} seconds ago`;
-    const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `${diffMin} minutes ago`;
-    const diffHour = Math.floor(diffMin / 60);
-    if (diffHour < 24) return `${diffHour} hours ago`;
-    const diffDay = Math.floor(diffHour / 24);
-    return `${diffDay} days ago`;
-  } catch (e) {
-    return '—';
+const formatValPrecision = (val: any): string => {
+  if (val === null || val === undefined || val === '') return '0.00';
+  const num = typeof val === 'number' ? val : parseFloat(val);
+  if (isNaN(num)) return '0.00';
+  const str = num.toString();
+  if (str.includes('.')) {
+    const decimals = str.split('.')[1].length;
+    if (decimals > 2) {
+      return num.toFixed(Math.min(decimals, 4));
+    }
   }
+  return num.toFixed(2);
 };
 
 // Isolated and optimized Parameter Card component
@@ -107,19 +61,21 @@ interface ParameterCardProps {
 const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, deviceName, isSelected, onClick }: ParameterCardProps) => {
   const isOffline = !data || data.status !== 'online';
   const valFloat = parseFloat(data?.value);
-  const formattedVal = isOffline 
-    ? 'N/A' 
-    : (!isNaN(valFloat) 
-        ? valFloat.toFixed(2)
+  const formattedVal = isOffline
+    ? 'Offline'
+    : (!isNaN(valFloat)
+        ? formatValPrecision(valFloat)
         : '0.00');
   const displayTimestamp = isOffline ? (data?.timestamp && data?.timestamp !== '—' ? data.timestamp : '—') : currentTime;
   const state = getParamState(p, data);
 
   const avgFloat = parseFloat(avgVal);
-  const formattedAvgVal = isOffline 
-    ? 'N/A' 
-    : (!isNaN(avgFloat) 
-        ? avgFloat.toFixed(2)
+  const formattedAvgVal = isOffline
+    ? (avgVal != null && avgVal !== '' && !isNaN(parseFloat(avgVal))
+        ? formatValPrecision(avgVal)
+        : 'N/A')
+    : (!isNaN(avgFloat)
+        ? formatValPrecision(avgFloat)
         : '0.00');
 
   let formattedTimestamp = '—';
@@ -150,135 +106,148 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
 
   // Custom Icon based on tag name
   const renderIcon = () => {
-    const name = (p.tag_name || '').toLowerCase();
-    const strokeColor = paramTheme.color;
+    const name = `${p.tag_name || ''} ${p.name || ''}`.toLowerCase();
+    const strokeColor = isOffline ? 'var(--text-secondary)' : paramTheme.color;
     
     if (name.includes('temp')) {
-      return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
-        </svg>
-      );
+      return <IconTemperature size={20} stroke={1.5} color={strokeColor} />;
     }
     if (name.includes('hum')) {
-      return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
-        </svg>
-      );
+      return <IconDroplet size={20} stroke={1.5} color={strokeColor} />;
+    }
+    if (name.includes('press')) {
+      return <IconGauge size={20} stroke={1.5} color={strokeColor} />;
+    }
+    if (name.includes('so2') || name.includes('sulfur')) {
+      return <IconFlask2 size={20} stroke={1.5} color={strokeColor} />;
+    }
+    if (name.includes('pm') || name.includes('dust')) {
+      return <IconAtom2 size={20} stroke={1.5} color={strokeColor} />;
+    }
+    if (name.includes('no') || name.includes('nox') || name.includes('nitro')) {
+      return <IconWind size={20} stroke={1.5} color={strokeColor} />;
     }
     if (name.includes('wind') || name.includes('ws') || name.includes('wd') || name.includes('speed') || name.includes('dir')) {
-      return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/>
-        </svg>
-      );
+      return <IconWind size={20} stroke={1.5} color={strokeColor} />;
     }
-    if (name.includes('pm') || name.includes('co') || name.includes('so2') || name.includes('no') || name.includes('o3') || name.includes('dust') || name.includes('ozone')) {
-      return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M17.5 19A3.5 3.5 0 0 0 21 15.5c0-2.79-2.54-4.5-5-4.5-.42-1.89-1.78-3.5-3.5-3.5a4.34 4.34 0 0 0-4 3c-2.42.36-4.5 2.21-4.5 4.5A3.5 3.5 0 0 0 7.5 19z"/>
-        </svg>
-      );
+    if (name.includes('flow')) {
+      return <IconGaugeFilled size={20} stroke={1.5} color={strokeColor} />;
     }
-    return (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-      </svg>
-    );
+    if (name.includes('total')) {
+      return <IconSum size={20} stroke={1.5} color={strokeColor} />;
+    }
+    if (name.includes('ph')) {
+      return <IconTestPipe size={20} stroke={1.5} color={strokeColor} />;
+    }
+    if (name.includes('tds')) {
+      return <IconDroplets size={20} stroke={1.5} color={strokeColor} />;
+    }
+    if (name.includes('rain')) {
+      return <IconCloudRain size={20} stroke={1.5} color={strokeColor} />;
+    }
+    if (name.includes('magnetic') || name.includes('compass') || name.includes('bearing')) {
+      return <IconCompass size={20} stroke={1.5} color={strokeColor} />;
+    }
+    if (name.includes('co') || name.includes('o3') || name.includes('ozone') || name.includes('carbon')) {
+      return <IconCloudFog size={20} stroke={1.5} color={strokeColor} />;
+    }
+    return <IconActivity size={20} stroke={1.5} color={strokeColor} />;
   };
+
+  const statusDotColor = isOffline ? 'var(--text-secondary)' : (isGood ? '#0F766E' : state.dot);
+  const statusBadgeText = state.cls === 'sensor-card-exceeded' ? (state.badge || 'EXCEEDED') : (isOffline ? 'OFFLINE' : 'NOMINAL');
+  const statusTextColor = isOffline ? 'var(--text-secondary)' : (isGood ? 'var(--primary-600)' : state.dot);
 
   return (
     <div className={`sensor-card ${state.cls}`} onClick={onClick} style={{ 
-      display: 'flex', flexDirection: 'column', padding: '20px', 
-      borderRadius: '12px', 
-      borderLeft: `5px solid ${isSelected ? paramTheme.color : (isGood ? paramTheme.border : state.dot)}`,
-      borderTop: '1px solid rgba(235, 225, 205, 0.4)',
-      borderRight: '1px solid rgba(235, 225, 205, 0.4)',
-      borderBottom: '1px solid rgba(235, 225, 205, 0.4)',
-      backgroundColor: 'rgba(252, 248, 238, 0.85)', 
-      boxShadow: isSelected ? `0 4px 16px ${paramTheme.glow}` : '0 2px 10px rgba(0,0,0,0.02)',
-      position: 'relative', cursor: 'pointer', transition: 'all 0.2s ease'
+      display: 'flex', flexDirection: 'column', padding: '10px 12px', 
+      borderRadius: '10px', 
+      width: '100%',
+      minWidth: 0,
+      borderLeft: `3px solid ${isSelected ? '#0F766E' : (isOffline ? 'rgba(71, 85, 105, 0.4)' : (isGood ? '#0F766E' : state.dot))}`,
+      borderTop: '1px solid var(--border)',
+      borderRight: '1px solid var(--border)',
+      borderBottom: '1px solid var(--border)',
+      backgroundColor: 'var(--surface)', 
+      position: 'relative', cursor: 'pointer', transition: 'all 0.2s ease',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
     }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '40px', height: '40px', backgroundColor: paramTheme.bg, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', flexWrap: 'wrap', gap: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+          <div style={{ width: '28px', height: '28px', backgroundColor: isOffline ? 'var(--surface-muted)' : paramTheme.bg, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             {renderIcon()}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>{p.tag_name}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+            <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-primary)', lineHeight: '1.2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name || p.tag_name}</span>
             {deviceName && deviceName.trim().toLowerCase() !== 'global gateway' && (
-              <span style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase' }}>{deviceName}</span>
+              <span style={{ fontSize: '9px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{deviceName}</span>
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span style={{ width: '8px', height: '8px', backgroundColor: state.dot, borderRadius: '50%', boxShadow: `0 0 8px ${state.dot}` }}></span>
-          <span style={{ fontSize: '10px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{state.cls === 'alarm' ? 'ALARM' : (isOffline ? 'OFFLINE' : 'NOMINAL')}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+          <span style={{ width: '7px', height: '7px', backgroundColor: statusDotColor, borderRadius: '50%', animation: isOffline ? 'alertPulse 1.4s ease-in-out infinite' : 'none' }}></span>
+          <span style={{ fontSize: '8.5px', fontWeight: '800', color: statusTextColor, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{statusBadgeText}</span>
         </div>
       </div>
 
       {/* Main Value Block */}
-      <div style={{ backgroundColor: 'rgba(245, 238, 224, 0.5)', borderRadius: '8px', padding: '16px', marginBottom: '16px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-        <span style={{ fontSize: '32px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1' }}>{formattedVal}</span>
-        <span style={{ fontSize: '14px', fontWeight: '700', color: '#64748b' }}>{unit}</span>
+      <div style={{ backgroundColor: 'var(--surface-muted)', borderRadius: '6px', padding: '6px 10px', marginBottom: '8px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+        <span style={{ fontSize: '20px', fontWeight: '800', color: isOffline ? 'var(--text-secondary)' : 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1' }}>{formattedVal}</span>
+        <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)' }}>{unit}</span>
       </div>
 
       {/* Details List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '8px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>Average (15m):</span>
-          <span style={{ fontSize: '12px', fontWeight: '800', color: '#10b981' }}>{formattedAvgVal} {unit}</span>
+          <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-secondary)' }}>Average (15m):</span>
+          <span style={{ fontSize: '10px', fontWeight: '800', color: isOffline && formattedAvgVal === 'N/A' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>{formattedAvgVal} {unit}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>Warning Limit:</span>
-          <span style={{ fontSize: '12px', fontWeight: '800', color: '#ef4444' }}>{limit} {unit}</span>
+          <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-secondary)' }}>Warning Limit:</span>
+          <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-primary)' }}>{limit} {unit}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>Parameter Range:</span>
-          <span style={{ fontSize: '12px', fontWeight: '700', color: '#64748b' }}>{range} {unit}</span>
+          <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-secondary)' }}>Parameter Range:</span>
+          <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)' }}>{range} {unit}</span>
         </div>
       </div>
 
       {/* Sparkline Block */}
-      <div style={{ backgroundColor: 'rgba(245, 238, 224, 0.5)', borderRadius: '8px', padding: '12px', marginBottom: '16px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
-         <div style={{ position: 'absolute', top: '10px', left: '10%', right: '10%', borderTop: '1px dotted #ef4444', opacity: 0.4 }}></div>
-         <div style={{ position: 'absolute', top: '20px', left: '10%', right: '10%', borderTop: '1px dotted #f97316', opacity: 0.4 }}></div>
-         <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '10px' }}>
-           <Sparkline data={history} color={sparklineColor} width={180} height={20} />
+      <div style={{ backgroundColor: 'var(--surface-muted)', borderRadius: '5px', padding: '3px 6px', marginBottom: '8px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+         <div style={{ position: 'absolute', top: '5px', left: '8%', right: '8%', borderTop: '1px dotted var(--danger)', opacity: isOffline ? 0.2 : 0.4 }}></div>
+         <div style={{ position: 'absolute', top: '11px', left: '8%', right: '8%', borderTop: '1px dotted var(--warning)', opacity: isOffline ? 0.2 : 0.4 }}></div>
+         <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+           <Sparkline data={history} color={isOffline ? 'var(--text-secondary)' : sparklineColor} isOffline={isOffline} width={140} height={16} />
          </div>
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
-        <span style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Raw Feed: {data?.raw_value != null ? parseFloat(data.raw_value).toFixed(2) : formattedVal} {unit}</span>
-        <span style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8' }}>Received: <span style={{ color: '#475569', fontWeight: '700' }}>{formattedTimestamp}</span></span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', flexWrap: 'wrap', gap: '3px' }}>
+        <span style={{ fontSize: '9.5px', fontWeight: '600', color: 'var(--text-secondary)' }}>Received: <span style={{ color: 'var(--text-primary)', fontWeight: '700' }}>{formattedTimestamp}</span></span>
       </div>
     </div>
   );
 });
 
-export const DashboardScreen = () => {
-  const { kpis, stations, devices, parameters, liveData, showToast, authFetch, API_BASE, parseUtcDate, fetchLatestTelemetryAndKpis, amcExpiry, broadcasts } = useContext(AppContext);
+export const DashboardScreen = React.memo(() => {
+  const { stations, devices, parameters, showToast, authFetch, API_BASE, parseUtcDate, amcExpiry, broadcasts, setActiveScreen } = useContext(AppContext);
+  const liveDataCtx = useContext(LiveDataContext) || {};
+  const liveData = liveDataCtx.liveData || {};
+  const kpis = liveDataCtx.kpis || {};
+  const fetchLatestTelemetryAndKpis = liveDataCtx.fetchLatestTelemetryAndKpis;
   const [selectedParam, setSelectedParam] = useState('');
   const [currentTime, setCurrentTime] = useState(formatCurrentTime());
   const [showAlarmsModal, setShowAlarmsModal] = useState(false);
   const [isTrendsModalOpen, setIsTrendsModalOpen] = useState(false);
   const [avg15Mins, setAvg15Mins] = useState({});
   const [networkInfo, setNetworkInfo] = useState<{ lan_ip: string; internet_connected: boolean; hostname: string } | null>(null);
-  const [dismissedBroadcast, setDismissedBroadcast] = useState<number | null>(null);
+  const [dismissedBroadcasts, setDismissedBroadcasts] = useState<Set<number>>(() => {
+    const stored = localStorage.getItem('ultron_dismissed_broadcasts');
+    return new Set<number>(stored ? JSON.parse(stored) : []);
+  });
 
-  // Poll latest telemetry every 5s, KPIs are pushed via WebSocket + cached on backend
-  useEffect(() => {
-    if (fetchLatestTelemetryAndKpis) {
-      fetchLatestTelemetryAndKpis();
-      const interval = setInterval(() => {
-        fetchLatestTelemetryAndKpis();
-      }, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [fetchLatestTelemetryAndKpis]);
+  // KPIs pushed via WebSocket — no HTTP poll needed
 
   const chartRef = useRef(null);
   const chartInstanceRef = useRef(null);
@@ -307,12 +276,15 @@ export const DashboardScreen = () => {
     return () => clearInterval(interval);
   }, [fetchNetworkInfo]);
 
-  // Keep clock running
+  // Keep clock running (rAF: ticks on display refresh, no missed seconds)
   useEffect(() => {
-    const timer = setInterval(() => {
+    let raf: number;
+    const update = () => {
       setCurrentTime(formatCurrentTime());
-    }, 1000);
-    return () => clearInterval(timer);
+      raf = requestAnimationFrame(update);
+    };
+    raf = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   const fetch15MinAverages = useCallback(async () => {
@@ -342,7 +314,7 @@ export const DashboardScreen = () => {
 
   useEffect(() => {
     fetch15MinAverages();
-    const interval = setInterval(fetch15MinAverages, 30000);
+    const interval = setInterval(fetch15MinAverages, 60000);
     return () => clearInterval(interval);
   }, [fetch15MinAverages]);
 
@@ -395,9 +367,9 @@ export const DashboardScreen = () => {
           parameters.forEach(p => {
             const s = seriesList.find(ser => ser.parameter_id == p.id);
             if (s && s.values) {
-              datasets[p.tag_name] = s.values.map(v => v !== null ? Number(parseFloat(v).toFixed(2)) : 0);
+              datasets[p.tag_name] = s.values.map(v => v !== null ? Number(parseFloat(v).toFixed(2)) : null);
             } else {
-              datasets[p.tag_name] = new Array(labels.length).fill(0);
+              datasets[p.tag_name] = new Array(labels.length).fill(null);
             }
           });
         }
@@ -431,16 +403,16 @@ export const DashboardScreen = () => {
           
           const limitLines: { value: number; color: string; label: string }[] = [];
           if (paramObj.alarm_high_high != null && !isNaN(Number(paramObj.alarm_high_high))) {
-            limitLines.push({ value: Number(paramObj.alarm_high_high), color: '#ef4444', label: 'H/H' });
+            limitLines.push({ value: Number(paramObj.alarm_high_high), color: 'var(--danger)', label: 'H/H' });
           }
           if (paramObj.alarm_high != null && !isNaN(Number(paramObj.alarm_high))) {
-            limitLines.push({ value: Number(paramObj.alarm_high), color: '#f59e0b', label: 'High' });
+            limitLines.push({ value: Number(paramObj.alarm_high), color: 'var(--warning)', label: 'High' });
           }
           if (paramObj.alarm_low != null && !isNaN(Number(paramObj.alarm_low))) {
-            limitLines.push({ value: Number(paramObj.alarm_low), color: '#f59e0b', label: 'Low' });
+            limitLines.push({ value: Number(paramObj.alarm_low), color: 'var(--warning)', label: 'Low' });
           }
           if (paramObj.alarm_low_low != null && !isNaN(Number(paramObj.alarm_low_low))) {
-            limitLines.push({ value: Number(paramObj.alarm_low_low), color: '#ef4444', label: 'L/L' });
+            limitLines.push({ value: Number(paramObj.alarm_low_low), color: 'var(--danger)', label: 'L/L' });
           }
 
           const maxLimit = limitLines.length > 0 ? Math.max(...limitLines.map(ll => ll.value)) : undefined;
@@ -453,34 +425,45 @@ export const DashboardScreen = () => {
               datasets: [{
                 label: `${paramObj.name || activeParam} (${unit})`,
                 data: dataPointsRef.current.datasets[activeParam] || [],
-                borderColor: activeParamTheme.color,
-                backgroundColor: activeParamTheme.glow,
+                borderColor: '#0F766E',
+                backgroundColor: 'rgba(15, 118, 110, 0.08)',
                 fill: true,
-                tension: 0.35,
-                pointBackgroundColor: activeParamTheme.color,
-                pointBorderColor: '#fff',
+                tension: 0, // Standard Time-Series Line (no smoothing/Bezier distortion)
+                spanGaps: false,
+                pointBackgroundColor: '#0F766E',
+                pointBorderColor: '#FFFFFF',
+                pointBorderWidth: 1.5,
                 pointRadius: 3,
                 pointHoverRadius: 6
               }]
             },
             options: {
               responsive: true,
-              animation: { duration: 400 },
+              maintainAspectRatio: false,
+              animation: false,
               plugins: {
                 legend: {
                   labels: {
-                    color: T.textMuted,
-                    font: { weight: 600, family: T.fontBase }
+                    color: 'var(--text-secondary)',
+                    font: { weight: 600, family: "'Source Sans 3', Inter, sans-serif" }
                   }
+                },
+                tooltip: {
+                  backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                  titleColor: '#F8FAFC',
+                  bodyColor: '#E2E8F0',
+                  borderColor: 'rgba(15, 118, 110, 0.4)',
+                  borderWidth: 1,
+                  padding: 8,
                 }
               },
               scales: {
-                x: { ticks: { color: T.textFaint, font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+                x: { ticks: { color: 'var(--text-secondary)', font: { size: 11, family: "'Source Sans 3', sans-serif" }, maxTicksLimit: 12 }, grid: { color: 'rgba(0,0,0,0.05)' } },
                 y: { 
-                  ticks: { color: T.textFaint, font: { size: 11 } }, 
-                  grid: { color: '#f1f5f9' },
+                  ticks: { color: 'var(--text-secondary)', font: { size: 11, family: "'Source Sans 3', sans-serif" } }, 
+                  grid: { color: 'rgba(0,0,0,0.05)' },
                   suggestedMax: maxLimit !== undefined ? maxLimit * 1.1 : undefined,
-                  suggestedMin: minLimit !== undefined ? Math.min(0, minLimit * 0.9) : 0
+                  suggestedMin: minLimit !== undefined ? Math.min(0, minLimit * 0.9) : undefined
                 }
               }
             },
@@ -554,13 +537,18 @@ export const DashboardScreen = () => {
     }
     
     const labelsCount = dataPointsRef.current.labels.length;
+    const _chartVal = (tag: string) => {
+      const v = liveData[tag]?.value;
+      const n = v != null ? parseFloat(v) : NaN;
+      return isNaN(n) ? null : Number(n.toFixed(2));
+    };
+
     if (labelsCount > 0 && dataPointsRef.current.labels[labelsCount - 1] === presentTimeStr) {
       parameters.forEach(p => {
         if (!dataPointsRef.current.datasets[p.tag_name]) {
           dataPointsRef.current.datasets[p.tag_name] = [];
         }
-        const val = parseFloat(liveData[p.tag_name]?.value) || 0;
-        dataPointsRef.current.datasets[p.tag_name][labelsCount - 1] = Number(val.toFixed(2));
+        dataPointsRef.current.datasets[p.tag_name][labelsCount - 1] = _chartVal(p.tag_name);
       });
     } else {
       dataPointsRef.current.labels.push(presentTimeStr);
@@ -572,8 +560,7 @@ export const DashboardScreen = () => {
         if (!dataPointsRef.current.datasets[p.tag_name]) {
           dataPointsRef.current.datasets[p.tag_name] = [];
         }
-        const val = parseFloat(liveData[p.tag_name]?.value) || 0;
-        dataPointsRef.current.datasets[p.tag_name].push(Number(val.toFixed(2)));
+        dataPointsRef.current.datasets[p.tag_name].push(_chartVal(p.tag_name));
         if (dataPointsRef.current.datasets[p.tag_name].length > 20) {
           dataPointsRef.current.datasets[p.tag_name].shift();
         }
@@ -612,7 +599,7 @@ export const DashboardScreen = () => {
     if (!chartInstanceRef.current) return;
     const img = chartInstanceRef.current.toBase64Image();
     const html = [
-      '<html><head><style>body{margin:20px;font-family:sans-serif}img{width:100%;border:1px solid #cbd5e1;border-radius:8px}</style></head>',
+      '<html><head><style>body{margin:20px;font-family:sans-serif}img{width:100%;border:1px solid var(--border);border-radius:8px}</style></head>',
       `<body><h2>Live Trend — ${selectedParam}</h2><img src="${img}" />`,
       '<script>window.onload=function(){window.print();setTimeout(function(){window.close()},800)};<\/script>',
       '</body></html>'
@@ -630,44 +617,24 @@ export const DashboardScreen = () => {
     showToast('PDF print dialog opened.');
   };
 
-  const exportCSV = () => {
-    if (!selectedParam || !dataPointsRef.current.datasets[selectedParam]) return;
-    const rows = [['Timestamp', 'Parameter', 'Value', 'Unit']];
-    const currentParamObj = parameters.find(p => p.tag_name === selectedParam) || {};
-    const unit = currentParamObj.unit || '';
-    
-    dataPointsRef.current.labels.forEach((ts, idx) => {
-      const val = dataPointsRef.current.datasets[selectedParam][idx];
-      rows.push([ts, selectedParam, val, unit]);
+  const exportTrendCSV = () => {
+    if (!selectedParam || !dataPointsRef.current.labels) {
+      showToast('Generate a trend first.', 'warn');
+      return;
+    }
+    const headers = ['Time', selectedParam];
+    const rows = dataPointsRef.current.labels.map((label, i) => {
+      const val = dataPointsRef.current.datasets[selectedParam]?.[i];
+      return `${label},${val != null ? val : ''}`;
     });
-
-    const csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `LiveTrend_${selectedParam}_${Date.now()}.csv`;
     a.click();
-    showToast('Live trend telemetry exported to CSV.');
-  };
-
-  const exportExcel = () => {
-    if (!selectedParam || !dataPointsRef.current.datasets[selectedParam]) return;
-    const rows = [['Timestamp', 'Parameter', 'Value', 'Unit']];
-    const currentParamObj = parameters.find(p => p.tag_name === selectedParam) || {};
-    const unit = currentParamObj.unit || '';
-
-    dataPointsRef.current.labels.forEach((ts, idx) => {
-      const val = dataPointsRef.current.datasets[selectedParam][idx];
-      rows.push([ts, selectedParam, val !== undefined ? val : '', unit]);
-    });
-
-    const tsvContent = rows.map(r => r.join('\t')).join('\n');
-    const blob = new Blob([tsvContent], { type: 'application/vnd.ms-excel' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `LiveTrend_${selectedParam}_${Date.now()}.xls`;
-    a.click();
-    showToast('Live trend telemetry exported to Excel.');
+    URL.revokeObjectURL(a.href);
+    showToast('Live trend CSV exported.');
   };
 
   // Performance memoizations
@@ -677,7 +644,7 @@ export const DashboardScreen = () => {
     assignedParams.forEach(p => {
       const device = devices.find(d => d.id == p.device_id);
       const station = stations.find(s => s.id == device?.station_id);
-      const key = station?.name || p.description || 'General';
+      const key = station?.name || p.description || '—';
       if (!grouped[key]) {
         grouped[key] = [];
       }
@@ -698,291 +665,65 @@ export const DashboardScreen = () => {
       const now = new Date();
       const diffDays = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
       if (diffDays <= 0) return { msg: `AMC has expired! Please renew immediately.`, severity: 'critical' };
-      if (diffDays <= 45) return { msg: `AMC expires in ${diffDays} day${diffDays === 1 ? '' : 's'} (${amcExpiry}). Contact Sunshine Technologies for renewal.`, severity: 'warn' };
+      if (diffDays <= 45) return { msg: `AMC expires in ${diffDays} day${diffDays === 1 ? '' : 's'} (${amcExpiry}). Contact Neeraj for renewal.`, severity: 'warn' };
     } catch {}
     return null;
   })();
 
-  if (!parameters || parameters.length === 0) {
-    return (
-      <div className="screen active" id="dashboardScreen">
-        
-        {/* AMC Warning Banner */}
-        {amcWarning && (
-          <div className="card" style={{ padding: '12px 20px', marginBottom: '16px', background: amcWarning.severity === 'critical' ? '#fef2f2' : '#fffbeb', border: `1px solid ${amcWarning.severity === 'critical' ? '#fecaca' : '#fde68a'}`, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? '🚨' : '⚠️'}</span>
-            <span style={{ fontSize: '13px', fontWeight: '600', color: amcWarning.severity === 'critical' ? '#991b1b' : '#92400e', flex: 1 }}>{amcWarning.msg}</span>
-          </div>
-        )}
-
-        {/* KPI Cards */}
-        <div className="card">
-          <div className="section-title">System Summary</div>
-          <div className="grid-5">
-            <div className="kpi-card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Total Stations</span>
-                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f766e, #14b8a6)', boxShadow: '0 4px 12px rgba(15,118,110,0.25)' }}>
-                  <StationIcon />
-                </div>
-              </div>
-              <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f766e', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-                {String(kpis.totalStations).padStart(2, '0')}
-              </div>
-            </div>
-
-            <div className="kpi-card kpi-green">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Online Parameters</span>
-                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #059669, #10b981)', boxShadow: '0 4px 12px rgba(5,150,105,0.25)' }}>
-                  <OnlineIcon />
-                </div>
-              </div>
-              <div style={{ fontSize: '30px', fontWeight: '800', color: '#059669', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-                {String(kpis.onlineDevices).padStart(2, '0')}
-              </div>
-            </div>
-
-            <div className="kpi-card kpi-red">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Offline Parameters</span>
-                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #dc2626, #ef4444)', boxShadow: '0 4px 12px rgba(220,38,38,0.25)' }}>
-                  <OfflineIcon />
-                </div>
-              </div>
-              <div style={{ fontSize: '30px', fontWeight: '800', color: '#dc2626', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-                {String(kpis.offlineDevices).padStart(2, '0')}
-              </div>
-            </div>
-
-            <div className="kpi-card kpi-amber" onClick={() => setShowAlarmsModal(true)} style={{ cursor: 'pointer' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Active Alarms</span>
-                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #b45309, #f59e0b)', boxShadow: '0 4px 12px rgba(180,83,9,0.25)' }}>
-                  <AlarmIcon />
-                </div>
-              </div>
-              <div style={{ fontSize: '30px', fontWeight: '800', color: '#b45309', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {String(kpis.activeAlarms).padStart(2, '0')}
-                {kpis.activeAlarms > 0 && (
-                  <span style={{ width: '7px', height: '7px', background: '#ef4444', borderRadius: '50%', display: 'inline-block', boxShadow: '0 0 8px #ef4444' }}></span>
-                )}
-              </div>
-            </div>
-
-            <div className="kpi-card kpi-blue">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>PC Network</span>
-                <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0369a1, #38bdf8)', boxShadow: '0 4px 12px rgba(3,105,161,0.25)' }}>
-                  <NetworkIcon />
-                </div>
-              </div>
-              <div style={{ fontSize: '20px', fontWeight: '700', color: '#0369a1', fontFamily: T.fontMono, lineHeight: '1.15', marginBottom: '4px' }}>
-                {networkInfo?.lan_ip || '---'}
-              </div>
-              <div style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block', backgroundColor: networkInfo?.internet_connected ? '#10b981' : '#ef4444', boxShadow: networkInfo?.internet_connected ? '0 0 6px #10b981' : '0 0 6px #ef4444' }}></span>
-                  {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
-                </span>
-                {networkInfo?.hostname && <span>{networkInfo.hostname}</span>}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* No Mapped Parameters Message */}
-
-        {/* No Mapped Parameters Message */}
-        <div className="card" style={{ padding: '40px 20px', textAlign: 'center', ...GLASS_CARD, boxShadow: T.shadowSm }}>
-          <div style={{ fontSize: '18px', fontWeight: '600', color: T.textLabel, marginBottom: '10px' }}>
-            No mapped parameters found.
-          </div>
-          <div style={{ color: T.textFaint, fontSize: '14px' }}>
-            Please configure your station, devices, and map parameters in the Parameter Mapping screen to start viewing live telemetry.
-          </div>
-        </div>
-
-        <AlarmsInspectorModal isOpen={showAlarmsModal} onClose={() => setShowAlarmsModal(false)} />
-
-        {broadcasts && broadcasts.length > 0 && (() => {
-          const visible = broadcasts.find((b: any) => b.id !== dismissedBroadcast);
-          if (!visible) return null;
-          const sev = visible.severity || 'info';
-          const colors: Record<string,any> = {
-            critical: { bg: '#fef2f2', border: '#fecaca', icon: '🚨', title: '#991b1b', text: '#7f1d1d', label: 'Critical Broadcast' },
-            warn:     { bg: '#fffbeb', border: '#fde68a', icon: '⚠️',  title: '#92400e', text: '#78350f', label: 'Warning Broadcast' },
-            info:     { bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ️',  title: '#1e40af', text: '#1e3a5f', label: 'Broadcast Message' },
-          };
-          const c = colors[sev] || colors.info;
-          return (
-            <div style={{
-              position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999,
-              maxWidth: '400px', padding: '16px 20px',
-              background: c.bg, border: `1px solid ${c.border}`,
-              borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
-              display: 'flex', alignItems: 'flex-start', gap: '12px',
-            }}>
-              <span style={{ fontSize: '24px', flexShrink: 0 }}>{c.icon}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: c.title, marginBottom: '4px' }}>{c.label}</div>
-                <div style={{ fontSize: '12px', color: c.text }}>{visible.message}</div>
-              </div>
-              <button onClick={() => setDismissedBroadcast(visible.id)} style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: '18px', color: c.title, padding: '0 0 0 8px', lineHeight: 1
-              }}>×</button>
-            </div>
-          );
-        })()}
-
-
-
-      </div>
-    );
-  }
+  const isEmpty = !parameters || parameters.length === 0;
 
   return (
     <div className="screen active" id="dashboardScreen">
       
       {/* AMC Warning Banner */}
       {amcWarning && (
-        <div style={{ padding: '12px 20px', marginBottom: '16px', background: amcWarning.severity === 'critical' ? '#fef2f2' : '#fffbeb', border: `1px solid ${amcWarning.severity === 'critical' ? '#fecaca' : '#fde68a'}`, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? '🚨' : '⚠️'}</span>
-          <span style={{ fontSize: '13px', fontWeight: '600', color: amcWarning.severity === 'critical' ? '#991b1b' : '#92400e', flex: 1 }}>{amcWarning.msg}</span>
+        <div style={{ padding: '12px 20px', marginBottom: '16px', background: amcWarning.severity === 'critical' ? 'var(--danger-bg)' : 'var(--warning-bg)', border: `1px solid ${amcWarning.severity === 'critical' ? 'var(--danger-bg)' : 'var(--warning-bg)'}`, borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '20px' }}>{amcWarning.severity === 'critical' ? <IconAlertOctagon size={20} stroke={1.75} color="var(--danger)" /> : <IconAlertTriangle size={20} stroke={1.75} color="var(--warning)" />}</span>
+          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)', flex: 1 }}>{amcWarning.msg}</span>
         </div>
       )}
 
-      {/* KPI Cards */}
-      <div className="card">
-        <div className="section-title">System Summary</div>
-        <div className="grid-5">
-          <div className="kpi-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Total Stations</span>
-              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0f766e, #14b8a6)' }}>
-                <StationIcon />
-              </div>
-            </div>
-            <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-              {String(kpis.totalStations).padStart(2, '0')}
-            </div>
-          </div>
-
-          <div className="kpi-card kpi-green">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Online Parameters</span>
-              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #059669, #10b981)' }}>
-                <OnlineIcon />
-              </div>
-            </div>
-            <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-              {String(kpis.onlineDevices).padStart(2, '0')}
-            </div>
-          </div>
-
-          <div className="kpi-card kpi-red">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Offline Parameters</span>
-              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #dc2626, #ef4444)' }}>
-                <OfflineIcon />
-              </div>
-            </div>
-            <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em' }}>
-              {String(kpis.offlineDevices).padStart(2, '0')}
-            </div>
-          </div>
-
-          <div className="kpi-card kpi-amber" onClick={() => setShowAlarmsModal(true)} style={{ cursor: 'pointer' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Active Alarms</span>
-              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #b45309, #f59e0b)' }}>
-                <AlarmIcon />
-              </div>
-            </div>
-            <div style={{ fontSize: '30px', fontWeight: '800', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {String(kpis.activeAlarms).padStart(2, '0')}
-              {kpis.activeAlarms > 0 && (
-                <span style={{ width: '7px', height: '7px', background: '#ef4444', borderRadius: '50%', display: 'inline-block', boxShadow: '0 0 8px #ef4444' }}></span>
-              )}
-            </div>
-          </div>
-
-          <div className="kpi-card kpi-blue">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>PC Network</span>
-              <div style={{ width: '34px', height: '34px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #0369a1, #38bdf8)' }}>
-                <NetworkIcon />
-              </div>
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: '#0f172a', fontFamily: T.fontMono, lineHeight: '1.15', marginBottom: '4px' }}>
-              {networkInfo?.lan_ip || '---'}
-            </div>
-            <div style={{ fontSize: '11px', fontWeight: '600', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block', backgroundColor: networkInfo?.internet_connected ? '#10b981' : '#ef4444', boxShadow: networkInfo?.internet_connected ? '0 0 6px #10b981' : '0 0 6px #ef4444' }}></span>
-                {networkInfo === null ? '...' : networkInfo.internet_connected ? 'Online' : 'Offline'}
-              </span>
-              {networkInfo?.hostname && <span>{networkInfo.hostname}</span>}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Live Trends Modal */}
-      {isTrendsModalOpen && parameters && parameters.length > 0 && (
+            {/* Body — always render layout, conditionally render parameter grid or empty state */}
+      {!isEmpty && isTrendsModalOpen && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)',
+          backgroundColor: 'rgba(15, 110, 86, 0.6)', backdropFilter: 'blur(4px)',
           zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
         }} onClick={() => setIsTrendsModalOpen(false)}>
           <div style={{
             backgroundColor: 'rgba(253, 250, 242, 0.95)', backdropFilter: 'blur(25px)', WebkitBackdropFilter: 'blur(25px)',
-            border: '1px solid rgba(235, 225, 205, 0.9)',
+            border: '1px solid rgba(0, 0, 0, 0.12)',
             borderRadius: '16px', width: '100%', maxWidth: '900px',
             padding: '24px', boxShadow: T.shadowLg, position: 'relative'
           }} onClick={e => e.stopPropagation()}>
-            <button 
-              onClick={() => setIsTrendsModalOpen(false)}
-              title="Close modal"
-              aria-label="Close modal"
-              style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: T.textFaint }}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            <button onClick={() => setIsTrendsModalOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', cursor: 'pointer', color: '#000000' }}>
+              <IconX size={24} stroke={2} />
             </button>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <div className="section-title" style={{ margin: 0, fontSize: '20px' }}>Live Trends</div>
-              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', paddingRight: '32px' }}>
-                <select 
-                  value={selectedParam} 
-                  onChange={handleParamChange}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    border: `1.5px solid ${T.borderSoft}`,
-                    fontSize: '14px',
-                    fontWeight: '700',
-                    color: T.text,
-                    backgroundColor: '#f8fafc',
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {parameters.map(p => (
-                    <option key={p.id} value={p.tag_name}>{p.name || p.tag_name}</option>
-                  ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <div className="section-title" style={{ margin: 0, fontSize: '20px' }}>Live Trends</div>
+                {(() => {
+                  const param = parameters.find(p => p.tag_name === selectedParam);
+                  const device = param ? devices.find(d => d.id == param.device_id) : null;
+                  const station = device ? stations.find(s => s.id == device.station_id) : null;
+                  return station ? (
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#000000', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {station.name}
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <select value={selectedParam} onChange={handleParamChange} style={{ padding: '8px 16px', borderRadius: '8px', border: `1.5px solid ${T.borderSoft}`, fontSize: '14px', fontWeight: '700', color: T.text, backgroundColor: 'var(--surface-muted)', outline: 'none', cursor: 'pointer' }}>
+                  {parameters.map(p => <option key={p.id} value={p.tag_name}>{p.name || p.tag_name}</option>)}
                 </select>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button onClick={downloadPNG} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PNG</button>
-                  <button onClick={downloadPDF} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PDF</button>
-                  <button onClick={exportCSV} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>CSV</button>
-                  <button onClick={exportExcel} style={{ background: '#f8fafc', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>Excel</button>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button onClick={downloadPNG} style={{ background: 'var(--surface-muted)', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PNG</button>
+                  <button onClick={downloadPDF} style={{ background: 'var(--surface-muted)', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>PDF</button>
+                  <button onClick={exportTrendCSV} style={{ background: 'var(--surface-muted)', border: `1px solid ${T.borderSoft}`, padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: T.textMuted, fontWeight: '700' }}>CSV</button>
                 </div>
               </div>
             </div>
-            
             <div style={{ position: 'relative', width: '100%', minHeight: '350px' }}>
               <canvas ref={chartRef}></canvas>
             </div>
@@ -990,118 +731,118 @@ export const DashboardScreen = () => {
         </div>
       )}
 
-      {/* Sensor telemetry Grid grouped by monitored sensor name */}
-      <div className="card">
-        <div className="section-title">Live Parameters</div>
-        {Object.entries(groupedBySensor).map(([sensorName, params]) => (
-          <div key={sensorName} style={{ marginBottom: '24px' }}>
-            <div style={{
-              fontSize: '14px',
-              marginBottom: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              borderBottom: `1px solid ${T.borderSoft}`,
-              paddingBottom: '6px'
-            }}>
-              <span style={{
-                fontSize: '14px',
-                fontWeight: '800',
-                color: T.primary,
-                background: T.primaryBg,
-                padding: '2px 10px',
-                borderRadius: T.rFull,
-                letterSpacing: '0.03em'
-              }}>
-                {sensorName}
-              </span>
+      <div className="dash-layout">
+        {isEmpty ? (
+          <div className="card" style={{ padding: '40px 20px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', marginBottom: 0, alignSelf: 'start', backgroundColor: '#FFFFFF', border: '1px solid rgba(0,0,0,0.08)' }}>
+            <div style={{ fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '10px' }}>
+              No mapped parameters found.
             </div>
-            <div className="grid-4">
-              {(params as any[]).map(p => (
-                <ParameterCard
-                  key={p.id}
-                  p={p}
-                  data={liveData[p.tag_name]}
-                  currentTime={currentTime}
-                  avgVal={avg15Mins[p.id]}
-                  history={dataPointsRef.current.datasets[p.tag_name] || []}
-                  deviceName=""
-                  isSelected={selectedParam === p.tag_name}
-                  onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }}
-                />
-              ))}
+            <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+              Please configure your station, devices, and map parameters in the Parameter Mapping screen to start viewing live telemetry.
             </div>
           </div>
-        ))}
-
-        {/* Fallback for unmapped parameters (no device at all) */}
-        {unassignedParameters.length > 0 && (
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{
-              fontSize: '14px',
-              fontWeight: '700',
-              color: T.textLabel,
-              marginBottom: '12px',
-              borderBottom: '1px solid rgba(100, 116, 139, 0.15)',
-              paddingBottom: '6px'
-            }}>
-              Unassigned Parameters
-            </div>
-            <div className="grid-4">
-              {unassignedParameters.map(p => (
-                <ParameterCard
-                  key={p.id}
-                  p={p}
-                  data={liveData[p.tag_name]}
-                  currentTime={currentTime}
-                  avgVal={avg15Mins[p.id]}
-                  history={dataPointsRef.current.datasets[p.tag_name] || []}
-                  deviceName="Unassigned"
-                  isSelected={selectedParam === p.tag_name}
-                  onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }}
-                />
-              ))}
-            </div>
+        ) : (
+          <div className="card" style={{ marginBottom: 0 }}>
+            <div className="section-title" style={{ color: '#000000' }}>Live Parameters</div>
+            {Object.entries(groupedBySensor).map(([sensorName, params]) => (
+              <div key={sensorName} style={{ marginBottom: '24px' }}>
+                <div style={{ fontSize: '14px', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: `1px solid ${T.borderSoft}`, paddingBottom: '6px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '800', color: '#000000', background: T.primaryBg, padding: '2px 10px', borderRadius: T.rFull, letterSpacing: '0.03em', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    {stationIconFor(sensorName)}
+                    {sensorName}
+                  </span>
+                </div>
+                <div className="grid-4">
+                  {(params as any[]).map(p => (
+                    <ParameterCard key={p.id} p={p} data={liveData?.[p.tag_name]} currentTime={currentTime} avgVal={avg15Mins?.[p.id]} history={dataPointsRef.current?.datasets?.[p.tag_name] || []} deviceName="" isSelected={selectedParam === p.tag_name} onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }} />
+                  ))}
+                </div>
+              </div>
+            ))}
+            {unassignedParameters.length > 0 && (
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ fontSize: '14px', fontWeight: '700', color: '#000000', marginBottom: '12px', borderBottom: '1px solid rgba(0, 0, 0, 0.15)', paddingBottom: '6px' }}>
+                  Unassigned Parameters
+                </div>
+                <div className="grid-4">
+                  {unassignedParameters.map(p => (
+                    <ParameterCard key={p.id} p={p} data={liveData?.[p.tag_name]} currentTime={currentTime} avgVal={avg15Mins?.[p.id]} history={dataPointsRef.current?.datasets?.[p.tag_name] || []} deviceName="Unassigned" isSelected={selectedParam === p.tag_name} onClick={() => { setSelectedParam(p.tag_name); setIsTrendsModalOpen(true); }} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
+
+        {/* Side rail — health, devices, system info, quick actions */}
+        <aside className="dash-sidebar dash-rail">
+          <div className="card">
+            <div className="dash-card-title">Device Status</div>
+            <div className="dash-health-row">
+              <span className="dash-health-dot" style={{ background: 'var(--success)' }}></span>
+              <span className="dash-health-name">Online Device</span>
+              <span className="dash-health-count">{String(kpis?.onlineDevices || 0).padStart(2, '0')}</span>
+            </div>
+            <div className="dash-health-row">
+              <span className="dash-health-dot" style={{ background: 'var(--danger)' }}></span>
+              <span className="dash-health-name">Offline Device</span>
+              <span className="dash-health-count">{String(kpis?.offlineDevices || 0).padStart(2, '0')}</span>
+            </div>
+            <div className="dash-health-row">
+              <span className="dash-health-dot" style={{ background: '#7FDBD0' }}></span>
+              <span className="dash-health-name">Stations</span>
+              <span className="dash-health-count">{String(kpis?.totalStations || stations.length || 0).padStart(2, '0')}</span>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="dash-card-title">Quick Actions</div>
+            <button className="dash-action" onClick={() => { fetchLatestTelemetryAndKpis(); showToast('Telemetry refreshed'); }}>
+              <IconRefresh size={16} stroke={2} /> Refresh Data
+            </button>
+            <button className="dash-action" onClick={() => setActiveScreen('reportsScreen')}>
+              <IconReportAnalytics size={16} stroke={1.75} /> View Reports
+            </button>
+            <button className="dash-action" onClick={() => setShowAlarmsModal(true)}>
+              <IconBell size={16} stroke={1.75} /> Active Alarms
+            </button>
+            <button className="dash-action" onClick={() => setActiveScreen('contactScreen')}>
+              <IconMail size={16} stroke={1.75} /> Contact
+            </button>
+          </div>
+        </aside>
       </div>
-
-
 
       <AlarmsInspectorModal isOpen={showAlarmsModal} onClose={() => setShowAlarmsModal(false)} />
 
-      {/* Broadcast Popup — shown as dismissible overlay */}
-      {broadcasts && broadcasts.length > 0 && (() => {
-        const visible = broadcasts.find((b: any) => b.id !== dismissedBroadcast);
+      {broadcasts && broadcasts.length > 0 && localStorage.getItem('ultron_broadcast_enabled') !== 'false' && (() => {
+        const visible = (broadcasts as any[]).find((b: any) => !dismissedBroadcasts.has(b.id));
         if (!visible) return null;
         const sev = visible.severity || 'info';
         const colors: Record<string,any> = {
-          critical: { bg: '#fef2f2', border: '#fecaca', icon: '🚨', title: '#991b1b', text: '#7f1d1d', label: 'Critical Broadcast' },
-          warn:     { bg: '#fffbeb', border: '#fde68a', icon: '⚠️',  title: '#92400e', text: '#78350f', label: 'Warning Broadcast' },
-          info:     { bg: '#eff6ff', border: '#bfdbfe', icon: 'ℹ️',  title: '#1e40af', text: '#1e3a5f', label: 'Broadcast Message' },
+          critical: { bg: 'var(--danger-bg)', border: 'var(--danger-bg)', icon: <IconAlertOctagon size={22} stroke={1.75} color="var(--danger-text)" />, title: 'var(--danger-text)', text: 'var(--danger-text)', label: 'Critical Broadcast' },
+          warn:     { bg: 'var(--warning-bg)', border: 'var(--warning-bg)', icon: <IconAlertTriangle size={22} stroke={1.75} color="var(--warning-text)" />,  title: 'var(--warning-text)', text: 'var(--warning-text)', label: 'Warning Broadcast' },
+          info:     { bg: 'var(--info-bg)', border: 'var(--info-bg)', icon: <IconInfoCircle size={22} stroke={1.75} color="var(--info-text)" />,  title: 'var(--info-text)', text: 'var(--info-text)', label: 'Broadcast Message' },
         };
         const c = colors[sev] || colors.info;
+        const dismiss = () => {
+          const next = new Set(dismissedBroadcasts);
+          next.add(visible.id);
+          setDismissedBroadcasts(next);
+          localStorage.setItem('ultron_dismissed_broadcasts', JSON.stringify([...next]));
+        };
         return (
-          <div style={{
-            position: 'fixed', bottom: '80px', right: '24px', zIndex: 9999,
-            maxWidth: '400px', padding: '16px 20px',
-            background: c.bg, border: `1px solid ${c.border}`,
-            borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
-            display: 'flex', alignItems: 'flex-start', gap: '12px',
-          }}>
+          <div style={{ position: 'fixed', bottom: '80px', right: '24px', left: '24px', zIndex: 9999, maxWidth: '400px', padding: '16px 20px', background: c.bg, border: `1px solid ${c.border}`, borderRadius: '12px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'flex-start', gap: '12px', margin: '0 auto' }}>
             <span style={{ fontSize: '24px', flexShrink: 0 }}>{c.icon}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '13px', fontWeight: '700', color: c.title, marginBottom: '4px' }}>{c.label}</div>
               <div style={{ fontSize: '12px', color: c.text }}>{visible.message}</div>
             </div>
-            <button onClick={() => setDismissedBroadcast(visible.id)} style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: '18px', color: c.title, padding: '0 0 0 8px', lineHeight: 1
-            }}>×</button>
+            <button onClick={dismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: c.title, padding: '0 0 0 8px', lineHeight: 1 }}>×</button>
           </div>
         );
       })()}
 
     </div>
   );
-};
+});

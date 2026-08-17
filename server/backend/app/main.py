@@ -1,23 +1,24 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-import os
 import time
+import uuid
+import traceback
 from collections import defaultdict
 from app.core.config import settings
 from app.db.database import engine, Base, get_db
 from app.models.core import IndustrySite, Device
 import logging
+import asyncio
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import models so they are registered with Base.metadata before create_all
-from app.models.core import IndustrySite, Device, Parameter, TelemetryData, Broadcast, PendingCommand, Alarm, SoftwareVersion, OTADeployment
+from app.models.core import IndustrySite, Device, Parameter, TelemetryData, Broadcast, PendingCommand, Alarm, SoftwareVersion, OTADeployment, Station
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -62,7 +63,7 @@ def _run_auto_migrations():
                 logger.warning(f"Index '{idx_name}' skipped: {e}")
 
         # Add lock fields & error tracking & version/notes to industry_sites if missing
-        existing_cols = {c["name"] for c in inspector.get_columns("industry_sites")}
+        # (existing_cols already fetched above — indexes don't change columns)
         for col_name, col_def in [
             ("lock_status", "VARCHAR(50) DEFAULT 'unlocked'"),
             ("lock_reason", "TEXT"),
@@ -110,25 +111,6 @@ def _run_auto_migrations():
                 logger.info("Auto-migration: added 'target_site_id' to broadcasts")
         except Exception as e:
             logger.warning(f"Auto-migration for broadcast columns skipped: {e}")
-
-        # Remove accidental demo broadcast so clients only see manually-created messages.
-        try:
-            result = conn.execute(
-                text(
-                    "DELETE FROM broadcasts "
-                    "WHERE lower(trim(message)) = :message "
-                    "AND CAST(expires_at AS TEXT) LIKE :expires_at"
-                ),
-                {
-                    "message": "scheduled maintenance tonight at 2 am",
-                    "expires_at": "2026-07-05%",
-                },
-            )
-            conn.commit()
-            if result.rowcount and result.rowcount > 0:
-                logger.info(f"Removed {result.rowcount} accidental placeholder broadcast(s)")
-        except Exception as e:
-            logger.warning(f"Broadcast placeholder cleanup skipped: {e}")
 
         # Add api_key column to devices table if missing
         try:
@@ -196,29 +178,172 @@ def _run_auto_migrations():
         except Exception as e:
             logger.warning(f"Auto-migration for alarms table skipped: {e}")
 
+        # Create stations table if not exists
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS stations (
+                    id SERIAL PRIMARY KEY,
+                    site_id INTEGER NOT NULL REFERENCES industry_sites(id) ON DELETE CASCADE,
+                    station_id VARCHAR(100) NOT NULL,
+                    username VARCHAR(200) NOT NULL,
+                    category VARCHAR(50) NOT NULL,
+                    station_name VARCHAR(200) NOT NULL,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """))
+            conn.commit()
+            logger.info("Auto-migration: ensured 'stations' table")
+        except Exception as e:
+            logger.warning(f"Auto-migration for stations table skipped: {e}")
+
+        # Add std_limit and station_name to parameters table if missing
+        try:
+            param_cols = {c["name"] for c in inspector.get_columns("parameters")}
+            for col_name, col_def in [
+                ("std_limit", "FLOAT"),
+                ("station_name", "VARCHAR(200)"),
+            ]:
+                if col_name not in param_cols:
+                    conn.execute(text(f"ALTER TABLE parameters ADD COLUMN {col_name} {col_def}"))
+                    conn.commit()
+                    logger.info(f"Auto-migration: added '{col_name}' to parameters")
+        except Exception as e:
+            logger.warning(f"Auto-migration for parameters columns skipped: {e}")
+
 _run_auto_migrations()
 
-# ─── Simple In-Memory Rate Limiter ─────────────────────────────────────────────
-_login_attempts: dict[str, list[float]] = defaultdict(list)
+# ─── Rate Limiting & Account Lockout ──────────────────────────────────────────
+_LOGIN_WINDOW = 60        # seconds
+_LOGIN_MAX_ATTEMPTS = 5    # per IP per window
+_KEY_LOCK_THRESHOLD = 10   # failed attempts before key lockout
+_KEY_LOCK_DURATION = 900   # seconds (15 min)
+_API_RATE_WINDOW = 60      # seconds
+_API_RATE_MAX = 200        # requests per window per IP
+_DATA_INGEST_PREFIXES = ("/api/v1/sync", "/api/v1/heartbeat", "/api/v1/spcb")
 
-def _check_login_rate_limit(ip: str) -> None:
+# IP → [timestamps] for login endpoint
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+# Key value → [timestamps] for distributed brute-force detection
+_key_attempts: dict[str, list[float]] = defaultdict(list)
+# Key value → locked_until timestamp
+_key_lockouts: dict[str, float] = {}
+# IP → [timestamps] for general API rate limiting
+_api_requests: dict[str, list[float]] = defaultdict(list)
+
+
+def _check_login_rate_limit(ip: str, key: str) -> None:
     now = time.time()
-    attempts = _login_attempts[ip]
-    attempts[:] = [t for t in attempts if now - t < 60]
-    if len(attempts) >= 5:
-        raise HTTPException(status_code=429, detail="Too many login attempts. Try again in 60 seconds.")
-    attempts.append(now)
+
+    # Per-key lockout check (catches distributed brute-force on same key)
+    if key in _key_lockouts:
+        if now < _key_lockouts[key]:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many login attempts. Try again later."
+            )
+        del _key_lockouts[key]  # lock expired
+
+    # Per-IP rate limit (catches single-source brute-force)
+    ip_attempts = _login_attempts[ip]
+    ip_attempts[:] = [t for t in ip_attempts if now - t < _LOGIN_WINDOW]
+    if len(ip_attempts) >= _LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Try again in 60 seconds."
+        )
+    ip_attempts.append(now)
+    ip_attempts[:] = ip_attempts[-(_LOGIN_MAX_ATTEMPTS + 5):]
+
+
+def _record_failed_login(ip: str, key: str) -> None:
+    """Track failed attempts per key and lock it after threshold."""
+    now = time.time()
+    key_attempts = _key_attempts[key]
+    key_attempts[:] = [t for t in key_attempts if now - t < _KEY_LOCK_DURATION]
+    key_attempts.append(now)
+    if len(key_attempts) >= _KEY_LOCK_THRESHOLD:
+        _key_lockouts[key] = now + _KEY_LOCK_DURATION
+        logger.warning(
+            "Key locked out: '%s...' (%d failures in %ds)",
+            key[:12], _KEY_LOCK_THRESHOLD, _KEY_LOCK_DURATION
+        )
+
+
+def _clear_key_lockout(key: str) -> None:
+    """Clear lockout state on successful login."""
+    _key_lockouts.pop(key, None)
+    _key_attempts.pop(key, None)
+
+
+async def _api_rate_limit_middleware(request: Request, call_next):
+    """Per-IP rate limit for all API endpoints except data ingestion."""
+    path = request.url.path
+    if path.startswith(settings.API_V1_STR) and not path.startswith(_DATA_INGEST_PREFIXES):
+        ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        reqs = _api_requests[ip]
+        reqs[:] = [t for t in reqs if now - t < _API_RATE_WINDOW]
+        if len(reqs) >= _API_RATE_MAX:
+            logger.warning("API rate limit hit: ip=%s path=%s", ip, path[:60])
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Try again later."}
+            )
+        reqs.append(now)
+        reqs[:] = reqs[-250:]
+    return await call_next(request)
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., min_length=1, max_length=100)
+    password: str = Field(..., min_length=1, max_length=256)
 
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
+
+# ─── Global Exception Handler ───────────────────────────────────────────────
+# Catches all unhandled exceptions, returns consistent JSON with request_id.
+# Never leaks stack traces, paths, or internal state to the client.
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    request_id = str(uuid.uuid4())
+    logger.error(
+        "Unhandled exception: request_id=%s path=%s method=%s",
+        request_id, request.url.path, request.method,
+        exc_info=True
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Internal server error", "request_id": request_id},
+        headers={"X-Request-Id": request_id},
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Return HTTPException as-is with consistent JSON shape."""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+    )
+
+
+# ─── Request ID Middleware (outermost — adds X-Request-Id to every response) ──
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = request.headers.get("X-Request-Id", str(uuid.uuid4()))
+    response = await call_next(request)
+    response.headers["X-Request-Id"] = request_id
+    return response
+
+
+# Apply API rate limiter
+app.middleware("http")(_api_rate_limit_middleware)
 
 # Set all CORS enabled origins
 app.add_middleware(
@@ -239,33 +364,59 @@ app.add_middleware(
 
 @app.post(f"{settings.API_V1_STR}/auth/login")
 async def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
-    _check_login_rate_limit(request.client.host if request.client else "unknown")
+    import bcrypt
+    from app.core.config import ADMIN_PASSWORD_HASH
+
+    ip = request.client.host if request.client else "unknown"
     key = payload.password
 
-    # Check admin key
+    # IP rate limit + key lockout check
+    _check_login_rate_limit(ip, key)
+
+    from app.api.deps import find_site_by_key, find_device_by_key
+
+    # Check admin login (username + hashed password)
+    if payload.username == settings.ADMIN_USERNAME and bcrypt.checkpw(
+        payload.password.encode("utf-8"), ADMIN_PASSWORD_HASH.encode("utf-8")
+    ):
+        _clear_key_lockout(key)
+        return {"success": True, "admin_key": settings.ADMIN_KEY}
+
+    # Check admin key (backward compat for X-Admin-Key header users)
     if key == settings.ADMIN_KEY:
-        return {"success": True}
+        _clear_key_lockout(key)
+        return {"success": True, "admin_key": settings.ADMIN_KEY}
 
     # Check site-level key
-    site = db.query(IndustrySite).filter(IndustrySite.api_key == key).first()
+    site = find_site_by_key(db, key)
     if site:
         if not site.is_active:
-            return JSONResponse({"success": False, "detail": "Site is inactive"}, status_code=403)
-        return {"success": True}
+            logger.warning("Login attempt for inactive site from %s", ip)
+            _record_failed_login(ip, key)
+            return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
+        _clear_key_lockout(key)
+        return {"success": True, "admin_key": site.api_key}
 
-    # Check device-level key
-    device = db.query(Device).filter(Device.api_key == key).first()
+    # Check device-level key (validate parent site is active)
+    device = find_device_by_key(db, key)
     if device:
-        return {"success": True}
+        if not device.site or not device.site.is_active:
+            logger.warning("Login attempt for inactive site device from %s", ip)
+            _record_failed_login(ip, key)
+            return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
+        _clear_key_lockout(key)
+        return {"success": True, "admin_key": device.api_key}
 
-    logger.warning(f"Failed login attempt from {request.client.host if request.client else 'unknown'}")
+    logger.warning("Failed login attempt from %s", ip)
+    _record_failed_login(ip, key)
     return JSONResponse({"success": False, "detail": "Invalid credentials"}, status_code=401)
 
 
-from app.api.endpoints import sync, sites, downloads, tgpcb_sync, broadcasts, commands, quality, alarms, cpcb, ota
+from app.api.endpoints import sync, sites, downloads, spcb_sync, broadcasts, commands, quality, alarms, cpcb, ota, stations
 
 app.include_router(sync.router, prefix=f"{settings.API_V1_STR}/sync", tags=["sync"])
-app.include_router(tgpcb_sync.router, prefix=f"{settings.API_V1_STR}/tgpcb", tags=["tgpcb-sync"])
+app.include_router(sync.heartbeat_router, prefix=f"{settings.API_V1_STR}/heartbeat", tags=["heartbeat"])
+app.include_router(spcb_sync.router, prefix=f"{settings.API_V1_STR}/spcb", tags=["spcb-sync"])
 app.include_router(sites.router, prefix=f"{settings.API_V1_STR}/sites", tags=["sites"])
 app.include_router(downloads.router, prefix=f"{settings.API_V1_STR}/downloads", tags=["downloads"])
 app.include_router(broadcasts.router, prefix=f"{settings.API_V1_STR}/broadcasts", tags=["broadcasts"])
@@ -274,52 +425,38 @@ app.include_router(quality.router, prefix=f"{settings.API_V1_STR}/quality", tags
 app.include_router(alarms.router, prefix=f"{settings.API_V1_STR}/alarms", tags=["alarms"])
 app.include_router(cpcb.router, prefix=f"{settings.API_V1_STR}/cpcb", tags=["cpcb"])
 app.include_router(ota.router, prefix=f"{settings.API_V1_STR}/ota", tags=["ota"])
-
-# Serve frontend build if it exists
-_base = os.path.dirname(__file__)
-frontend_path = os.path.abspath(os.path.join(_base, "..", "..", "frontend", "dist"))
-if not os.path.exists(frontend_path):
-    frontend_path = os.path.abspath(os.path.join(_base, "..", "frontend", "dist"))
-if os.path.exists(frontend_path):
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_path, "assets")), name="assets")
-    
-    @app.get("/")
-    async def serve_frontend_root():
-        return FileResponse(os.path.join(frontend_path, "index.html"))
-        
-    @app.get("/{full_path:path}")
-    async def serve_frontend(full_path: str):
-        # Allow API requests to pass through (this catch-all must be defined AFTER API routers)
-        if full_path.startswith("api/"):
-            return JSONResponse({"detail": "Not Found"}, status_code=404)
-            
-        file_path = os.path.join(frontend_path, full_path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(frontend_path, "index.html"))
+app.include_router(stations.router, prefix=f"{settings.API_V1_STR}/stations", tags=["stations"])
+from app.api.endpoints import fleet
+app.include_router(fleet.router, prefix=f"{settings.API_V1_STR}/fleet", tags=["fleet"])
 
 # Background heartbeat monitor loop for server
-import asyncio
 from datetime import datetime, timezone, timedelta
 from app.db.database import SessionLocal
 from app.models.core import IndustrySite, Device
 
+_prev_online: set[int] = set()
+
 async def monitor_heartbeats_loop():
+    global _prev_online
     logger.info("Server Heartbeat Monitor loop started")
     while True:
         try:
             db = SessionLocal()
             now = datetime.now(timezone.utc)
             cutoff = now - timedelta(seconds=90)
-            
-            # Find sites with last_sync older than 90 seconds
-            # And update status of all their devices to offline
-            # sites newer than 90 seconds, update to online
+
             sites = db.query(IndustrySite).all()
+            new_online: set[int] = set()
             for site in sites:
                 is_online = site.last_sync is not None and site.last_sync.replace(tzinfo=timezone.utc) >= cutoff
-                status_str = "online" if is_online else "offline"
-                db.query(Device).filter(Device.site_id == site.id).update({"status": status_str})
+                if is_online:
+                    new_online.add(site.id)
+                # Only UPDATE when status actually changed since last check
+                was_online = site.id in _prev_online
+                if is_online != was_online:
+                    status_str = "online" if is_online else "offline"
+                    db.query(Device).filter(Device.site_id == site.id).update({"status": status_str})
+            _prev_online = new_online
             db.commit()
             db.close()
         except Exception as e:

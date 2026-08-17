@@ -8,17 +8,9 @@ uvicorn[standard]>=0.30.0
 # ─── Database ────────────────────────────────────────────────
 sqlalchemy>=2.0.30
 aiosqlite>=0.20.0              # SQLite Async Driver
-asyncpg>=0.29.0                # PostgreSQL Async Driver
-alembic>=1.13.0                # Database migrations
-
-
 # ─── Industrial Protocols ────────────────────────────────────
 pymodbus>=3.6.9                # Modbus TCP + RTU (pure Python)
 pyserial>=3.5                  # RS485 / serial
-pyserial-asyncio>=0.6          # Async serial
-
-# ─── Central Server Comm ─────────────────────────────────────
-gmqtt>=0.6.14                  # Async MQTT Client for Remote Control
 
 # ─── Report Generation ───────────────────────────────────────
 openpyxl>=3.1.2                # Excel reports (pure Python)
@@ -32,14 +24,11 @@ python-dotenv>=1.0.0
 pydantic>=2.10.0               # 2.10+ has Python 3.14 wheels
 pydantic-settings>=2.5.0
 python-multipart>=0.0.9
-aiofiles>=23.2.1
 httpx>=0.27.0
-
 
 # ─── Security ────────────────────────────────────────────────
 python-jose[cryptography]>=3.3.0
 bcrypt>=4.0.0
-slowapi>=0.1.9
 pywebview>=5.1.0
 pyinstaller>=6.11.0
 psutil>=5.9.8

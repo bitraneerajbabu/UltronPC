@@ -1,12 +1,16 @@
 """UltrON — Parameters API"""
 
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import List
+from sqlalchemy import select, delete, func
+from typing import List, Optional
 from app.database import get_db
 from app.models.parameter import Parameter
+from app.models.device import Device
+from app.models.station import Station, StationStatus
+from app.models.telemetry import LiveData, HistoricalData, DataQuality
 from app.schemas.parameter import ParameterCreate, ParameterUpdate, ParameterOut
 from app.services import polling_engine
 from app.core.security import get_current_user, require_admin
@@ -22,9 +26,9 @@ router = APIRouter(
 
 
 @router.get("/", response_model=List[ParameterOut])
-async def list_parameters(device_id: int = None, db: AsyncSession = Depends(get_db)):
+async def list_parameters(db: AsyncSession = Depends(get_db), device_id: Optional[int] = Query(None)):
     query = select(Parameter).order_by(Parameter.display_order, Parameter.id)
-    if device_id:
+    if device_id is not None and isinstance(device_id, int):
         query = query.where(Parameter.device_id == device_id)
     result = await db.execute(query)
     return result.scalars().all()
@@ -49,41 +53,8 @@ async def create_parameter(
         data["display_order"] = max_ord + 1
     param = Parameter(**data)
     db.add(param)
-    await db.flush()
-
-    # Sync description to all parameters in the same device if description is set
-    if param.description:
-        from sqlalchemy import update as sa_update
-        await db.execute(
-            sa_update(Parameter)
-            .where(Parameter.device_id == param.device_id)
-            .values(description=param.description)
-        )
-        await db.flush()
-
     await db.commit()
     await db.refresh(param)
-
-    # Auto-enable parameter mapping for all existing push servers
-    from app.models.server_config import ServerConfig, ServerParameterMapping
-    servers_res = await db.execute(select(ServerConfig))
-    servers = servers_res.scalars().all()
-    for srv in servers:
-        mapping = ServerParameterMapping(
-            server_id=srv.id,
-            parameter_id=param.id,
-            is_active=True,
-            api_vname=param.tag_name,
-            api_unit=param.unit or "",
-            api_id="",
-            api_name="",
-            api_password="",
-            cpcb_station_name="",
-            cpcb_parameter=param.name
-        )
-        db.add(mapping)
-    await db.flush()
-    await db.commit()
 
     background_tasks.add_task(polling_engine.reload_device, param.device_id)
     return param
@@ -152,6 +123,10 @@ async def delete_parameter(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
+    from app.models.device import Device
+    from app.models.station import Station
+    from sqlalchemy import func
+
     result = await db.execute(select(Parameter).where(Parameter.id == param_id))
     param = result.scalar_one_or_none()
     if not param:
@@ -159,7 +134,26 @@ async def delete_parameter(
     device_id = param.device_id
     await db.delete(param)
     await db.commit()
-    background_tasks.add_task(polling_engine.reload_device, device_id)
+
+    # Clean up device if it has no remaining parameters
+    rem_params = await db.execute(select(func.count(Parameter.id)).where(Parameter.device_id == device_id))
+    if (rem_params.scalar() or 0) == 0:
+        dev_res = await db.execute(select(Device).where(Device.id == device_id))
+        dev = dev_res.scalar_one_or_none()
+        if dev:
+            station_id = dev.station_id
+            await db.delete(dev)
+            await db.commit()
+            # Clean up station if it has no remaining devices
+            rem_devs = await db.execute(select(func.count(Device.id)).where(Device.station_id == station_id))
+            if (rem_devs.scalar() or 0) == 0:
+                st_res = await db.execute(select(Station).where(Station.id == station_id))
+                st = st_res.scalar_one_or_none()
+                if st:
+                    await db.delete(st)
+                    await db.commit()
+
+    background_tasks.add_task(polling_engine.reload_all)
 
 
 @router.post("/{param_id}/test-read", dependencies=[Depends(require_admin)])
@@ -335,6 +329,53 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
             else:
                 value, quality = None, "E"
                 
+        elif protocol == "serial_ascii":
+            # RS232/ASCII: reuse the polling engine's shared reader for this device.
+            # Windows serial ports are exclusive — opening a second connection
+            # causes PermissionError (Access Denied) → quality 'E'.
+            from app.services import polling_engine as _pe
+            shared_reader = _pe._serial_ascii.get(device.id)
+            if shared_reader is None:
+                # Port not yet opened by the polling engine — create a temporary one
+                from app.services.serial_ascii import SerialASCIIReader
+                shared_reader = SerialASCIIReader(
+                    port=target_serial_port or device.serial_port or "COM1",
+                    baudrate=target_baud_rate or 9600,
+                    data_bits=target_data_bits or 8,
+                    parity=target_parity or "N",
+                    stop_bits=target_stop_bits or 1,
+                    timeout=min(device.timeout or 3, 5),
+                    command_format=device.command_format or "ascii",
+                    request_command=device.request_command or "",
+                    response_delimiter=device.response_delimiter or "newline",
+                )
+                _owned_reader = True
+            else:
+                _owned_reader = False
+            param_dict = {
+                "id": param.id,
+                "tag_name": param.tag_name,
+                "register_address": param.register_address,
+                "data_type": param.data_type.value if hasattr(param.data_type, "value") else str(param.data_type),
+                "scale_factor": param.scale_factor,
+                "offset": param.offset,
+                "parse_method": param.parse_method or "csv_col",
+                "parse_config": param.parse_config,
+                "serial_port": target_serial_port or device.serial_port,
+                "baud_rate": target_baud_rate or device.baud_rate,
+                "data_bits": target_data_bits or device.data_bits,
+                "parity": target_parity or device.parity,
+                "stop_bits": target_stop_bits or device.stop_bits,
+            }
+            res = await shared_reader.poll_parameters([param_dict])
+            if _owned_reader:
+                await shared_reader.close()
+            if res and len(res) > 0:
+                value = res[0]["value"]
+                quality = res[0]["quality"]
+            else:
+                value, quality = None, "E"
+
         else:
             return {
                 "success": False,
@@ -351,6 +392,14 @@ async def test_parameter_read(param_id: int, db: AsyncSession = Depends(get_db))
             value = round(value, 2)
             
         if quality in ("U", "O"):
+            now = datetime.now(timezone.utc)
+            await db.execute(delete(LiveData).where(LiveData.parameter_id == param.id))
+            db.add(LiveData(parameter_id=param.id, timestamp=now, value=value, raw_value=raw_value, quality=quality, source="test"))
+            db.add(HistoricalData(parameter_id=param.id, timestamp=now, value=value, raw_value=raw_value, quality=quality, source="test"))
+            await db.execute(Device.__table__.update().where(Device.id == device.id).values(status="online", last_poll=now))
+            if device.station_id:
+                await db.execute(Station.__table__.update().where(Station.id == device.station_id).values(status=StationStatus.online, last_seen=now))
+            await db.commit()
             return {
                 "success": True,
                 "value": value,

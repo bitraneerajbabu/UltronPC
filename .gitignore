@@ -29,6 +29,10 @@ github_token.txt
 secret.key
 secret.salt
 
+# Alembic migrations (unused — schema evolves in database.py)
+alembic/
+alembic.ini
+
 # Runtime output logs
 ultron_stdout.txt
 ultron_stderr.txt
@@ -40,4 +44,32 @@ out.txt
 *.appdata
 
 # Token blacklist (persisted across restarts)
-.token_blacklist
+.token_blacklist
+
+# Runtime directories (created on first run)
+backups/
+reports/
+uploads/
+client_lock.json
+
+# Embedded WebView browser profile (runtime cache — never commit)
+webview_data/
+
+# Frontend boilerplate assets
+react.svg
+vite.svg
+hero.png
+# Agent workspace.agents/
+
+# Binary bloat — never commit EXEs
+*.exe
+server/backend/downloads/
+
+# Credential-bearing scratch/debug scripts — never commit
+debug_*.py
+test_*_final.py
+reset_*.py
+setup_*_config.py
+update_hash.py
+
+

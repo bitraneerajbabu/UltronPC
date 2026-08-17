@@ -1,0 +1,14 @@
+# RajAPI - UltrON Industrial Monitoring Platform
+
+RajAPI is the central server and fleet management dashboard for UltrON, an Industrial IoT monitoring platform built by Sunshine Technologies. 
+
+## About UltrON
+UltrON provides real-time telemetry, CPCB compliance reporting, and alarm management for industrial sites. Each site runs its own UltrON Edge instance, which communicates with RajAPI for centralized monitoring, OTA updates, and AMC license management.
+
+## Resources
+- **Website**: https://rajapi.com
+- **Company**: Sunshine Technologies
+- **Developer**: Neeraj
+
+## Access
+The central dashboard is restricted to administrators. Field engineers and clients interact with the platform via their local Edge installations.

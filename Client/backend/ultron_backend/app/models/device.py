@@ -18,12 +18,12 @@ class DeviceType(str, enum.Enum):
 
 
 class DeviceProtocol(str, enum.Enum):
-    modbus_tcp = "modbus_tcp"
-    modbus_rtu = "modbus_rtu"
-    tcp_custom = "tcp_custom"
-    udp_custom = "udp_custom"
-    csv = "csv"
-    opc_ua = "opc_ua"
+    modbus_tcp   = "modbus_tcp"
+    modbus_rtu   = "modbus_rtu"
+    tcp_custom   = "tcp_custom"
+    udp_custom   = "udp_custom"
+    csv          = "csv"
+    serial_ascii = "serial_ascii"
 
 
 class Device(Base):
@@ -34,13 +34,9 @@ class Device(Base):
 
     name = Column(String(120), nullable=False, index=True)
     device_type = Column(SAEnum(DeviceType), default=DeviceType.ANALYZER)
-    manufacturer = Column(String(100))
-    model_number = Column(String(100))
-    serial_number = Column(String(100))
-    firmware_version = Column(String(50))
 
     # Protocol (can override station-level)
-    protocol = Column(SAEnum(DeviceProtocol), default=DeviceProtocol.modbus_tcp)
+    protocol = Column(SAEnum(DeviceProtocol, create_constraint=False), default=DeviceProtocol.modbus_tcp)
     host = Column(String(100))           # override station host
     port = Column(Integer)               # override station port
     slave_id = Column(Integer, default=1)  # Modbus slave / unit ID
@@ -62,6 +58,10 @@ class Device(Base):
     # TCP Custom-specific
     request_hex = Column(String(500), nullable=True)     # hex bytes to send before each read (e.g. "02 4D 31 30 34 30 34 37 43 03")
     response_delimiter = Column(String(20), default="newline")  # "newline", "etx", "length"
+
+    # Serial ASCII-specific
+    command_format  = Column(String(10), nullable=True)  # "ascii" | "hex" | "auto"
+    request_command = Column(Text, nullable=True)         # command string (ASCII with <CR> tokens, or hex bytes)
 
     # Polling
     poll_interval = Column(Integer, default=5)    # seconds

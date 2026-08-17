@@ -1,12 +1,11 @@
-import re
-from fastapi import APIRouter, Depends, HTTPException, Header, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from app.db.database import get_db
 from app.models.core import IndustrySite, PendingCommand
-from app.api.deps import AuthContext, get_auth_context
+from app.api.deps import AuthContext, get_auth_context, find_site_by_key
 from app.core.config import settings
 
 router = APIRouter()
@@ -17,29 +16,12 @@ class CommandRequest(BaseModel):
     action: str
 
 
-def _slugify(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
-
-
-def _find_site(db: Session, station_id: Optional[str]):
-    if not station_id:
-        return None
-    site = db.query(IndustrySite).filter(IndustrySite.api_key == station_id).first()
-    if site:
-        return site
-    slug = _slugify(station_id)
-    for s in db.query(IndustrySite).all():
-        if _slugify(s.name) == slug:
-            return s
-    return None
-
-
 @router.get("/supported")
 def get_supported_commands():
     return {"commands": sorted(SUPPORTED_COMMANDS)}
 
 @router.post("/sites/{site_id}/command")
-def send_command(site_id: int, payload: CommandRequest, request: Request, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
+def send_command(site_id: int, payload: CommandRequest, db: Session = Depends(get_db), auth: AuthContext = Depends(get_auth_context)):
     if not auth.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     site = db.query(IndustrySite).filter(IndustrySite.id == site_id).first()
@@ -55,8 +37,6 @@ def send_command(site_id: int, payload: CommandRequest, request: Request, db: Se
         station_id=site.api_key,
         action=payload.action,
         status="pending",
-        initiated_by=auth.auth_key[:16] + "..." if len(auth.auth_key) > 16 else auth.auth_key,
-        initiated_ip=request.client.host if request.client else "unknown",
     )
     db.add(cmd)
     db.commit()
@@ -65,13 +45,12 @@ def send_command(site_id: int, payload: CommandRequest, request: Request, db: Se
 
 @router.get("/pending")
 def get_pending_commands(
-    station_id: Optional[str] = Query(default=None),  # legacy fallback — prefer X-Station-Id header
     x_station_id: Optional[str] = Header(default=None, alias="X-Station-Id"),
     x_admin_key: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ):
-    effective_station_id = x_station_id or station_id
-    site = _find_site(db, effective_station_id)
+    effective_station_id = x_station_id
+    site = find_site_by_key(db, effective_station_id)
     if not site and x_admin_key != settings.ADMIN_KEY:
         raise HTTPException(status_code=403, detail="Invalid station or admin key")
 
@@ -95,7 +74,6 @@ def get_pending_commands(
 @router.post("/{command_id}/ack")
 def ack_command(
     command_id: int,
-    station_id: Optional[str] = Query(default=None),  # legacy fallback — prefer X-Station-Id header
     x_station_id: Optional[str] = Header(default=None, alias="X-Station-Id"),
     fail: Optional[bool] = Query(False),
     x_admin_key: Optional[str] = Header(default=None),
@@ -107,8 +85,8 @@ def ack_command(
     if x_admin_key == settings.ADMIN_KEY:
         eff_sid = cmd.station_id
     else:
-        eff_sid = x_station_id or station_id
-    site = _find_site(db, eff_sid) if eff_sid else None
+        eff_sid = x_station_id
+    site = find_site_by_key(db, eff_sid) if eff_sid else None
     resolved_key = site.api_key if site else eff_sid
     if not resolved_key or cmd.station_id != resolved_key:
             raise HTTPException(status_code=403, detail="Invalid admin key or station_id")

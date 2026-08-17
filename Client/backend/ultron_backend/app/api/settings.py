@@ -1,7 +1,7 @@
 """UltrON — Settings API (app-level configuration, user management, DB utilities)"""
 
 from fastapi import APIRouter, Depends, HTTPException
-from app.core.security import get_current_user, require_admin, hash_password
+from app.core.security import get_current_user, require_admin, require_super_admin, hash_password
 from app.models.user import User
 from app.models.plant_settings import PlantSettings
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,9 +16,8 @@ from app.models.parameter import Parameter, RegisterType, DataType, ByteOrder, A
 from app.models.telemetry import LiveData, HistoricalData, Averages, Alarm, SystemLog, PendingUpload
 from app.config import APP_DIR, settings
 from app.core.logger import get_logger, get_audit_logger
+import httpx
 import socket
-import asyncio
-
 log = get_logger("ultron.settings")
 audit = get_audit_logger()
 router = APIRouter(
@@ -56,24 +55,39 @@ async def _get_lan_ip() -> str:
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
         s.close()
-        return ip
+        if ip and not ip.startswith("127."):
+            return ip
     except Exception:
-        try:
-            return socket.gethostbyname(socket.gethostname())
-        except Exception:
-            return "127.0.0.1"
+        pass
+        
+    try:
+        import psutil
+        for interface, snics in psutil.net_if_addrs().items():
+            iname = interface.lower()
+            if any(x in iname for x in ["loopback", "wsl", "vmware", "vbox", "virtual", "docker", "vpn", "tailscale", "zerotier"]):
+                continue
+            for snic in snics:
+                if snic.family == socket.AF_INET and not snic.address.startswith("127."):
+                    if not snic.address.startswith("169.254."):
+                        return snic.address
+    except Exception:
+        pass
+        
+    try:
+        fallback = socket.gethostbyname(socket.gethostname())
+        if fallback and not fallback.startswith("127.") and not fallback.startswith("169.254."):
+            return fallback
+    except Exception:
+        pass
+        
+    return "127.0.0.1"
 
 
 async def _check_internet() -> bool:
     try:
-        import urllib.request
-        from app.core.ssl_utils import urlopen_with_ssl_fallback
-        req = urllib.request.Request(
-            "https://clients3.google.com/generate_204",
-            method="GET",
-        )
-        with urlopen_with_ssl_fallback(req, timeout=5) as resp:
-            return resp.status == 204
+        async with httpx.AsyncClient(verify=True, timeout=5) as client:
+            resp = await client.get("https://clients3.google.com/generate_204")
+            return resp.status_code == 204
     except Exception:
         return False
 
@@ -91,7 +105,7 @@ async def network_info():
 
 
 # ─── Reset / Clear Telemetry Data ─────────────────────────────────────────────
-@router.post("/reset-telemetry", dependencies=[Depends(require_admin)])
+@router.post("/reset-telemetry", dependencies=[Depends(require_super_admin)])
 async def reset_telemetry(db: AsyncSession = Depends(get_db)):
     """
     Wipe all telemetry data (live_data, historical_data, averages, alarms)
@@ -136,20 +150,12 @@ async def factory_reset_core(*, restart: bool = True):
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
-    # 3. Re-seed default admin user (dropped with all other tables)
+    # 3. Re-seed default admin and super-admin users (dropped with all other tables)
+    from app.database_initializer import seed_default_admin
     async with AsyncSessionLocal() as seed_db:
-        admin = User(
-            username=settings.ADMIN_USERNAME,
-            hashed_password=hash_password(settings.ADMIN_PASSWORD),
-            role="admin",
-            full_name="System Administrator",
-            is_active=True,
-            created_by="system",
-        )
-        seed_db.add(admin)
-        await seed_db.commit()
+        await seed_default_admin(seed_db)
 
-    log.warning("Full database reset complete — all tables recreated, admin re-seeded")
+    log.warning("Full database reset complete — all tables recreated, default admin accounts re-seeded")
 
     # 4. Auto-restart the process so background jobs start fresh
     if restart:
@@ -176,7 +182,7 @@ async def factory_reset_core(*, restart: bool = True):
             log.error(f"Restart setup failed: {e}")
 
 
-@router.post("/reset-all", dependencies=[Depends(require_admin)])
+@router.post("/reset-all", dependencies=[Depends(require_super_admin)])
 async def reset_all_data():
     """
     Drop and recreate all tables — full factory reset.
@@ -221,28 +227,60 @@ async def polling_status():
 
 
 # ─── Restart UltrON Application ────────────────────────────────────────────────
-@router.post("/restart-app", dependencies=[Depends(require_admin)])
+@router.post("/restart-app", dependencies=[Depends(require_super_admin)])
 async def restart_app():
     """
     Restart the UltrON desktop application (frozen PyInstaller exe only).
-    Spawns a new process in the background, then exits the current one.
+    Handles swapping UltrON_new.exe -> UltrON.exe if a software update is pending,
+    then cleanly restarts the application without file-lock crashes.
     """
-    import sys, os, subprocess, threading
+    import sys, os, subprocess, threading, tempfile
 
     if not getattr(sys, "frozen", False):
         raise HTTPException(status_code=400, detail="Restart is only supported in desktop (frozen) mode")
 
+    current_exe = os.path.abspath(sys.executable)
+    exe_dir = os.path.dirname(current_exe)
+    exe_name = os.path.basename(current_exe)
+    new_exe = os.path.join(exe_dir, "UltrON_new.exe")
+    old_exe = os.path.join(exe_dir, "UltrON_old.exe")
+    flag_path = os.path.join(exe_dir, "update_pending.flag")
+
     def _do_restart():
         import time
-        time.sleep(2)
+        # Write helper updater batch script into temp dir
+        bat_path = os.path.join(tempfile.gettempdir(), f"ultron_updater_{os.getpid()}.bat")
+        bat_content = f"""@echo off
+timeout /t 2 /nobreak >nul
+if exist "{new_exe}" (
+    :retry_swap
+    if exist "{old_exe}" del /f /q "{old_exe}" >nul 2>&1
+    move /y "{current_exe}" "{old_exe}" >nul 2>&1
+    if errorlevel 1 (
+        timeout /t 1 /nobreak >nul
+        goto retry_swap
+    )
+    move /y "{new_exe}" "{current_exe}" >nul 2>&1
+    if exist "{flag_path}" del /f /q "{flag_path}" >nul 2>&1
+)
+start "" "{current_exe}"
+del "%~f0" >nul 2>&1
+exit
+"""
         try:
-            startup_info = None
-            if sys.platform == "win32":
-                startup_info = subprocess.STARTUPINFO()
-                startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            subprocess.Popen([sys.executable], startupinfo=startup_info, close_fds=True)
+            with open(bat_path, "w", encoding="utf-8") as f:
+                f.write(bat_content)
+            
+            flags = 0x08000000 | 0x00000008  # CREATE_NO_WINDOW | DETACHED_PROCESS
+            subprocess.Popen(["cmd.exe", "/c", bat_path], creationflags=flags, close_fds=True)
         except Exception as e:
-            log.error(f"Restart spawn failed: {e}")
+            log.error(f"Restart batch launch failed: {e}")
+            try:
+                subprocess.Popen([current_exe], close_fds=True)
+            except Exception as ex2:
+                log.error(f"Direct restart failed: {ex2}")
+        
+        time.sleep(0.5)
         os._exit(0)
 
     threading.Thread(target=_do_restart, daemon=True).start()
@@ -356,6 +394,61 @@ async def save_general_settings(payload: GeneralSettingsSchema):
         raise HTTPException(status_code=500, detail=f"Failed to save general settings: {str(e)}")
 
 
+# ─── RajAPI Global Settings ───────────────────────────────────────────────────
+class RajapiSettingsSchema(BaseModel):
+    rajapi_api_key: str
+    rajapi_station_id: str
+    rajapi_sync_enabled: bool = True
+
+@router.get("/rajapi")
+async def get_rajapi_settings():
+    return {
+        "rajapi_api_key": settings.RAJAPI_API_KEY,
+        "rajapi_station_id": settings.RAJAPI_STATION_ID,
+        "rajapi_sync_enabled": settings.RAJAPI_SYNC_ENABLED,
+    }
+
+@router.post("/rajapi", dependencies=[Depends(require_super_admin)])
+async def save_rajapi_settings(payload: RajapiSettingsSchema):
+    try:
+        # Update settings singleton dynamically
+        settings.RAJAPI_API_KEY = payload.rajapi_api_key
+        settings.RAJAPI_STATION_ID = payload.rajapi_station_id
+        settings.RAJAPI_SYNC_ENABLED = payload.rajapi_sync_enabled
+        
+        # Write directly to .env
+        def _write_env_var(key: str, val: str):
+            env_path = APP_DIR / ".env"
+            lines = []
+            if env_path.is_file():
+                with open(env_path, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+            
+            found = False
+            for idx, line in enumerate(lines):
+                if line.strip().startswith(f"{key}="):
+                    lines[idx] = f"{key}={val}\n"
+                    found = True
+                    break
+            if not found:
+                if lines and not lines[-1].endswith("\n"):
+                    lines[-1] += "\n"
+                lines.append(f"{key}={val}\n")
+                
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+
+        _write_env_var("RAJAPI_API_KEY", payload.rajapi_api_key)
+        _write_env_var("RAJAPI_STATION_ID", payload.rajapi_station_id)
+        _write_env_var("RAJAPI_SYNC_ENABLED", "true" if payload.rajapi_sync_enabled else "false")
+        
+        audit.info("RajAPI settings updated via /settings/rajapi")
+        return {"success": True}
+    except Exception as e:
+        log.error(f"Error saving RajAPI settings: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save RajAPI settings: {str(e)}")
+
+
 # ─── Push Engine Status ────────────────────────────────────────────────────────
 @router.get("/push-status")
 async def push_engine_status():
@@ -378,24 +471,16 @@ async def check_firmware():
     Query the GitHub Releases API to find the latest UltrON release.
     Returns version, release notes, download URL, and whether an update is available.
     """
-    import urllib.request
-    import json as _json
-    import ssl
-
     current_version = settings.APP_VERSION
 
     try:
-        from app.core.ssl_utils import urlopen_with_ssl_fallback
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-        req = urllib.request.Request(
-            url,
-            headers={
-                "User-Agent": "UltrON-FirmwareChecker/1.0",
-                "Accept": "application/vnd.github.v3+json",
-            }
-        )
-        with urlopen_with_ssl_fallback(req, timeout=10) as resp:
-            data = _json.loads(resp.read().decode("utf-8"))
+        async with httpx.AsyncClient(verify=True, timeout=10) as client:
+            resp = await client.get(
+                f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
+                headers={"User-Agent": "UltrON-FirmwareChecker/1.0", "Accept": "application/vnd.github.v3+json"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
         latest_tag = data.get("tag_name", "").lstrip("v")
         release_name = data.get("name", latest_tag)
@@ -449,7 +534,7 @@ async def check_firmware():
 
 
 # ─── Trigger CPCB File Write Now ─────────────────────────────────────────────
-@router.post("/trigger-cpcb", dependencies=[Depends(require_admin)])
+@router.post("/trigger-cpcb", dependencies=[Depends(require_super_admin)])
 async def trigger_cpcb_now():
     """
     Immediately run the CPCB flat-file write for all active CPCB/both servers.
@@ -477,7 +562,7 @@ _fw_download_state: dict = {
 }
 
 
-def _do_firmware_download(custom_url=None):
+def _do_firmware_download(custom_url: str | None = None) -> None:
     """Run in a background thread: download UltrON.exe from GitHub or a custom URL."""
     global _fw_download_state
     import urllib.request
@@ -490,6 +575,10 @@ def _do_firmware_download(custom_url=None):
     try:
         from app.core.ssl_utils import urlopen_with_ssl_fallback
 
+        current_exe_name = "UltrON.exe"
+        if getattr(sys, "frozen", False):
+            current_exe_name = os.path.basename(sys.executable)
+
         if custom_url:
             download_url = custom_url
             tag_name = "custom"
@@ -500,10 +589,6 @@ def _do_firmware_download(custom_url=None):
             req = urllib.request.Request(url, headers={"User-Agent": "UltrON-Updater/1.0", "Accept": "application/vnd.github.v3+json"})
             with urlopen_with_ssl_fallback(req, timeout=15) as resp:
                 data = _json.loads(resp.read().decode("utf-8"))
-
-            current_exe_name = "UltrON.exe"
-            if getattr(sys, "frozen", False):
-                current_exe_name = os.path.basename(sys.executable)
 
             download_url = ""
             for asset in data.get("assets", []):
@@ -572,7 +657,7 @@ def _do_firmware_download(custom_url=None):
         _fw_download_state = {"state": "error", "percent": 0, "message": str(e), "restart_required": False}
 
 
-@router.post("/firmware/download", dependencies=[Depends(require_admin)])
+@router.post("/firmware/download", dependencies=[Depends(require_super_admin)])
 async def start_firmware_download():
     """
     Start a background download of the latest UltrON.exe from GitHub Releases.
@@ -587,7 +672,7 @@ async def start_firmware_download():
     return {"state": "downloading", "percent": 0, "message": "Download started…", "restart_required": False}
 
 
-@router.post("/firmware/download-url", dependencies=[Depends(require_admin)])
+@router.post("/firmware/download-url", dependencies=[Depends(require_super_admin)])
 async def start_firmware_download_url(payload: dict):
     """
     Start a background download of UltrON.exe from a custom URL.
@@ -611,7 +696,7 @@ async def get_firmware_download_status():
     return _fw_download_state
 
 
-@router.post("/firmware/cancel", dependencies=[Depends(require_admin)])
+@router.post("/firmware/cancel", dependencies=[Depends(require_super_admin)])
 async def cancel_firmware_download():
     """Cancel an in-progress firmware download."""
     global _fw_download_state
@@ -620,3 +705,6 @@ async def cancel_firmware_download():
     _fw_download_state["state"] = "cancelled"
     audit.info("Firmware download cancelled by user")
     return {"state": "cancelled", "message": "Download cancelled."}
+
+
+

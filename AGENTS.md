@@ -25,7 +25,7 @@
 - **RajAPI Server Audit (pi@raj.local):** 11 CRITICAL/HIGH findings. No HTTPS, secrets in world-readable .env, PostgreSQL exposed to LAN, API keys in URL query params, weak guessable passwords, dual codebase confusion, uvicorn bound to 0.0.0.0
 
 ## RajAPI Server (pi@raj.local) — Key Details
-- **IP/Host:** raj.local (Raspberry Pi 5, Debian 13, aarch64)
+- **IP/Host:** raj.local (Raspberry Pi 3 B/B+, Raspberry Pi OS Lite 64-bit, 64GB SD Card, aarch64)
 - **Services:** nginx (port 80) → uvicorn (port 8080), PostgreSQL in Docker (port 5432), cloudflared tunnel to rajapi.com
 - **WARNING:** No HTTPS — all traffic plain HTTP. Cloudflare edge has HTTPS, but origin connection is HTTP
 - **Secrets file:** `/home/pi/rajapi_server/backend/.env` (world-readable — FIX: restrict to 600)
@@ -35,11 +35,30 @@
 - **API keys:** Static, stored in DB plaintext. No JWTs.
 - **Login:** Returns `admin_key` in response body (plaintext echo)
 
-## Latest Session (2026-06-30) — Edit Gateway Rule Fixes
-- **APP_VERSION:** `1.0.65` — EXE built at `client/backend/ultron_backend/dist/Ultron_1.0.65.exe` (33.7 MB)
+## Latest Session (2026-08-16) — UltrON v1.1 Official Production Release
+- **APP_VERSION:** `1.1` (Frontend + Backend synced)
+- **Reports & Trends Screen Redesign:**
+  - Standard industrial time-series line chart as default visualization (straight lines, `tension: 0`, genuine telemetry timestamps, zero artificial spline smoothing).
+  - Step mode support for totalizers, discrete/digital states, and counters.
+  - Live summary statistics header (`Current`, `Min`, `Max`, `Avg`) calculated directly from true telemetry values.
+  - Quick time range presets (`1 Hr`, `6 Hr`, `12 Hr`, `1 Day`, `7 Days`, `30 Days`, `Custom`) with instant dynamic updates.
+  - Real communication gap representation (`spanGaps: false`).
+  - Alarm limit threshold reference lines (`H/H`, `High`, `Low`, `L/L`).
+  - Comprehensive export capabilities in PDF, CSV, and Excel.
+- **Orphan Device & Station Auto-Cleanup:**
+  - Deleting parameters/rules automatically purges empty devices and stations to prevent ghost polling loops.
+  - Polling loop synchronization keeps background acquisition strictly 1:1 with active devices.
+
+## Previous Session (2026-07-07) — UltrON v1.0.69 Release & Fixes
+
+## Previous Session (2026-06-30) — Edit Gateway Rule Fixes
 - **Fixed `handleChange` NaN bug in `DevicesScreen.tsx:129-137`:** Number inputs (`scale_factor`, `offset`, etc.) stored raw string value instead of `Number(value)`. `Number("-")` → `NaN` → React renders blank, losing negative sign. Now converts to number only at save time.
 - **Fixed `description` overwrite (`DevicesScreen.tsx:196-207`):** Removed `description: form.station_name` from parameter save payload — no longer corrupts parameter description with station name.
 - **Numeric fields converted on save (`DevicesScreen.tsx:203-208`):** Added explicit `Number()` conversion for 13 numeric fields in `handleSave` payload, with NaN guard.
 - **Device update numeric fields (`DevicesScreen.tsx:157-175`):** Added `toNum()` helper for device-level fields (`slave_id`, `baud_rate`, etc.) to handle string → number conversion with fallback.
 - Fixed `===` → `==` in AppContext (`:607,614`) for `editParameter`/`deleteParameter`
 - Removed hardcoded `host: '192.168.1.101'`/`port: '502'`/`slave_id: '1'` from DEFAULT_PARAM (`:33`)
+
+## Guardrails
+- **Login accounts (2026-08-09):** `Master`/`Ultron123.0` (admin, no server mgmt page) and `SuperMaster`/`Ultron@9493` (admin, server mgmt page). Manually inserted into DB via script — no API path. The old "Ultronpoiu" password is dead; do not restore it.
+- **Role hierarchy (2026-08-13):** `SuperMaster` is the ULTIMATE main admin — full control of everything (user mgmt, Server Management, resets, firmware, restart). `Master` is 2nd in rank with LIMITED usage (devices/params/calibration/logs/reports/settings — NO user mgmt, NO Server Management, NO resets/firmware/restart). `client` login = Dashboard + Reports ONLY (enforced: `App.tsx` allowedScreens + nav roles; calibration/contact removed for client). Backend enforcement: `require_super_admin` (new dep, `User.is_super_admin` column) on users router + settings reset/restart/firmware/rajapi/trigger-cpcb; `require_server_mgmt` on server_config + rajapi + cpcb routers; `require_admin` elsewhere. Frontend: `isSuperAdmin` from login response gates User Management tab + reset/firmware/restart buttons; `allowServerMgmt` gates Server Management nav. Master password locked (DB-only change, `users.py:108`).

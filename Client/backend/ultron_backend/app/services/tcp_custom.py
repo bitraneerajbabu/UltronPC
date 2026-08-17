@@ -16,14 +16,11 @@ log = get_logger("ultron.tcp_custom")
 
 
 def _hex_to_bytes(hex_str: Optional[str]) -> Optional[bytes]:
-    if not hex_str:
-        return None
-    clean = hex_str.strip()
-    if not clean:
+    if not hex_str or not hex_str.strip():
         return None
     try:
-        parts = clean.replace(",", " ").split()
-        return bytes(int(b, 16) for b in parts if b)
+        clean = hex_str.replace(",", " ").replace("0x", "")
+        return bytes.fromhex("".join(clean.split()))
     except Exception as e:
         log.error(f"Failed to parse hex string '{hex_str}': {e}")
         return None
@@ -202,65 +199,26 @@ class TCPCustomReader:
                 await self.close()
                 return None
 
-    async def poll_device(self, device: dict, parameters: list[dict]) -> list[dict]:
+    async def poll_parameters(self, parameters: list[dict]) -> list[dict]:
         """
-        Polls a single device. Re-uses the persistent TCP connection for multiple requests.
+        Send request (if configured), read response, extract each parameter
+        value using its parse method, apply scale/offset.
         """
         import json
-        results = []
-        
-        # Group parameters by destination to minimize connection thrashing (if any overrides)
         groups = {}
         for p in parameters:
-            p_host = p.get("host") or self.host
-            p_port = p.get("port") or self.port
-            
-            # Extract parameter-level request_hex from parse_config
-            req_hex = None
-            try:
-                if p.get("parse_config"):
-                    conf = json.loads(p.get("parse_config"))
-                    req_hex = conf.get("request_hex")
-            except:
-                pass
-                
-            key = (p_host, p_port, req_hex)
+            thost = p.get("host")
+            if thost is None: thost = self.host
+            tport = p.get("port")
+            if tport is None: tport = self.port
+            key = (thost, tport)
             if key not in groups:
                 groups[key] = []
             groups[key].append(p)
 
-        for (thost, tport, req_hex), params in groups.items():
-            try:
-                if not self._reader or not self._writer or self.host != thost or self.port != tport:
-                    self.host = thost
-                    self.port = tport
-                    await self.connect()
-
-                if not self._writer:
-                    for p in params:
-                        p["_value"] = None
-                        p["_quality"] = "E"
-                    results.extend(params)
-                    continue
-
-                custom_bytes = bytes.fromhex(req_hex.replace(" ", "")) if req_hex else self.request_bytes
-                
-                # Send request
-                if custom_bytes:
-                    self._writer.write(custom_bytes)
-                    await self._writer.drain()
-                    
-                raw_response = await _read_until_delimiter(
-                    self._reader, self.response_delimiter, self.timeout
-                )
-                if raw_response:
-                    raw_response = raw_response.decode("utf-8", errors="ignore").strip()
-                else:
-                    await self.close()
-            except Exception as e:
-                log.error(f"TCP poll error for {thost}:{tport}: {e}")
-                raw_response = None
-                await self.close()
+        results = []
+        for (thost, tport), params in groups.items():
+            raw_response = await self.send_request(target_host=thost, target_port=tport)
 
             for p in params:
                 parse_method = p.get("parse_method", "csv_col")
@@ -294,43 +252,4 @@ class TCPCustomReader:
                 })
         return results
 
-    async def read_line(self) -> Optional[str]:
-        """
-        Read one line from the TCP stream and return as decoded string.
-        Kept for backward compatibility.
-        """
-        if not await self._ensure_connected():
-            return None
-        try:
-            line = await asyncio.wait_for(
-                self._reader.readline(),
-                timeout=self.timeout,
-            )
-            if not line:
-                await self.close()
-                return None
-            return line.decode("utf-8", errors="ignore").strip()
-        except asyncio.TimeoutError:
-            log.warning(f"TCP readline timeout → {self.host}:{self.port}")
-            await self.close()
-            return None
-        except Exception as e:
-            log.error(f"TCP readline error ({self.host}:{self.port}): {e}")
-            await self.close()
-            return None
 
-    async def read_csv_line(self) -> Optional[dict]:
-        """
-        Read one CSV line from the TCP stream and return as {field_index: value}.
-        Used for CSV-over-TCP instruments.
-        """
-        decoded = await self.read_line()
-        if not decoded:
-            return None
-        try:
-            reader = csv.reader(io.StringIO(decoded))
-            fields = next(reader, [])
-            return {i: v.strip() for i, v in enumerate(fields)}
-        except Exception as e:
-            log.error(f"TCP CSV parse error: {e}")
-            return None

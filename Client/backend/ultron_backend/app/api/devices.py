@@ -2,10 +2,10 @@
 
 import asyncio
 import re
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
+from typing import List, Optional
 from app.database import get_db
 from app.models.device import Device, DeviceProtocol
 from app.schemas.device import DeviceCreate, DeviceUpdate, DeviceOut
@@ -32,10 +32,10 @@ def generate_tag_name(name: str) -> str:
 
 
 @router.get("/", response_model=List[DeviceOut])
-async def list_devices(station_id: int = None, db: AsyncSession = Depends(get_db)):
+async def list_devices(db: AsyncSession = Depends(get_db), station_id: Optional[int] = Query(None)):
     from sqlalchemy.orm import selectinload
     query = select(Device).options(selectinload(Device.parameters)).order_by(Device.id)
-    if station_id:
+    if station_id is not None and isinstance(station_id, int):
         query = query.where(Device.station_id == station_id)
     result = await db.execute(query)
     return result.scalars().all()
@@ -52,43 +52,31 @@ async def create_device(payload: DeviceCreate, background_tasks: BackgroundTasks
     from app.models.parameter import Parameter
     from sqlalchemy.orm import selectinload
 
-    # Resolve station
+    # Resolve station — strict lookup, no auto-create
     station_id = payload.station_id
     station_name = payload.station_name
     if station_name and (not station_id or station_id <= 0):
-        # Look up by name
         res = await db.execute(select(Station).where(Station.name == station_name))
         existing_station = res.scalar_one_or_none()
         if existing_station:
             station_id = existing_station.id
         else:
-            # Create new station
-            new_st = Station(
-                name=station_name,
-                station_type="AAQMS",
-                status="offline",
-                is_active=True
+            raise HTTPException(
+                status_code=422,
+                detail=f"Station '{station_name}' not found. Create it first."
             )
-            db.add(new_st)
-            await db.flush()
-            station_id = new_st.id
 
     if not station_id:
-        # Fallback to first station or create default
+        # Fallback to first station
         res = await db.execute(select(Station).order_by(Station.id))
         first_station = res.scalars().first()
         if first_station:
             station_id = first_station.id
         else:
-            new_st = Station(
-                name="Default Station",
-                station_type="AAQMS",
-                status="offline",
-                is_active=True
+            raise HTTPException(
+                status_code=422,
+                detail="No stations exist. Create a station first before adding devices."
             )
-            db.add(new_st)
-            await db.flush()
-            station_id = new_st.id
 
     # Create device
     device_dict = payload.model_dump(exclude={"parameters", "station_name", "station_id"})
@@ -155,7 +143,7 @@ async def update_device(
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
-    # Resolve station
+    # Resolve station — strict lookup, no auto-create/rename
     station_id = payload.station_id
     station_name = payload.station_name
     if station_name and (not station_id or station_id <= 0):
@@ -164,35 +152,10 @@ async def update_device(
         if existing_station:
             station_id = existing_station.id
         else:
-            is_renamed = False
-            if device.station_id:
-                from sqlalchemy import func
-                count_res = await db.execute(
-                    select(func.count(Device.id)).where(
-                        Device.station_id == device.station_id,
-                        Device.id != device.id
-                    )
-                )
-                other_devices = count_res.scalar() or 0
-                if other_devices == 0:
-                    res_st = await db.execute(select(Station).where(Station.id == device.station_id))
-                    curr_station = res_st.scalar_one_or_none()
-                    if curr_station:
-                        curr_station.name = station_name
-                        await db.flush()
-                        station_id = curr_station.id
-                        is_renamed = True
-
-            if not is_renamed:
-                new_st = Station(
-                    name=station_name,
-                    station_type="AAQMS",
-                    status="offline",
-                    is_active=True
-                )
-                db.add(new_st)
-                await db.flush()
-                station_id = new_st.id
+            raise HTTPException(
+                status_code=422,
+                detail=f"Station '{station_name}' not found. Create it first."
+            )
 
     if station_id:
         device.station_id = station_id

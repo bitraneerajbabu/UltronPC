@@ -6,42 +6,43 @@
 
 // ─── Core Palette ─────────────────────────────────────────────────────────────
 export const T = {
-  // Brand / Primary
-  primary:       '#0f766e',
-  primaryLight:  '#14b8a6',
-  primaryGlow:   'rgba(15,118,110,0.35)',
-  primaryBg:     'rgba(15,118,110,0.08)',
-  primaryBorder: 'rgba(15,118,110,0.18)',
+  // Brand / Primary — dark teal industrial
+  primary:       '#0F6E56',
+  primaryAccent: '#1D9E75',
+  primaryGlow:   'rgba(15,110,86,0.25)',
+  primaryBg:     'rgba(15,110,86,0.06)',
+  primaryBorder: 'rgba(15,110,86,0.12)',
 
   // Semantic
-  success:    '#10b981',
-  successBg:  'rgba(16,185,129,0.12)',
-  warning:    '#f59e0b',
-  warningBg:  'rgba(245,158,11,0.12)',
-  danger:     '#ef4444',
-  dangerBg:   'rgba(239,68,68,0.1)',
-  dangerGlow: 'rgba(239,68,68,0.35)',
-  info:       '#38bdf8',
-  infoBg:     'rgba(56,189,248,0.12)',
+  success:    '#1D9E75',
+  successBg:  'rgba(29,158,117,0.12)',
+  warning:    '#EF9F27',
+  warningBg:  'rgba(239,159,39,0.12)',
+  warningDark:'#C07E12',
+  error:      '#E24B4A',
+  errorBg:    'rgba(226,75,74,0.1)',
+  errorGlow:  'rgba(226,75,74,0.35)',
+  info:       '#378ADD',
+  infoBg:     'rgba(55,138,221,0.12)',
 
-  // Neutrals
-  text:        '#0f172a',
+  // Neutrals — light mode, slate hierarchy
+  text:        '#0F172A',
   textMuted:   '#475569',
-  textFaint:   '#94a3b8',
-  textLabel:   '#64748b',
-  border:      'rgba(235, 225, 205, 0.8)',
-  borderSoft:  'rgba(15,118,110,0.1)',
+  textFaint:   '#64748B',
+  textLabel:   '#334155',
+  border:      'rgba(15, 110, 86, 0.15)',
+  borderSoft:  'rgba(15, 110, 86, 0.08)',
 
-  // Glass surfaces
-  glass:       'rgba(253, 250, 242, 0.65)',
-  glassHover:  'rgba(253, 250, 242, 0.82)',
-  glassDark:   'rgba(250, 244, 230, 0.45)',
+  // Surfaces
+  glass:       '#FFFFFF',
+  glassHover:  '#F0FDF4',
+  glassDark:   '#F0FDF4',
 
   // Shadows
-  shadowSm:    '0 2px 8px rgba(15,118,110,0.08)',
-  shadowMd:    '0 4px 16px rgba(15,118,110,0.14)',
-  shadowLg:    '0 8px 32px rgba(15,118,110,0.18)',
-  shadowGlow:  '0 0 20px rgba(15,118,110,0.25)',
+  shadowSm:    '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+  shadowMd:    '0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04)',
+  shadowLg:    '0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04)',
+  shadowGlow:  '0 0 16px rgba(15,110,86,0.12)',
 
   // Radii
   r:           '10px',
@@ -59,8 +60,8 @@ export const INP = {
   width: '100%',
   padding: '7px 10px',
   borderRadius: T.r,
-  border: `1.5px solid ${T.primaryBorder}`,
-  background: 'rgba(253, 250, 242, 0.8)',
+  border: `1px solid ${T.primaryBorder}`,
+  background: 'rgba(225, 245, 238, 0.5)',
   fontSize: '12px',
   fontFamily: T.fontBase,
   color: T.text,
@@ -71,31 +72,23 @@ export const INP = {
 export const SEL = { ...INP, cursor: 'pointer' };
 
 export const inpErr = (hasErr) => hasErr
-  ? { ...INP, borderColor: T.danger, boxShadow: `0 0 0 3px ${T.dangerBg}` }
+  ? { ...INP, borderColor: T.error, boxShadow: `0 0 0 3px ${T.errorBg}` }
   : INP;
 
 // ─── Protocol / Connection configs ────────────────────────────────────────────
 export const PROTO = {
-  modbus_tcp: { label: 'Modbus TCP', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', glow: 'rgba(56,189,248,0.25)', icon: '' },
-  modbus_rtu: { label: 'Modbus RTU', color: '#a78bfa', bg: 'rgba(167,139,250,0.12)', glow: 'rgba(167,139,250,0.25)', icon: '' },
-  tcp_custom: { label: 'TCP Custom', color: '#34d399', bg: 'rgba(52,211,153,0.12)', glow: 'rgba(52,211,153,0.25)', icon: '' },
-  udp_custom: { label: 'UDP Custom', color: '#f472b6', bg: 'rgba(244,114,182,0.12)', glow: 'rgba(244,114,182,0.25)', icon: '' },
+  modbus_tcp: { label: 'Modbus TCP', color: '#378ADD', bg: 'rgba(55,138,221,0.12)', glow: 'rgba(55,138,221,0.25)', icon: '' },
+  modbus_rtu: { label: 'Modbus RTU', color: '#EF9F27', bg: 'rgba(239,159,39,0.12)', glow: 'rgba(239,159,39,0.25)', icon: '' },
+  tcp_custom: { label: 'TCP Custom', color: '#0F6E56', bg: 'rgba(15,110,86,0.12)', glow: 'rgba(15,110,86,0.25)', icon: '' },
+  udp_custom: { label: 'UDP Custom', color: '#E24B4A', bg: 'rgba(226,75,74,0.12)', glow: 'rgba(226,75,74,0.25)', icon: '' },
   csv:        { label: 'CSV Watch',  color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  glow: 'rgba(251,191,36,0.25)',  icon: '' },
-};
-
-export const INPUT_TYPES = {
-  modbus_tcp:     { label: 'Modbus TCP',  color: '#38bdf8', icon: '' },
-  modbus_rtu:     { label: 'Modbus RTU',  color: '#a78bfa', icon: '' },
-  csv:            { label: 'CSV File',    color: '#fbbf24', icon: '' },
-  cumulative:     { label: 'Cumulative',  color: '#34d399', icon: ''  },
-  day_cumulative: { label: 'Day Cumul.', color: '#f472b6', icon: '' },
 };
 
 // ─── Sensor card state ────────────────────────────────────────────────────────
 export const PARAM_STATE = {
-  offline:  { cls: 'sensor-card-offline',  badge: 'OFFLINE',  text: 'OFFLINE',  dot: T.danger   },
-  critical: { cls: 'sensor-card-exceeded', badge: 'CRITICAL', text: 'CRITICAL', dot: '#ea580c'  },
-  warning:  { cls: 'sensor-card-exceeded', badge: 'WARNING',  text: 'EXCEEDED', dot: '#f59e0b'  },
+  offline:  { cls: 'sensor-card-offline',  badge: 'OFFLINE',  text: 'OFFLINE',  dot: T.error   },
+  critical: { cls: 'sensor-card-exceeded', badge: 'CRITICAL', text: 'CRITICAL', dot: '#E24B4A'  },
+  warning:  { cls: 'sensor-card-exceeded', badge: 'WARNING',  text: 'EXCEEDED', dot: '#EF9F27'  },
   good:     { cls: 'sensor-card-good',     badge: 'VALID',    text: 'VALID',    dot: T.primary  },
 };
 
@@ -117,7 +110,7 @@ export const getParamState = (param, livePoint) => {
 // ─── Button presets ───────────────────────────────────────────────────────────
 export const BTN = {
   primary: {
-    background: `linear-gradient(135deg, ${T.primary}, ${T.primaryLight})`,
+    background: `linear-gradient(135deg, ${T.primary}, ${T.primaryAccent})`,
     color: '#fff',
     border: 'none',
     borderRadius: T.r,
@@ -131,16 +124,16 @@ export const BTN = {
   ghost: {
     background: 'transparent',
     color: T.textLabel,
-    border: `1.5px solid ${T.primaryBorder}`,
+    border: `1px solid ${T.primaryBorder}`,
     borderRadius: T.r,
     padding: '7px 14px',
     fontSize: '12px',
     fontWeight: '700',
     cursor: 'pointer',
   },
-  danger: {
-    background: T.dangerBg,
-    color: T.danger,
+  error: {
+    background: T.errorBg,
+    color: T.error,
     border: `1.5px solid rgba(239,68,68,0.2)`,
     borderRadius: T.r,
     padding: '7px 13px',
@@ -161,14 +154,14 @@ export const GLASS_CARD = {
 
 // ─── Parameter category theme colors ──────────────────────────────────────────
 export const PARAM_THEMES = {
-  pm:      { color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.07)', border: 'rgba(139, 92, 246, 0.25)', glow: 'rgba(139, 92, 246, 0.2)' },
-  co:      { color: '#f97316', bg: 'rgba(249, 115, 22, 0.07)',  border: 'rgba(249, 115, 22, 0.25)',  glow: 'rgba(249, 115, 22, 0.2)'  },
-  nox:     { color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.07)',  border: 'rgba(59, 130, 246, 0.25)',  glow: 'rgba(59, 130, 246, 0.2)'  },
-  so2:     { color: '#eab308', bg: 'rgba(234, 179, 8, 0.07)',   border: 'rgba(234, 179, 8, 0.25)',   glow: 'rgba(234, 179, 8, 0.2)'   },
-  o3:      { color: '#06b6d4', bg: 'rgba(6, 182, 212, 0.07)',   border: 'rgba(6, 182, 212, 0.25)',   glow: 'rgba(6, 182, 212, 0.2)'   },
-  ambient: { color: '#10b981', bg: 'rgba(16, 185, 129, 0.07)',  border: 'rgba(16, 185, 129, 0.25)',  glow: 'rgba(16, 185, 129, 0.2)'  },
-  wind:    { color: '#6366f1', bg: 'rgba(99, 102, 241, 0.07)',  border: 'rgba(99, 102, 241, 0.25)',  glow: 'rgba(99, 102, 241, 0.2)'  },
-  default: { color: '#0f766e', bg: 'rgba(15, 118, 110, 0.07)',  border: 'rgba(15, 118, 110, 0.18)',  glow: 'rgba(15, 118, 110, 0.2)'  },
+  pm:      { color: '#0F6E56', bg: 'rgba(15, 110, 86, 0.07)',   border: 'rgba(15, 110, 86, 0.25)',   glow: 'rgba(15, 110, 86, 0.2)'   },
+  co:      { color: '#EF9F27', bg: 'rgba(239, 159, 39, 0.07)',  border: 'rgba(239, 159, 39, 0.25)',  glow: 'rgba(239, 159, 39, 0.2)'  },
+  nox:     { color: '#378ADD', bg: 'rgba(55, 138, 221, 0.07)',  border: 'rgba(55, 138, 221, 0.25)',  glow: 'rgba(55, 138, 221, 0.2)'  },
+  so2:     { color: T.warningDark, bg: 'rgba(192, 126, 18, 0.07)', border: 'rgba(192, 126, 18, 0.25)', glow: 'rgba(192, 126, 18, 0.2)' },
+  o3:      { color: '#378ADD', bg: 'rgba(55, 138, 221, 0.07)',  border: 'rgba(55, 138, 221, 0.25)',  glow: 'rgba(55, 138, 221, 0.2)'  },
+  ambient: { color: '#1D9E75', bg: 'rgba(29, 158, 117, 0.07)',  border: 'rgba(29, 158, 117, 0.25)',  glow: 'rgba(29, 158, 117, 0.2)'  },
+  wind:    { color: '#1D9E75', bg: 'rgba(29, 158, 117, 0.07)',  border: 'rgba(29, 158, 117, 0.25)',  glow: 'rgba(29, 158, 117, 0.2)'  },
+  default: { color: '#0F6E56', bg: 'rgba(15, 110, 86, 0.07)',  border: 'rgba(15, 110, 86, 0.18)',  glow: 'rgba(15, 110, 86, 0.2)'  },
 };
 
 export const getParamTheme = (tagName?: string) => {

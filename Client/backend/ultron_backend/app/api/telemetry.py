@@ -28,12 +28,12 @@ _DASHBOARD_CACHE_TTL = 5.0
 
 @router.get("/", response_model=List[TelemetryPoint])
 async def query_telemetry(
+    db: AsyncSession = Depends(get_db),
     parameter_ids: Optional[str] = Query(None, description="Comma-separated parameter IDs"),
-    start: Optional[datetime] = None,
-    end: Optional[datetime] = None,
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
     avg_type: AverageType = AverageType.raw,
     limit: int = Query(1000, le=50000),
-    db: AsyncSession = Depends(get_db),
 ):
     model = HistoricalData if avg_type == AverageType.raw else Averages
     query = select(model)
@@ -41,60 +41,68 @@ async def query_telemetry(
     if avg_type != AverageType.raw:
         query = query.where(model.avg_type == avg_type)
 
-    if parameter_ids:
+    if parameter_ids and isinstance(parameter_ids, str):
         ids = [int(x) for x in parameter_ids.split(",") if x.strip().isdigit()]
-        query = query.where(model.parameter_id.in_(ids))
+        if ids:
+            query = query.where(model.parameter_id.in_(ids))
 
-    if start:
+    if start and isinstance(start, datetime):
         query = query.where(model.timestamp >= start)
-    if end:
+    if end and isinstance(end, datetime):
         query = query.where(model.timestamp <= end)
 
-    query = query.order_by(model.timestamp.desc()).limit(limit)
+    lim_val = limit if isinstance(limit, int) else 1000
+    query = query.order_by(model.timestamp.desc()).limit(lim_val)
     result = await db.execute(query)
     return result.scalars().all()
 
 
 @router.get("/latest", response_model=List[TelemetryPoint])
 async def latest_values(
-    parameter_ids: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
+    parameter_ids: Optional[str] = Query(None),
 ):
-    """Return the most recent raw reading per parameter."""
-    query = select(LiveData)
-    if parameter_ids:
-        ids = [int(x) for x in parameter_ids.split(",") if x.strip().isdigit()]
-        query = query.where(LiveData.parameter_id.in_(ids))
+    """Return the most recent reading per parameter from LiveCache (or DB fallback)."""
+    from app.services.live_cache import live_cache
+    live_points = live_cache.get_all_points()
 
-    result = await db.execute(query)
-    points = result.scalars().all()
+    filter_ids = None
+    if parameter_ids is not None and isinstance(parameter_ids, str):
+        filter_ids = [int(x) for x in parameter_ids.split(",") if x.strip().isdigit()]
 
-    if not points:
-        return points
+    if live_points:
+        points = []
+        for lp in live_points:
+            if filter_ids and lp.parameter_id not in filter_ids:
+                continue
+            is_online = lp.quality in ("U", "O", "N", "good", "out_of_range") and lp.value is not None
+            qual = lp.quality if is_online else "comms_fail"
+            points.append(TelemetryPoint(
+                parameter_id=lp.parameter_id,
+                value=lp.value if is_online else None,
+                raw_value=lp.raw_value if is_online else None,
+                quality=qual,
+                timestamp=lp.timestamp or datetime.now(timezone.utc),
+            ))
+        if points:
+            return points
 
-    # Single batch query: get last good timestamp for all offline parameters
-    bad_param_ids = [
-        pt.parameter_id for pt in points
-        if pt.quality in (DataQuality.comms_fail, DataQuality.sensor_fail)
+    # Initial boot fallback when LiveCache is empty: return offline states
+    query = select(Parameter).where(Parameter.is_active == True)
+    if filter_ids:
+        query = query.where(Parameter.id.in_(filter_ids))
+    params = (await db.execute(query)).scalars().all()
+    now = datetime.now(timezone.utc)
+    return [
+        TelemetryPoint(
+            parameter_id=p.id,
+            value=None,
+            raw_value=None,
+            quality="comms_fail",
+            timestamp=p.updated_at or p.created_at or now,
+        )
+        for p in params
     ]
-    if bad_param_ids:
-        # Use a correlated subquery to get last good timestamp per parameter
-        latest_good = select(
-            HistoricalData.parameter_id,
-            func.max(HistoricalData.timestamp).label("last_good_ts")
-        ).where(
-            HistoricalData.parameter_id.in_(bad_param_ids),
-            HistoricalData.quality.in_((DataQuality.good, DataQuality.out_of_range, DataQuality.uncertain))
-        ).group_by(HistoricalData.parameter_id)
-
-        good_result = await db.execute(latest_good)
-        good_map = {row.parameter_id: row.last_good_ts for row in good_result.all()}
-
-        for pt in points:
-            if pt.parameter_id in good_map:
-                pt.timestamp = good_map[pt.parameter_id]
-
-    return points
 
 
 @router.get("/dashboard-summary", response_model=DashboardSummary)
@@ -110,24 +118,22 @@ async def dashboard_summary(db: AsyncSession = Depends(get_db)):
     # 1. Station count (single scalar)
     total_stations = (await db.execute(select(func.count(Station.id)))).scalar() or 0
 
-    # 2. Parameter counts — online vs offline from LiveData in a single query
+    # 2. Parameter counts — online vs offline from LiveCache
+    from app.services.live_cache import live_cache
+    live_points = live_cache.get_all_points()
+
     param_count = (await db.execute(
         select(func.count(Parameter.id)).where(Parameter.is_active == True)
     )).scalar() or 0
 
     online_params = 0
-    if param_count > 0:
-        # Single aggregated query: count online/offline params via CASE
-        online_result = await db.execute(
-            select(func.count(LiveData.parameter_id)).where(
-                LiveData.quality.in_(("U", "O", "N"))
-            )
+    if live_points:
+        online_params = sum(
+            1 for pt in live_points 
+            if pt.quality in ("U", "O", "N", "good", "out_of_range") and pt.value is not None
         )
-        online_params = online_result.scalar() or 0
 
-    offline_params = param_count - online_params
-    if offline_params < 0:
-        offline_params = 0
+    offline_params = max(0, param_count - online_params)
 
     # 3. Active alarms (single scalar)
     active_alarms = (await db.execute(
@@ -141,15 +147,15 @@ async def dashboard_summary(db: AsyncSession = Depends(get_db)):
             func.count(HistoricalData.parameter_id).label("total"),
             func.sum(
                 case(
-                    (HistoricalData.quality.in_(("U", "O", "N")), 1),
+                    (HistoricalData.quality.in_(("U", "O", "N", "good")), 1),
                     else_=0
                 )
             ).label("good"),
         ).where(HistoricalData.timestamp >= one_hour_ago)
     )
     row = quality_result.one_or_none()
-    total_q = row.total or 1
-    good_q = row.good or 0
+    total_q = (row.total if row else 0) or 1
+    good_q = (row.good if row else 0) or 0
     quality_pct = round((float(good_q) / float(total_q)) * 100, 1)
 
     result = DashboardSummary(
@@ -166,5 +172,12 @@ async def dashboard_summary(db: AsyncSession = Depends(get_db)):
     _dashboard_cache["data"] = result
     _dashboard_cache["ts"] = now_ts
     return result
+
+
+@router.get("/diagnostics")
+async def get_system_diagnostics():
+    """Return comprehensive system health report, SCADA device states, and metrics."""
+    from app.services.watchdog import watchdog_service
+    return watchdog_service.get_diagnostics()
 
 

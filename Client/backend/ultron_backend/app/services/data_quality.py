@@ -86,9 +86,13 @@ class DataQualityEngine:
 
         return "U"
 
-    def reset(self, parameter_id: int):
-        """Reset frozen-sensor tracking for a parameter (e.g. after maintenance)."""
-        self._state.pop(parameter_id, None)
+    def reset(self, parameter_id: Optional[int] = None):
+        """Reset frozen state for a parameter or all parameters."""
+        if parameter_id is None:
+            self._state.clear()
+        else:
+            self._state.pop(parameter_id, None)
+
 
     def bulk_check(self, readings: list[dict], parameters_meta: dict) -> list[dict]:
         """

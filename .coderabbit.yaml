@@ -1,0 +1,56 @@
+# CodeRabbit AI Configuration
+# Docs: https://docs.coderabbit.ai/getting-started/configure-coderabbit
+
+version: "2"
+language: "en-US"
+
+tone_instructions: |
+  Perform concise, highly targeted senior developer reviews focused on industrial IoT reliability, CPCB regulatory compliance, backend SQLite concurrency, and React 18/TypeScript correctness. Avoid nitpicking formatting unless it violates team conventions.
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  auto_title_placeholder: "@coderabbitai summary"
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+
+  path_filters:
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/ui_dist/**"
+    - "!**/*.min.js"
+    - "!**/*.lock"
+    - "!**/*.svg"
+    - "!**/build/**"
+
+  path_instructions:
+    - path: "client/backend/**/*.py"
+      instructions: |
+        Review Python FastAPI code for:
+        1. CPCB/SPCB regulatory compliance (quality codes: U=Valid, O=Over-range, E=Equipment error, N=No data).
+        2. SQLite write concurrency & deadlock prevention (semaphores, backoff).
+        3. Security & authentication: No hardcoded secrets, input sanitization, path traversal prevention.
+        4. Error handling: Prevent data loss during server/network drops.
+
+    - path: "client/frontend/src/**/*.{ts,tsx}"
+      instructions: |
+        Review React/TypeScript code for:
+        1. Type safety & numeric input conversions (avoid string-to-number NaN bugs).
+        2. Performance: Immediate LCP rendering (no artificial entrance delays for primary elements).
+        3. Optimistic UI mutations with explicit rollback error handling.
+        4. Clean component decoupling & state isolation.
+
+  auto_review:
+    enabled: true
+    ignore_title_keywords:
+      - "WIP"
+      - "draft"
+    drafts: false
+    base_branches:
+      - "main"
+      - "master"
+
+chat:
+  auto_reply: true

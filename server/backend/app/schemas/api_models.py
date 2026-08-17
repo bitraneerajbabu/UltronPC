@@ -1,12 +1,17 @@
-from pydantic import BaseModel, Field
+import uuid
+from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
+
 
 class TelemetryPoint(BaseModel):
     tag_name: str
     value: Optional[float] = None
     quality: str
     timestamp: datetime
+    unit: Optional[str] = ""
+    std_limit: Optional[float] = None  # CPCB standard limit (client alarm_high)
+    station_name: Optional[str] = None  # client station name for grouping
 
 class ClientSyncPayload(BaseModel):
     client_id: str
@@ -59,6 +64,8 @@ class LatestTelemetryPoint(BaseModel):
     value: Optional[float] = None
     quality: str
     timestamp: datetime
+    std_limit: Optional[float] = None  # CPCB standard limit
+    station_name: Optional[str] = None  # station grouping label
 
     class Config:
         from_attributes = True
@@ -71,7 +78,7 @@ class BroadcastCreate(BaseModel):
     target_site_id: Optional[int] = None
 
 class BroadcastResponse(BaseModel):
-    id: int
+    id: uuid.UUID
     message: str
     message_type: str
     is_active: bool
@@ -83,15 +90,34 @@ class BroadcastResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class StationCreate(BaseModel):
+    station_id: str
+    username: str
+    category: str
+    station_name: str
+
+class StationUpdate(BaseModel):
+    station_id: Optional[str] = None
+    username: Optional[str] = None
+    category: Optional[str] = None
+    station_name: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class StationResponse(BaseModel):
+    id: int
+    site_id: int
+    station_id: str
+    username: str
+    category: str
+    station_name: str
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class LockUpdate(BaseModel):
     lock_status: str = "unlocked"
     lock_reason: Optional[str] = None
 
-class LockSummary(BaseModel):
-    id: int
-    lock_status: str
-    lock_reason: Optional[str] = None
-    lock_updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True

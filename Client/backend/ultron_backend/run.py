@@ -17,6 +17,10 @@ For active frontend development:
 import sys
 import os
 import shutil
+
+# Make sys.argv[0] absolute immediately to prevent pywebview base_uri/get_app_root chdir bugs
+if sys.argv and sys.argv[0]:
+    sys.argv[0] = os.path.abspath(sys.argv[0])
 import subprocess
 import argparse
 import uvicorn

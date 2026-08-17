@@ -27,6 +27,25 @@ log = get_logger("ultron.api.led")
 router = APIRouter(prefix="/led", tags=["LED Board"])
 
 
+async def _require_auth(auth: Optional[str], db: AsyncSession) -> None:
+    """Shared auth check: static token if configured, else active user username."""
+    if not auth:
+        raise HTTPException(status_code=401, detail="Auth parameter required — use ?auth=username")
+
+    if settings.LED_AUTH_TOKEN:
+        if auth != settings.LED_AUTH_TOKEN:
+            log.warning(f"[LED] Unauthorized access attempt with auth='{auth}'")
+            raise HTTPException(status_code=401, detail="Unauthorized — invalid auth")
+    else:
+        result = await db.execute(
+            select(User).where(User.username == auth, User.is_active == True)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            log.warning(f"[LED] Unauthorized access attempt with auth='{auth}'")
+            raise HTTPException(status_code=401, detail="Unauthorized — invalid username")
+
+
 @router.get(
     "/",
     summary="LED Board Data Feed",
@@ -49,25 +68,7 @@ async def get_led_data(
                Omit to return ALL active LED channels.
     """
     # ── Auth check ────────────────────────────────────────────────
-    if not auth:
-        raise HTTPException(status_code=401, detail="Auth parameter required — use ?auth=username")
-
-    # 1. Check static token from .env first (backward compatible)
-    if settings.LED_AUTH_TOKEN:
-        if auth == settings.LED_AUTH_TOKEN:
-            pass  # valid static token
-        else:
-            log.warning(f"[LED] Unauthorized access attempt with auth='{auth}'")
-            raise HTTPException(status_code=401, detail="Unauthorized — invalid auth")
-    else:
-        # 2. Validate against active user usernames
-        result = await db.execute(
-            select(User).where(User.username == auth, User.is_active == True)
-        )
-        user = result.scalar_one_or_none()
-        if not user:
-            log.warning(f"[LED] Unauthorized access attempt with auth='{auth}'")
-            raise HTTPException(status_code=401, detail="Unauthorized — invalid username")
+    await _require_auth(auth, db)
 
     # ── Parse PCB channel IDs ──────────────────────────────────────
     channel_ids: list[int] = []
@@ -92,11 +93,15 @@ async def get_led_data(
 @router.get(
     "/info",
     summary="LED Endpoint Info",
-    description="Returns the LED endpoint URL and configured channels (no auth required).",
+    description="Returns the LED endpoint URL and configured channels.",
     include_in_schema=True,
 )
-async def get_led_info(db: AsyncSession = Depends(get_db)):
+async def get_led_info(
+    auth: Optional[str] = Query(default=None, description="Username or LED static token"),
+    db: AsyncSession = Depends(get_db),
+):
     """Returns a helpful summary of the LED endpoint URL and active channels."""
+    await _require_auth(auth, db)
     from app.models.server_config import ServerConfig, ServerParameterMapping
     from sqlalchemy.orm import selectinload
 

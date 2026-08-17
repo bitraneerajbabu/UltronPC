@@ -10,7 +10,9 @@ set /p PI_IP="Enter Raspberry Pi IP Address (e.g. 192.168.1.100) or hostname: "
 
 echo.
 echo Deploying updated frontend code to %PI_IP%...
-scp -r "%~dp0server\frontend\dist" pi@%PI_IP%:/home/pi/rajapi_backend/frontend/
+ssh pi@%PI_IP% "mkdir -p /var/www/rajapi"
+scp -r "%~dp0server\frontend\dist\." pi@%PI_IP%:/var/www/rajapi/
+ssh pi@%PI_IP% "sudo chmod -R 755 /var/www/rajapi"
 
 echo.
 echo ===================================================

@@ -18,6 +18,7 @@ router = APIRouter(prefix="/broadcasts", tags=["Broadcasts"])
 
 class BroadcastOut(BaseModel):
     id: int
+    server_id: str | None = None
     message: str
     severity: str
     is_active: bool

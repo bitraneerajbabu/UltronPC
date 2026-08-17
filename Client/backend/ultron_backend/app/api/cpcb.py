@@ -18,13 +18,13 @@ from app.services.cpcb.average_service import compute_15min_averages_for_station
 from app.services.cpcb.export_service import export_station_file, run_cpcb_export
 from app.services.cpcb.backfill_service import run_backfill
 from app.core.logger import get_logger
-from app.core.security import get_current_user, require_admin
+from app.core.security import get_current_user, require_admin, require_server_mgmt
 
 log = get_logger("ultron.api.cpcb")
 router = APIRouter(
     prefix="/cpcb",
     tags=["CPCB Export"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user), Depends(require_server_mgmt)],
 )
 
 
@@ -158,7 +158,7 @@ async def get_config(station_id: int, db: AsyncSession = Depends(get_db)):
     return config
 
 
-@router.post("/config", response_model=StationConfigOut, dependencies=[Depends(require_admin)])
+@router.post("/config", response_model=StationConfigOut, dependencies=[Depends(require_server_mgmt)])
 async def create_config(payload: StationConfigCreate, db: AsyncSession = Depends(get_db)):
     valid, msg = validate_station_name(payload.station_name)
     if not valid:
@@ -175,7 +175,7 @@ async def create_config(payload: StationConfigCreate, db: AsyncSession = Depends
     return config
 
 
-@router.put("/config/{station_id}", response_model=StationConfigOut, dependencies=[Depends(require_admin)])
+@router.put("/config/{station_id}", response_model=StationConfigOut, dependencies=[Depends(require_server_mgmt)])
 async def update_config(station_id: int, payload: StationConfigUpdate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(CPCBStationConfig).where(CPCBStationConfig.station_id == station_id)
@@ -195,7 +195,7 @@ async def update_config(station_id: int, payload: StationConfigUpdate, db: Async
     return config
 
 
-@router.delete("/config/{station_id}", status_code=204, dependencies=[Depends(require_admin)])
+@router.delete("/config/{station_id}", status_code=204, dependencies=[Depends(require_server_mgmt)])
 async def delete_config(station_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(CPCBStationConfig).where(CPCBStationConfig.station_id == station_id)
@@ -214,7 +214,7 @@ async def list_mappings(db: AsyncSession = Depends(get_db)):
     return await get_all_mappings(db)
 
 
-@router.post("/mappings", response_model=MappingOut, dependencies=[Depends(require_admin)])
+@router.post("/mappings", response_model=MappingOut, dependencies=[Depends(require_server_mgmt)])
 async def create_mapping_route(payload: MappingCreate, db: AsyncSession = Depends(get_db)):
     try:
         mapping = await create_mapping(
@@ -227,7 +227,7 @@ async def create_mapping_route(payload: MappingCreate, db: AsyncSession = Depend
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.put("/mappings/{mapping_id}", response_model=MappingOut, dependencies=[Depends(require_admin)])
+@router.put("/mappings/{mapping_id}", response_model=MappingOut, dependencies=[Depends(require_server_mgmt)])
 async def update_mapping_route(mapping_id: int, payload: MappingUpdate, db: AsyncSession = Depends(get_db)):
     try:
         mapping = await update_mapping(db, mapping_id, **payload.model_dump(exclude_unset=True))
@@ -239,7 +239,7 @@ async def update_mapping_route(mapping_id: int, payload: MappingUpdate, db: Asyn
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete("/mappings/{mapping_id}", status_code=204, dependencies=[Depends(require_admin)])
+@router.delete("/mappings/{mapping_id}", status_code=204, dependencies=[Depends(require_server_mgmt)])
 async def delete_mapping_route(mapping_id: int, db: AsyncSession = Depends(get_db)):
     deleted = await delete_mapping(db, mapping_id)
     if not deleted:
@@ -285,7 +285,7 @@ async def get_logs(limit: int = Query(default=100, le=500), db: AsyncSession = D
 
 # ─── Manual Export ─────────────────────────────────────────────────────────────
 
-@router.post("/export", dependencies=[Depends(require_admin)])
+@router.post("/export", dependencies=[Depends(require_server_mgmt)])
 async def trigger_export(db: AsyncSession = Depends(get_db)):
     try:
         result = await run_cpcb_export(db)
@@ -312,7 +312,7 @@ async def _run_backfill_background(station_name: str, start_date: datetime, end_
             log.error(f"Background backfill failed: {e}")
 
 
-@router.post("/backfill", dependencies=[Depends(require_admin)])
+@router.post("/backfill", dependencies=[Depends(require_server_mgmt)])
 async def trigger_backfill(
     payload: BackfillRequest,
     background_tasks: BackgroundTasks,
@@ -356,3 +356,4 @@ async def download_file(station_name: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Export file not found. Run export first.")
     from fastapi.responses import FileResponse
     return FileResponse(file_path, filename=f"{station_name}.txt", media_type="text/csv")
+

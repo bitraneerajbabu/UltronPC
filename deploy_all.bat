@@ -14,15 +14,18 @@ if "%PI_HOST%"=="" set PI_HOST=rajapi.com
 
 echo.
 echo ------ [1/5] Deploying backend Python files ------
-scp "%~dp0server\backend\app\api\endpoints\sites.py" pi@%PI_HOST%:/home/pi/rajapi_backend/app/api/endpoints/sites.py
-scp "%~dp0server\backend\app\api\endpoints\sync.py" pi@%PI_HOST%:/home/pi/rajapi_backend/app/api/endpoints/sync.py
-scp "%~dp0server\backend\app\models\core.py" pi@%PI_HOST%:/home/pi/rajapi_backend/app/models/core.py
-scp "%~dp0server\backend\app\schemas\api_models.py" pi@%PI_HOST%:/home/pi/rajapi_backend/app/schemas/api_models.py
-scp "%~dp0server\backend\migrate_add_last_sync.py" pi@%PI_HOST%:/home/pi/rajapi_backend/migrate_add_last_sync.py
+scp "%~dp0server\backend\app\api\endpoints\sites.py" pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/api/endpoints/sites.py
+scp "%~dp0server\backend\app\api\endpoints\sync.py" pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/api/endpoints/sync.py
+scp "%~dp0server\backend\app\api\endpoints\broadcasts.py" pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/api/endpoints/broadcasts.py
+scp "%~dp0server\backend\app\models\core.py" pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/models/core.py
+scp "%~dp0server\backend\app\schemas\api_models.py" pi@%PI_HOST%:/home/pi/rajapi_server/backend/app/schemas/api_models.py
+scp "%~dp0server\backend\migrate_add_last_sync.py" pi@%PI_HOST%:/home/pi/rajapi_server/backend/migrate_add_last_sync.py
 
 echo.
 echo ------ [2/5] Deploying frontend dist/ ------
-scp -r "%~dp0server\frontend\dist" pi@%PI_HOST%:/home/pi/rajapi_backend/frontend/
+ssh pi@%PI_HOST% "mkdir -p /var/www/rajapi"
+scp -r "%~dp0server\frontend\dist\." pi@%PI_HOST%:/var/www/rajapi/
+ssh pi@%PI_HOST% "sudo chmod -R 755 /var/www/rajapi"
 
 echo.
 echo ------ [3/5] Deploying MQTT broker config ------
@@ -32,7 +35,7 @@ scp "%~dp0rajapi_server\docker-compose.yml" pi@%PI_HOST%:/home/pi/rajapi_backend
 
 echo.
 echo ------ [4/5] Running DB migration + Restarting backend ------
-ssh pi@%PI_HOST% "cd /home/pi/rajapi_backend && python3 migrate_add_last_sync.py; sudo systemctl restart rajapi"
+ssh pi@%PI_HOST% "cd /home/pi/rajapi_server/backend && python3 migrate_add_last_sync.py; sudo systemctl restart rajapi rajapi-python"
 
 echo.
 echo ------ [5/5] Starting MQTT broker (Docker) ------

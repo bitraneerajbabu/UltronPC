@@ -22,18 +22,18 @@ ssh "${PI}" "mkdir -p /var/www/rajapi"
 scp -r "$LOCAL/frontend/dist/." "${PI}:/var/www/rajapi/"
 ssh "${PI}" "sudo chmod -R 755 /var/www/rajapi"
 
-# 3. Restart service using key-based auth + passwordless sudo
-Write-Host "`n[3/4] Restarting rajapi service..." -ForegroundColor Yellow
-ssh "${PI}" "sudo systemctl restart rajapi"
+# 3. Restart services using key-based auth + passwordless sudo
+Write-Host "`n[3/4] Restarting rajapi and rajapi-python services..." -ForegroundColor Yellow
+ssh "${PI}" "sudo systemctl restart rajapi rajapi-python"
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "ERROR: Failed to restart rajapi service. Check SSH key setup." -ForegroundColor Red
+    Write-Host "ERROR: Failed to restart rajapi services. Check SSH key setup." -ForegroundColor Red
     exit 1
 }
 
 # 4. Health check
 Write-Host "`n[4/4] Running health check..." -ForegroundColor Yellow
 Start-Sleep -Seconds 3
-$health = ssh "${PI}" "if curl -sf http://localhost:8000/api/v1/sites/ >/dev/null; then echo 'healthy'; else echo 'failed'; fi"
+$health = ssh "${PI}" "if curl -sf http://localhost:8081/api/v1/sites/ >/dev/null; then echo 'healthy'; else echo 'failed'; fi"
 if ($health -eq 'healthy') {
     Write-Host "API health check: OK" -ForegroundColor Green
 } else {

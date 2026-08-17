@@ -21,26 +21,6 @@ class TelemetryPoint(BaseModel):
         from_attributes = True
 
 
-class TelemetryQuery(BaseModel):
-    parameter_ids: Optional[List[int]] = None
-    start: Optional[datetime] = None
-    end: Optional[datetime] = None
-    avg_type: Optional[AverageType] = AverageType.raw
-    limit: int = 1000
-
-
-class LiveDataPoint(BaseModel):
-    """Used in WebSocket live push."""
-    parameter_id: int
-    tag_name: str
-    station_name: str
-    device_name: str
-    value: Optional[float]
-    raw_value: Optional[float] = None
-    unit: str
-    quality: str
-    timestamp: datetime
-
 
 # ─── Alarm ────────────────────────────────────────────────────────────────────
 class AlarmOut(BaseModel):

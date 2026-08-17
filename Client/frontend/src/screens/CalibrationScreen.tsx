@@ -33,12 +33,12 @@ const tabBtnStyle = (active: boolean): React.CSSProperties => ({
 });
 
 const STAT_COLORS: Record<string, string> = {
-  pending: '#f59e0b', running: '#3b82f6', completed: '#10b981',
-  approved: '#0f766e', rejected: '#ef4444',
+  pending: 'var(--warning)', running: 'var(--info)', completed: 'var(--success)',
+  approved: 'var(--primary-600)', rejected: 'var(--danger)',
 };
 
-export const CalibrationScreen = () => {
-  const { stations, parameters, API_BASE, showToast, authFetch, currentUser } = useContext(AppContext);
+export const CalibrationScreen = React.memo(() => {
+  const { stations, devices, parameters, API_BASE, showToast, authFetch, currentUser } = useContext(AppContext);
 
   const [activeTab, setActiveTab] = useState('jobs');
   const [jobs, setJobs] = useState<any[]>([]);
@@ -73,19 +73,26 @@ export const CalibrationScreen = () => {
     };
   }, []);
 
+  const allStations = useMemo(() => {
+    return stations.filter(st => {
+      return parameters.some(p => {
+        const dev = devices.find(d => String(d.id) === String(p.device_id));
+        return dev && String(dev.station_id) === String(st.id);
+      });
+    });
+  }, [stations, parameters, devices]);
+
   useEffect(() => {
-    if (stations.length && !startStationId) setStartStationId(stations[0].id);
-  }, [stations, startStationId]);
+    if (allStations.length && !startStationId) setStartStationId(String(allStations[0].id));
+  }, [allStations, startStationId]);
 
   const filteredParams = useMemo(() => {
     if (!startStationId) return [];
-    const station = stations.find(s => s.id === Number(startStationId));
-    if (!station) return [];
     return parameters.filter(p => {
-      const stationDeviceIds = stations.filter(s => s.id === Number(startStationId)).map(s => s.id);
-      return stationDeviceIds.includes(p.device_id);
+      const dev = devices.find(d => String(d.id) === String(p.device_id));
+      return dev && String(dev.station_id) === startStationId;
     });
-  }, [parameters, stations, startStationId]);
+  }, [parameters, devices, startStationId]);
 
   const fetchJobs = async () => {
     setJobsLoading(true);
@@ -123,17 +130,44 @@ export const CalibrationScreen = () => {
       const res = await authFetch(`${API_BASE}/calibration/start`, {
         method: 'POST', body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `HTTP ${res.status}`);
+      }
       showToast('Calibration job started successfully.');
       setStartJobName('');
       setActiveTab('jobs');
       fetchJobs();
-    } catch {
-      showToast('Failed to start calibration job.', 'error');
+    } catch (e: any) {
+      showToast('Failed: ' + (e.message || 'unknown error'), 'error');
     }
   };
 
+  const jobCacheRef = useRef<Record<number, { job: any; cc: any }>>({});
+
+  const prefetchJob = async (jobId: number) => {
+    if (jobCacheRef.current[jobId]) return;
+    try {
+      const [jRes, ccRes] = await Promise.all([
+        authFetch(`${API_BASE}/calibration/jobs/${jobId}`),
+        authFetch(`${API_BASE}/calibration/control-chart/${jobId}`),
+      ]);
+      if (jRes.ok) {
+        const job = await jRes.json();
+        const cc = ccRes.ok ? await ccRes.json() : null;
+        jobCacheRef.current[jobId] = { job, cc };
+      }
+    } catch {}
+  };
+
   const handleViewResults = async (jobId: number) => {
+    if (jobCacheRef.current[jobId]) {
+      const { job, cc } = jobCacheRef.current[jobId];
+      setViewingJob(job);
+      setControlChartData(cc);
+      setActiveTab('results');
+      return;
+    }
     setResultsLoading(true);
     try {
       const res = await authFetch(`${API_BASE}/calibration/jobs/${jobId}`);
@@ -143,12 +177,9 @@ export const CalibrationScreen = () => {
       setActiveTab('results');
 
       const ccRes = await authFetch(`${API_BASE}/calibration/control-chart/${jobId}`);
-      if (ccRes.ok) {
-        const cc = await ccRes.json();
-        setControlChartData(cc);
-      } else {
-        setControlChartData(null);
-      }
+      const cc = ccRes.ok ? await ccRes.json() : null;
+      setControlChartData(cc);
+      jobCacheRef.current[jobId] = { job, cc };
     } catch {
       showToast('Failed to load job results.', 'error');
     }
@@ -157,22 +188,33 @@ export const CalibrationScreen = () => {
 
   const handleApproveReject = async (jobId: number, decision: 'approve' | 'reject') => {
     setProcessingJobId(jobId);
+    const newStatus = decision === 'approve' ? 'approved' : 'rejected';
+    const previousJobs = [...jobs];
+    const previousViewing = viewingJob;
+
+    // Optimistic UI Update
+    setJobs(prev => prev.map(j => j.id == jobId ? { ...j, status: newStatus } : j));
+    if (viewingJob && viewingJob.id == jobId) {
+      setViewingJob((prev: any) => prev ? { ...prev, status: newStatus } : null);
+    }
+    showToast(`Job ${decision}d. Pressing commit in background...`, 'success');
+
     try {
       const res = await authFetch(`${API_BASE}/calibration/${jobId}/${decision}`, {
         method: 'POST',
         body: JSON.stringify({ comments: approveComment || null }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      showToast(`Job ${decision}d successfully.`);
       setApproveComment('');
+      delete jobCacheRef.current[jobId];
       fetchJobs();
-      if (viewingJob && viewingJob.id == jobId) {
-        setViewingJob((prev: any) => prev ? { ...prev, status: decision === 'approve' ? 'approved' : 'rejected' } : null);
-      }
     } catch {
-      showToast(`Failed to ${decision} job.`, 'error');
+      setJobs(previousJobs);
+      setViewingJob(previousViewing);
+      showToast(`Failed to ${decision} job. Rollback applied.`, 'error');
+    } finally {
+      setProcessingJobId(null);
     }
-    setProcessingJobId(null);
   };
 
   // Draw trend chart for a phase
@@ -204,12 +246,13 @@ export const CalibrationScreen = () => {
       },
       options: {
         responsive: true,
+        animation: false,
         plugins: {
-          legend: { labels: { color: '#475569', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
+          legend: { labels: { color: 'var(--text-secondary)', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
         },
         scales: {
-          x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#f1f5f9' } },
-          y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+          x: { ticks: { color: 'var(--text-secondary)', font: { size: 10 } }, grid: { color: 'var(--surface-muted)' } },
+          y: { ticks: { color: 'var(--text-secondary)', font: { size: 11 } }, grid: { color: 'var(--surface-muted)' } },
         },
       },
     });
@@ -219,8 +262,8 @@ export const CalibrationScreen = () => {
     if (viewingJob && viewingJob.results?.length) {
       const zeroResult = viewingJob.results.find((r: any) => r.phase === 'zero');
       const spanResult = viewingJob.results.find((r: any) => r.phase === 'span');
-      if (zeroResult) drawPhaseChart(chartRef, chartInstanceRef, zeroResult, '#0f766e');
-      if (spanResult) drawPhaseChart(spanChartRef, spanChartInstanceRef, spanResult, '#3b82f6');
+      if (zeroResult) drawPhaseChart(chartRef, chartInstanceRef, zeroResult, 'var(--primary-600)');
+      if (spanResult) drawPhaseChart(spanChartRef, spanChartInstanceRef, spanResult, 'var(--info)');
     }
   }, [viewingJob]);
 
@@ -241,22 +284,22 @@ export const CalibrationScreen = () => {
       {
         label: 'Value',
         data: shewhart.values,
-        borderColor: '#0f766e',
+        borderColor: 'var(--primary-600)',
         backgroundColor: 'rgba(15,118,110,0.07)',
         fill: true,
         tension: 0.3,
-        pointBackgroundColor: '#0f766e',
+        pointBackgroundColor: 'var(--primary-600)',
         pointRadius: 3,
       },
     ];
     if (shewhart.ucl) {
-      datasets.push({ label: 'UCL', data: shewhart.ucl, borderColor: '#ef4444', borderDash: [6, 3], pointRadius: 0, fill: false, borderWidth: 1.5 });
+      datasets.push({ label: 'UCL', data: shewhart.ucl, borderColor: 'var(--danger)', borderDash: [6, 3], pointRadius: 0, fill: false, borderWidth: 1.5 });
     }
     if (shewhart.lcl) {
-      datasets.push({ label: 'LCL', data: shewhart.lcl, borderColor: '#ef4444', borderDash: [6, 3], pointRadius: 0, fill: false, borderWidth: 1.5 });
+      datasets.push({ label: 'LCL', data: shewhart.lcl, borderColor: 'var(--danger)', borderDash: [6, 3], pointRadius: 0, fill: false, borderWidth: 1.5 });
     }
     if (shewhart.mean) {
-      datasets.push({ label: 'Mean', data: shewhart.mean, borderColor: '#3b82f6', borderDash: [4, 2], pointRadius: 0, fill: false, borderWidth: 1 });
+      datasets.push({ label: 'Mean', data: shewhart.mean, borderColor: 'var(--info)', borderDash: [4, 2], pointRadius: 0, fill: false, borderWidth: 1 });
     }
 
     ccChartInstanceRef.current = new ChartJS(ctx, {
@@ -265,12 +308,12 @@ export const CalibrationScreen = () => {
       options: {
         responsive: true,
         plugins: {
-          legend: { labels: { color: '#475569', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
-          title: { display: true, text: 'Shewhart Control Chart', color: '#0f172a', font: { weight: 700, size: 14 } },
+          legend: { labels: { color: 'var(--text-secondary)', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
+          title: { display: true, text: 'Shewhart Control Chart', color: 'var(--text-primary)', font: { weight: 700, size: 14 } },
         },
         scales: {
-          x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#f1f5f9' } },
-          y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+          x: { ticks: { color: 'var(--text-secondary)', font: { size: 10 } }, grid: { color: 'var(--surface-muted)' } },
+          y: { ticks: { color: 'var(--text-secondary)', font: { size: 11 } }, grid: { color: 'var(--surface-muted)' } },
         },
       },
     });
@@ -318,7 +361,7 @@ export const CalibrationScreen = () => {
                 <thead>
                   <tr>
                     <th>Job Name</th>
-                    <th>Station name (Device & Config)</th>
+                    <th>Station Name</th>
                     <th>Parameter</th>
                     <th>Type</th>
                     <th>Sequence</th>
@@ -335,7 +378,7 @@ export const CalibrationScreen = () => {
                     <tr><td colSpan={9} className="table-empty">No calibration jobs found. Start a new one.</td></tr>
                   ) : (
                     jobs.map((job: any) => (
-                      <tr key={job.id}>
+                      <tr key={job.id} onMouseEnter={() => prefetchJob(job.id)} onFocus={() => prefetchJob(job.id)}>
                         <td><strong>{job.job_name}</strong></td>
                         <td>{stations.find(s => s.id == job.station_id)?.name || `Station #${job.station_id}`}</td>
                         <td>{parameters.find(p => p.id == job.parameter_id)?.name || `Param #${job.parameter_id}`}</td>
@@ -344,9 +387,9 @@ export const CalibrationScreen = () => {
                         <td>
                           <span style={{
                             display: 'inline-block', padding: '2px 10px', borderRadius: '999px',
-                            fontSize: '11px', fontWeight: 700, background: (STAT_COLORS[job.status] || '#94a3b8') + '1A',
-                            color: STAT_COLORS[job.status] || '#94a3b8',
-                            border: `1px solid ${(STAT_COLORS[job.status] || '#94a3b8') + '33'}`,
+                            fontSize: '11px', fontWeight: 700, background: (STAT_COLORS[job.status] || 'var(--text-secondary)') + '1A',
+                            color: STAT_COLORS[job.status] || 'var(--text-secondary)',
+                            border: `1px solid ${(STAT_COLORS[job.status] || 'var(--text-secondary)') + '33'}`,
                           }}>
                             {job.status.toUpperCase()}
                           </span>
@@ -362,6 +405,14 @@ export const CalibrationScreen = () => {
                                 onClick={() => { setSelectedJob(job); setActiveTab('results'); handleViewResults(job.id); }}
                                 disabled={resultsLoading}>{resultsLoading ? '…' : 'Approve'}</button>
                             )}
+                            <button className="table action-btn" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                              onClick={async () => {
+                                if (!window.confirm(`Delete job "${job.job_name}"?`)) return;
+                                const r = await authFetch(`${API_BASE}/calibration/${job.id}`, { method: 'DELETE' });
+                                if (!r.ok) { const b = await r.json().catch(() => ({})); showToast(b.detail || 'Delete failed', 'error'); return; }
+                                showToast('Job deleted.');
+                                fetchJobs();
+                              }}>Delete</button>
                           </div>
                         </td>
                       </tr>
@@ -380,9 +431,9 @@ export const CalibrationScreen = () => {
           <div className="section-title">Start New Calibration</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '18px', maxWidth: '640px' }}>
             <div className="form-group">
-              <label className="form-label">Station name (Device & Config)</label>
+              <label className="form-label">Station Name</label>
               <select className="form-select" value={startStationId} onChange={e => setStartStationId(e.target.value)}>
-                {stations.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
+                {allStations.map(st => <option key={st.id} value={st.id}>{st.name}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -469,9 +520,9 @@ export const CalibrationScreen = () => {
                   <div className="section-title" style={{ marginBottom: 0 }}>{viewingJob.job_name}</div>
                   <span style={{
                     display: 'inline-block', padding: '4px 14px', borderRadius: '999px',
-                    fontSize: '12px', fontWeight: 700, background: (STAT_COLORS[viewingJob.status] || '#94a3b8') + '1A',
-                    color: STAT_COLORS[viewingJob.status] || '#94a3b8',
-                    border: `1px solid ${(STAT_COLORS[viewingJob.status] || '#94a3b8') + '33'}`,
+                    fontSize: '12px', fontWeight: 700, background: (STAT_COLORS[viewingJob.status] || 'var(--text-secondary)') + '1A',
+                    color: STAT_COLORS[viewingJob.status] || 'var(--text-secondary)',
+                    border: `1px solid ${(STAT_COLORS[viewingJob.status] || 'var(--text-secondary)') + '33'}`,
                   }}>
                     {viewingJob.status.toUpperCase()}
                   </span>
@@ -490,8 +541,8 @@ export const CalibrationScreen = () => {
                 </div>
               )}
 
-              {phaseCard(viewingJob.results?.find((r: any) => r.phase === 'zero'), '#0f766e')}
-              {phaseCard(viewingJob.results?.find((r: any) => r.phase === 'span'), '#3b82f6')}
+              {phaseCard(viewingJob.results?.find((r: any) => r.phase === 'zero'), 'var(--primary-600)')}
+              {phaseCard(viewingJob.results?.find((r: any) => r.phase === 'span'), 'var(--info)')}
 
               {/* Control Chart */}
               {controlChartData && controlChartData.shewhart && controlChartData.shewhart.labels && (
@@ -505,13 +556,13 @@ export const CalibrationScreen = () => {
               {controlChartData && controlChartData.cusum && controlChartData.cusum.labels && (
                 <div className="card">
                   <div className="section-title">CUSUM Control Chart</div>
-                  <canvas ref={el => { if (el) drawExtraChart(el, controlChartData.cusum, '#8b5cf6', 'CUSUM'); }} height="80"></canvas>
+                  <canvas ref={el => { if (el) drawExtraChart(el, controlChartData.cusum, '#378ADD', 'CUSUM'); }} height="80"></canvas>
                 </div>
               )}
               {controlChartData && controlChartData.ewma && controlChartData.ewma.labels && (
                 <div className="card">
                   <div className="section-title">EWMA Control Chart</div>
-                  <canvas ref={el => { if (el) drawExtraChart(el, controlChartData.ewma, '#f59e0b', 'EWMA'); }} height="80"></canvas>
+                  <canvas ref={el => { if (el) drawExtraChart(el, controlChartData.ewma, 'var(--warning)', 'EWMA'); }} height="80"></canvas>
                 </div>
               )}
 
@@ -568,7 +619,7 @@ export const CalibrationScreen = () => {
       )}
     </div>
   );
-};
+});
 
 function drawExtraChart(canvas: HTMLCanvasElement, data: any, color: string, label: string) {
   if (!data || !data.labels) return;
@@ -595,11 +646,11 @@ function drawExtraChart(canvas: HTMLCanvasElement, data: any, color: string, lab
     options: {
       responsive: true,
       plugins: {
-        legend: { labels: { color: '#475569', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
+        legend: { labels: { color: 'var(--text-secondary)', font: { weight: 600, family: 'Inter, sans-serif' as any } } },
       },
       scales: {
-        x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: '#f1f5f9' } },
-        y: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: '#f1f5f9' } },
+        x: { ticks: { color: 'var(--text-secondary)', font: { size: 10 } }, grid: { color: 'var(--surface-muted)' } },
+        y: { ticks: { color: 'var(--text-secondary)', font: { size: 11 } }, grid: { color: 'var(--surface-muted)' } },
       },
     },
   });

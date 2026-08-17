@@ -6,6 +6,7 @@ Recalculates and regenerates CPCB export records for a given date range.
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, delete, func
+from sqlalchemy.orm import selectinload
 from app.models.cpcb import CPCBExportRecord, CPCBStationConfig
 from app.models.telemetry import Averages, AverageType
 from app.models.parameter import Parameter
@@ -31,7 +32,9 @@ async def run_backfill(
     end_date: datetime,
 ) -> dict:
     config_result = await db.execute(
-        select(CPCBStationConfig).where(CPCBStationConfig.station_name == station_name)
+        select(CPCBStationConfig)
+        .options(selectinload(CPCBStationConfig.station))
+        .where(CPCBStationConfig.station_name == station_name)
     )
     config = config_result.scalar_one_or_none()
     if not config:
@@ -78,8 +81,9 @@ async def run_backfill(
             avg_val = avg_result.scalar()
             if avg_val is not None:
                 converted_val = round(float(avg_val) * mapping.conversion_factor, 4)
+                live_name = config.station.name if config.station else station_name
                 db.add(CPCBExportRecord(
-                    station_name=station_name,
+                    station_name=live_name,
                     parameter=mapping.cpcb_parameter,
                     date_from=window_start,
                     date_to=window_end,

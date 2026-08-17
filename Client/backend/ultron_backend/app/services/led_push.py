@@ -4,9 +4,9 @@ UltrON — LED Board LAN Service
 Builds the payload that LED control cards expect when polling a URL:
 
   [
-    {"listchannelData": [{"ChannelId": 7003, "ChannelName": "NOX",
-                          "ChannelValue": "39", "StationName": "AAQMS",
-                          "Units": "mg/Nm3"}]},
+    {"listchannelData": [{"StationName": "AAQMS", "ChannelName": "NOX",
+                          "ChannelValue": "39", "Units": "mg/Nm3",
+                          "ChannelStatus": "online"}]},
     ...
   ]
 
@@ -33,9 +33,9 @@ async def build_led_response(db, channel_ids: list[int]) -> list[dict]:
     """
     Build the LED board JSON payload for the requested PCB channel IDs.
 
-    Queries all active ServerConfig entries with protocol='led' whose
-    led_channel_id is in channel_ids, then fetches current LiveData for
-    each active parameter mapping and builds the response array.
+    Queries all active ServerConfig entries with protocol='led',
+    fetches current LiveData for each active parameter mapping
+    and builds the response array.
 
     Args:
         db:          AsyncSession (injected by FastAPI dependency)
@@ -108,9 +108,6 @@ async def build_led_response(db, channel_ids: list[int]) -> list[dict]:
 
         param = mapping.parameter
 
-        # ── Channel ID ────────────────────────────────────────────
-        channel_id = param.id if param else 0
-
         # ── Channel Name (parameter label on LED display) ─────────
         channel_name = (
             mapping.led_channel_name
@@ -133,13 +130,13 @@ async def build_led_response(db, channel_ids: list[int]) -> list[dict]:
             or ""
         )
 
-        # ── Live Value ────────────────────────────────────────────
+        # ── Live Value & Status ──────────────────────────────────
         live = live_by_param_id.get(mapping.parameter_id)
+        quality = live.quality.value if live and live.quality else None
 
         if live and live.value is not None:
             try:
                 channel_value = str(round(float(live.value), 2))
-                # Strip trailing zeros for cleaner display  (e.g. "39.00" → "39")
                 if "." in channel_value:
                     channel_value = channel_value.rstrip("0").rstrip(".")
             except (ValueError, TypeError):
@@ -147,14 +144,16 @@ async def build_led_response(db, channel_ids: list[int]) -> list[dict]:
         else:
             channel_value = "--"
 
+        channel_status = "online" if quality == "U" else "offline"
+
         payload.append({
             "listchannelData": [
                 {
-                    "ChannelId": channel_id,
+                    "StationName": station_name,
                     "ChannelName": channel_name,
                     "ChannelValue": channel_value,
-                    "StationName": station_name,
                     "Units": unit,
+                    "ChannelStatus": channel_status,
                 }
             ]
         })

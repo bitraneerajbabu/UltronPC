@@ -64,7 +64,7 @@ def get_logger(name: str) -> logging.Logger:
 
 
 def get_alarm_logger() -> logging.Logger:
-    """Dedicated logger that writes only to logs/alarms.log and DB."""
+    """Dedicated logger that writes only to logs/alarms.log."""
     logger = logging.getLogger("ultron.alarms")
     logger.propagate = False
 
@@ -88,7 +88,7 @@ def get_alarm_logger() -> logging.Logger:
 
 
 def get_audit_logger() -> logging.Logger:
-    """Dedicated logger that writes only to logs/audit.log and DB."""
+    """Dedicated logger that writes only to logs/audit.log."""
     logger = logging.getLogger("ultron.audit")
     logger.propagate = False
 

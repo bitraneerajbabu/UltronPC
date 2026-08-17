@@ -21,11 +21,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return (
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        minHeight: '100vh', background: '#faf6ee', padding: '24px',
+        minHeight: '100vh', background: 'var(--bg)', padding: '24px',
       }}>
         <div style={{
           background: 'rgba(253,250,242,0.75)', backdropFilter: 'blur(24px)',
-          border: '1px solid rgba(235,225,205,0.8)', borderRadius: '20px',
+          border: '1px solid rgba(0,0,0,0.12)', borderRadius: '20px',
           padding: '48px 44px', maxWidth: '480px', textAlign: 'center',
           boxShadow: '0 20px 50px rgba(15,118,110,0.08)',
         }}>

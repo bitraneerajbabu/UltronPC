@@ -4,9 +4,9 @@ from typing import List, Optional
 from app.db.database import get_db
 from app.models.core import IndustrySite, SoftwareVersion, OTADeployment
 from app.schemas.ota import (
-    SoftwareVersionCreate,
+    SoftwareVersionBase,
     SoftwareVersionResponse,
-    OTADeploymentCreate,
+    OTADeploymentBase,
     OTADeploymentUpdate,
     OTADeploymentResponse
 )
@@ -18,7 +18,7 @@ router = APIRouter()
 
 @router.post("/versions", response_model=SoftwareVersionResponse, status_code=status.HTTP_201_CREATED)
 def create_version(
-    payload: SoftwareVersionCreate,
+    payload: SoftwareVersionBase,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth_context)
 ):
@@ -76,7 +76,7 @@ def delete_version(
 
 @router.post("/deployments", response_model=OTADeploymentResponse, status_code=status.HTTP_201_CREATED)
 def create_deployment(
-    payload: OTADeploymentCreate,
+    payload: OTADeploymentBase,
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth_context)
 ):

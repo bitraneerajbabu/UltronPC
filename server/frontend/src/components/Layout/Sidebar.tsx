@@ -1,4 +1,4 @@
-import { Box, Typography, Divider, Drawer } from '@mui/material';
+import { Box, Typography, Divider, Drawer, useTheme, alpha } from '@mui/material';
 import Icon from '../Common/Icon';
 
 interface NavItem {
@@ -18,81 +18,90 @@ interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
   onLogout: () => void;
+  variant?: 'permanent' | 'temporary';
+  open?: boolean;
+  onClose?: () => void;
 }
 
 const navGroups: NavGroup[] = [
   {
-    items: [{ id: 'dashboard', label: 'Dashboard', icon: <Icon name="LayoutDashboard" size={22} /> }],
+    items: [{ id: 'dashboard', label: 'Dashboard', icon: <Icon name="LayoutDashboard" size={20} /> }],
   },
   {
     title: 'Monitoring',
     items: [
-      { id: 'live', label: 'Live Monitoring', icon: <Icon name="Radio" size={22} /> },
-      { id: 'plants', label: 'Plants', icon: <Icon name="Factory" size={22} /> },
-      { id: 'notifications_tab', label: 'Notifications', icon: <Icon name="BellRing" size={22} /> },
+      { id: 'sites', label: 'Sites', icon: <Icon name="Factory" size={20} /> },
+      { id: 'clients', label: 'UltrON Clients', icon: <Icon name="Server" size={20} /> },
     ],
   },
   {
-    title: 'Management',
+    title: 'Control',
     items: [
-      { id: 'configuration', label: 'Configuration', icon: <Icon name="Sliders" size={22} /> },
-      { id: 'broadcasts', label: 'Broadcast Center', icon: <Icon name="Megaphone" size={22} /> },
-      { id: 'amc', label: 'AMC Management', icon: <Icon name="CalendarRange" size={22} /> },
+      { id: 'broadcasts', label: 'Broadcast Center', icon: <Icon name="Megaphone" size={20} /> },
+      { id: 'amc', label: 'AMC & Control', icon: <Icon name="Lock" size={20} /> },
     ],
   },
   {
-    title: 'Reports',
+    title: 'Compliance',
     items: [
-      { id: 'quality', label: 'Audit Logs', icon: <Icon name="History" size={22} /> },
-      { id: 'settings_tab', label: 'Settings', icon: <Icon name="Settings" size={22} /> },
+      { id: 'cpcb', label: 'Regulatory', icon: <Icon name="ShieldCheck" size={20} /> },
+      { id: 'reports', label: 'Reports', icon: <Icon name="FileBarChart2" size={20} /> },
+    ],
+  },
+  {
+    title: 'Operations',
+    items: [
+      { id: 'commands', label: 'Commands', icon: <Icon name="Send" size={20} /> },
+      { id: 'notifications', label: 'Notifications', icon: <Icon name="BellRing" size={20} /> },
+      { id: 'activity', label: 'Activity', icon: <Icon name="History" size={20} /> },
+    ],
+  },
+  {
+    title: 'Administration',
+    items: [
+      { id: 'users', label: 'Users', icon: <Icon name="Users" size={20} /> },
+      { id: 'roles', label: 'Roles', icon: <Icon name="UserShield" size={20} /> },
+      { id: 'settings', label: 'Settings', icon: <Icon name="Settings" size={20} /> },
+      { id: 'audit', label: 'Audit Trail', icon: <Icon name="ClipboardList" size={20} /> },
     ],
   },
 ];
 
-const tabMapping: Record<string, string> = {
-  dashboard: 'dashboard',
-  live: 'dashboard',
-  plants: 'dashboard',
-  notifications_tab: 'alarms',
-  configuration: 'commands',
-  broadcasts: 'broadcasts',
-  amc: 'locks',
-  quality: 'quality',
-  settings_tab: 'settings_tab',
-};
+export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, onLogout, variant = 'permanent', open, onClose }: SidebarProps) {
+  const theme = useTheme();
+  const isTemp = variant === 'temporary';
 
-const activeItemMapping: Record<string, string> = {
-  dashboard: 'dashboard',
-  alarms: 'notifications_tab',
-  commands: 'configuration',
-  broadcasts: 'broadcasts',
-  locks: 'amc',
-  quality: 'quality',
-  settings_tab: 'settings_tab',
-};
-
-export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, onLogout }: SidebarProps) {
   const handleNav = (id: string) => {
-    const mapped = tabMapping[id] || 'dashboard';
-    onTabChange(mapped);
+    onTabChange(id);
+    if (isTemp) onClose?.();
   };
 
-  const isSelected = (id: string) => {
-    return activeItemMapping[activeTab] === id;
-  };
+  const drawerWidth = collapsed ? 72 : 260;
 
   return (
     <Drawer
-      variant="permanent"
-      sx={{
-        width: collapsed ? 72 : 260,
+      variant={variant}
+      open={isTemp ? open : undefined}
+      onClose={isTemp ? onClose : undefined}
+      sx={isTemp ? {
+        '& .MuiDrawer-paper': {
+          width: 260,
+          borderRight: 1, borderColor: 'divider',
+          bgcolor: 'background.paper',
+          overflowX: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+        },
+      } : {
+        width: drawerWidth,
         flexShrink: 0,
         transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
         '& .MuiDrawer-paper': {
-          width: collapsed ? 72 : 260,
+          width: drawerWidth,
           transition: 'width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-          borderRight: '1px solid rgba(0,0,0,0.06)',
-          backgroundColor: '#FFFFFF',
+          borderRight: 1, borderColor: 'divider',
+          bgcolor: 'background.paper',
           overflowX: 'hidden',
           display: 'flex',
           flexDirection: 'column',
@@ -109,7 +118,7 @@ export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, o
             alignItems: 'center',
             justifyContent: 'center',
             px: 2, py: 2.5,
-            borderBottom: '1px solid rgba(0,0,0,0.06)',
+            borderBottom: 1, borderColor: 'divider',
             gap: 1.5,
           }}
         >
@@ -120,10 +129,10 @@ export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, o
           />
           {!collapsed && (
             <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="h4" sx={{ fontSize: '18px', fontWeight: 800, lineHeight: 1.2, color: '#111827', mb: 0.5 }}>
-                RajAPI
+              <Typography variant="h4" sx={{ fontSize: '18px', fontWeight: 700, lineHeight: 1.2, color: 'text.primary', mb: 0.5 }}>
+                UltrON
               </Typography>
-              <Typography variant="caption" sx={{ color: '#6B7280', fontWeight: 600, display: 'block', lineHeight: 1.2 }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', lineHeight: 1.2 }}>
                 Super Admin Portal
               </Typography>
             </Box>
@@ -139,7 +148,7 @@ export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, o
                   variant="overline"
                   sx={{
                     display: 'block', px: 2, py: 0.75,
-                    color: '#9CA3AF', fontSize: '10px', fontWeight: 700,
+                    color: '#5D6663', fontSize: '10px', fontWeight: 700,
                     letterSpacing: '0.08em',
                   }}
                 >
@@ -147,42 +156,37 @@ export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, o
                 </Typography>
               )}
               {group.items.map((item) => {
-                const selected = isSelected(item.id);
+                const selected = activeTab === item.id;
                 return (
                   <Box
                     key={item.id}
                     onClick={() => handleNav(item.id)}
                     sx={{
                       display: 'flex', alignItems: 'center', gap: 2,
-                      px: collapsed ? 1.5 : 2, py: 1.25,
+                      px: collapsed ? 1.5 : 2, py: 1.1,
                       mx: 0.5,
                       my: 0.25,
-                      borderRadius: '8px',
+                      borderRadius: 2,
                       cursor: 'pointer',
                       justifyContent: collapsed ? 'center' : 'flex-start',
-                      backgroundColor: selected ? '#EFF6FF' : 'transparent',
-                      color: selected ? '#2563EB' : '#4B5563',
+                      backgroundColor: selected ? alpha(theme.palette.primary.main, 0.08) : 'transparent',
+                      color: selected ? theme.palette.primary.main : '#5D6663',
                       transition: 'all 0.15s ease',
                       '&:hover': {
-                        backgroundColor: selected ? '#EFF6FF' : '#F5F7FA',
-                        color: selected ? '#2563EB' : '#111827',
+                        backgroundColor: selected ? alpha(theme.palette.primary.main, 0.12) : '#F3F4F2',
+                        color: selected ? theme.palette.primary.main : '#1A1D1C',
                       },
                     }}
                   >
-                    <Box sx={{
-                      display: 'flex',
-                      color: selected ? '#2563EB' : '#9CA3AF',
-                      transition: 'color 0.15s ease',
-                      flexShrink: 0,
-                    }}>
+                    <Box sx={{ display: 'flex', color: selected ? theme.palette.primary.main : '#5D6663', flexShrink: 0 }}>
                       {item.icon}
                     </Box>
                     {!collapsed && (
                       <Typography
                         variant="body2"
                         sx={{
-                          fontWeight: 500, // Font Weight: 500
-                          fontSize: '15px', // Text: 15px
+                          fontWeight: selected ? 600 : 500,
+                          fontSize: '14px',
                           color: 'inherit',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
@@ -196,57 +200,57 @@ export default function Sidebar({ activeTab, onTabChange, collapsed, onToggle, o
                 );
               })}
               {gi < navGroups.length - 1 && !collapsed && (
-                <Divider sx={{ my: 1.5, mx: 2, borderColor: '#F3F4F6' }} />
+                <Divider sx={{ my: 1.5, mx: 2, borderColor: 'rgba(0, 0, 0, 0.08)' }} />
               )}
             </Box>
           ))}
         </Box>
 
         {/* Action Controls + Logout Footer */}
-        <Box sx={{ borderTop: '1px solid rgba(0,0,0,0.06)', px: collapsed ? 1 : 2, py: 1.5, backgroundColor: '#FFFFFF' }}>
-          {/* Collapse Button */}
-          <Box
-            onClick={onToggle}
-            sx={{
-              display: 'flex', alignItems: 'center', gap: 2,
-              px: collapsed ? 1.5 : 2, py: 1.25, borderRadius: '8px',
-              cursor: 'pointer', color: '#6B7280',
-              justifyContent: collapsed ? 'center' : 'flex-start',
-              transition: 'all 0.15s ease',
-              mb: 0.5,
-              '&:hover': { backgroundColor: '#F5F7FA', color: '#111827' },
-            }}
-          >
-            <Icon name={collapsed ? 'ChevronRight' : 'ChevronLeft'} size={22} />
-            {!collapsed && (
-              <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '13px' }}>
-                Collapse Menu
-              </Typography>
-            )}
-          </Box>
+        <Box sx={{ borderTop: 1, borderColor: 'divider', px: collapsed ? 1 : 2, py: 1.5, bgcolor: 'background.paper' }}>
+          {!isTemp && (
+            <Box
+              onClick={onToggle}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 2,
+                px: collapsed ? 1.5 : 2, py: 1.1, borderRadius: 2,
+                cursor: 'pointer', color: 'text.secondary',
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                transition: 'all 0.15s ease',
+                mb: 0.5,
+                '&:hover': { backgroundColor: '#F3F4F2', color: '#1A1D1C' },
+              }}
+            >
+              <Icon name={collapsed ? 'ChevronRight' : 'ChevronLeft'} size={20} />
+              {!collapsed && (
+                <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '13px' }}>
+                  Collapse Menu
+                </Typography>
+              )}
+            </Box>
+          )}
 
-          {/* Logout Button */}
           <Box
             onClick={onLogout}
             sx={{
               display: 'flex', alignItems: 'center', gap: 2,
-              px: collapsed ? 1.5 : 2, py: 1.25, borderRadius: '8px',
-              cursor: 'pointer', color: '#EF4444',
+              px: collapsed ? 1.5 : 2, py: 1.1, borderRadius: 2,
+              cursor: 'pointer', color: '#E24B4A',
               justifyContent: collapsed ? 'center' : 'flex-start',
               transition: 'all 0.15s ease',
-              '&:hover': { backgroundColor: '#FEF2F2' },
+              '&:hover': { backgroundColor: '#FCEBEB' },
             }}
           >
-            <Icon name="LogOut" size={22} />
+            <Icon name="LogOut" size={20} />
             {!collapsed && (
               <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '13px' }}>
                 Logout
               </Typography>
             )}
           </Box>
-          {!collapsed && (
-            <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#9CA3AF', mt: 1.5, fontSize: '10px' }}>
-              Powered by Sunshine Technologies
+          {!collapsed && !isTemp && (
+            <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', color: '#5D6663', mt: 1.5, fontSize: '10px' }}>
+              UltrON · Sunshine Technologies
             </Typography>
           )}
         </Box>

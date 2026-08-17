@@ -1,5 +1,6 @@
 import React, { useContext, useState, useEffect, useCallback } from 'react';
-import { AppContext } from '../context/AppContext';
+import { AppContext, LiveDataContext } from '../context/AppContext';
+import { IconAlertTriangle, IconX, IconCheck } from '@tabler/icons-react';
 
 /**
  * AlarmsInspectorModal displays threshold alarms and communication failures,
@@ -9,13 +10,14 @@ export const AlarmsInspectorModal = ({ isOpen, onClose }) => {
   const {
     devices,
     parameters,
-    liveData,
     authFetch,
     API_BASE,
     parseUtcDate,
     currentUser,
     showToast
   } = useContext(AppContext);
+  const liveDataCtx = useContext(LiveDataContext) || {};
+  const liveData = liveDataCtx.liveData || {};
 
   const [activeTab, setActiveTab] = useState('threshold');
   const [activeAlarmsList, setActiveAlarmsList] = useState([]);
@@ -52,7 +54,7 @@ export const AlarmsInspectorModal = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  const offlineParams = parameters.filter(p => liveData[p.tag_name]?.status !== 'online');
+  const offlineParams = parameters.filter(p => (liveData[p.tag_name] || {}).status !== 'online');
 
   const handleAcknowledge = async (e) => {
     e.preventDefault();
@@ -96,18 +98,11 @@ export const AlarmsInspectorModal = ({ isOpen, onClose }) => {
       <div className="modal-wrapper" onClick={e => e.stopPropagation()}>
         <div className="modal-header-custom">
           <h3 className="modal-title-custom">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#be123c' }}>
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
+            <IconAlertTriangle size={18} stroke={2} style={{ color: 'var(--danger)' }} />
             Active Alarms Inspector
           </h3>
           <button className="modal-close-btn" onClick={onClose}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <IconX size={18} stroke={2} />
           </button>
         </div>
 
@@ -130,13 +125,11 @@ export const AlarmsInspectorModal = ({ isOpen, onClose }) => {
           {activeTab === 'threshold' ? (
             <div>
               {loadingAlarms ? (
-                <div style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>Loading active alarms...</div>
+                <div className="loader" style={{ margin: '20px auto' }}></div>
               ) : activeAlarmsList.length === 0 ? (
                 <div className="alarm-empty-state">
                   <div className="alarm-empty-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                    <IconCheck size={24} stroke={3} color="var(--success)" />
                   </div>
                   <div>No active threshold alarms. All parameters within limits.</div>
                 </div>
@@ -188,7 +181,7 @@ export const AlarmsInspectorModal = ({ isOpen, onClose }) => {
                             </td>
                             <td>
                               <strong>{paramObj.name || `Param ID: ${alarm.parameter_id}`}</strong>
-                              <div style={{ fontSize: '11px', color: '#64748b' }}>{paramObj.tag_name}</div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{paramObj.tag_name}</div>
                             </td>
                             <td>{alarm.message}</td>
                             <td>
@@ -209,7 +202,7 @@ export const AlarmsInspectorModal = ({ isOpen, onClose }) => {
                       <label className="form-label" style={{ fontSize: '12px' }}>Operator Notes</label>
                       <textarea
                         className="form-input"
-                        style={{ height: '60px', padding: '8px', fontSize: '13px', background: '#fff', border: '1px solid #cbd5e1' }}
+                        style={{ height: '60px', padding: '8px', fontSize: '13px', background: '#fff', border: '1px solid var(--border)' }}
                         placeholder="Enter acknowledgement notes / actions taken..."
                         value={ackNotes}
                         onChange={e => setAckNotes(e.target.value)}
@@ -231,9 +224,7 @@ export const AlarmsInspectorModal = ({ isOpen, onClose }) => {
               {offlineParams.length === 0 ? (
                 <div className="alarm-empty-state">
                   <div className="alarm-empty-icon" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                    <IconCheck size={24} stroke={3} color="var(--success)" />
                   </div>
                   <div>All parameters are online and communicating properly.</div>
                 </div>

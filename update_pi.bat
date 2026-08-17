@@ -12,8 +12,9 @@ set REMOTE=/home/pi/rajapi_server
 echo [1/5] Uploading backend API endpoints...
 scp "%~dp0server\backend\app\api\endpoints\downloads.py" %PI%:%REMOTE%/backend/app/api/endpoints/
 scp "%~dp0server\backend\app\api\endpoints\sites.py" %PI%:%REMOTE%/backend/app/api/endpoints/
-scp "%~dp0server\backend\app\api\endpoints\tgpcb_sync.py" %PI%:%REMOTE%/backend/app/api/endpoints/
+scp "%~dp0server\backend\app\api\endpoints\spcb_sync.py" %PI%:%REMOTE%/backend/app/api/endpoints/
 scp "%~dp0server\backend\app\api\endpoints\sync.py" %PI%:%REMOTE%/backend/app/api/endpoints/
+scp "%~dp0server\backend\app\api\endpoints\broadcasts.py" %PI%:%REMOTE%/backend/app/api/endpoints/
 
 echo.
 echo [2/5] Uploading backend models and schemas...
@@ -30,7 +31,7 @@ scp -r "%~dp0server\frontend\dist\." %PI%:%REMOTE%/frontend/dist/
 
 echo.
 echo [5/5] Restarting RajAPI service on Pi...
-ssh %PI% "sudo systemctl restart rajapi && sleep 2 && sudo systemctl status rajapi --no-pager -l"
+ssh %PI% "sudo systemctl restart rajapi rajapi-python && sleep 2 && sudo systemctl status rajapi rajapi-python --no-pager -l"
 
 echo.
 echo ===================================================

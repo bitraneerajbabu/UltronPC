@@ -1,128 +1,80 @@
-import React, { useContext, useState, useEffect } from 'react';
-import { AppContext } from './context/AppContext';
+import React, { useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { AppContext, LiveDataContext } from './context/AppContext';
+import { IconLayoutDashboard, IconDeviceDesktop, IconReport, IconSettings, IconUsers, IconEye, IconEyeOff, IconFileText, IconShieldCheck, IconMail, IconGauge, IconChartLine, IconBellRinging, IconRouter, IconUser, IconLock, IconLogs } from '@tabler/icons-react';
+import { QRCodeSVG } from 'qrcode.react';
 import './App.css';
 
 // Import Screens
 import { DashboardScreen } from './screens/DashboardScreen';
 import { DevicesScreen } from './screens/DevicesScreen';
-import { TrendsScreen } from './screens/TrendsScreen';
-import { ReportsScreen } from './screens/ReportsScreen';
-import { LogsScreen } from './screens/LogsScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { UsersScreen } from './screens/UsersScreen';
-import { CPCB } from './screens/CPCB';
-import { CalibrationScreen } from './screens/CalibrationScreen';
 import { ContactScreen } from './screens/ContactScreen';
+import { LogsScreen } from './screens/LogsScreen';
+
+// Lazy load heavy secondary screens for code splitting & optimal bundle chunking
+const TrendsScreen = React.lazy(() => import('./screens/TrendsScreen').then(m => ({ default: m.TrendsScreen })));
+const ReportsScreen = React.lazy(() => import('./screens/ReportsScreen').then(m => ({ default: m.ReportsScreen })));
+const CPCB = React.lazy(() => import('./screens/CPCB').then(m => ({ default: m.CPCB })));
+const CalibrationScreen = React.lazy(() => import('./screens/CalibrationScreen').then(m => ({ default: m.CalibrationScreen })));
 
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
-const DashboardIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <rect x="3" y="3" width="7" height="9" />
-    <rect x="14" y="3" width="7" height="5" />
-    <rect x="14" y="12" width="7" height="9" />
-    <rect x="3" y="16" width="7" height="5" />
-  </svg>
-);
+const DashboardIcon = () => <IconLayoutDashboard className="nav-icon" size={20} stroke={1.8} />;
 
-const DevicesIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-    <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-    <line x1="6" y1="6" x2="6.01" y2="6" />
-    <line x1="6" y1="18" x2="6.01" y2="18" />
-    <line x1="20" y1="6" x2="20.01" y2="6" />
-    <line x1="20" y1="18" x2="20.01" y2="18" />
-  </svg>
-);
+const DevicesIcon = () => <IconDeviceDesktop className="nav-icon" size={20} stroke={1.8} />;
 
-const TrendsIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-  </svg>
-);
+const TrendsIcon = () => <IconChartLine className="nav-icon" size={20} stroke={1.8} />;
 
-const ReportsIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-    <line x1="16" y1="13" x2="8" y2="13" />
-    <line x1="16" y1="17" x2="8" y2="17" />
-  </svg>
-);
+const ReportsIcon = () => <IconReport className="nav-icon" size={20} stroke={1.8} />;
 
-const LogsIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <path d="M12 20h9" />
-    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-  </svg>
-);
+const SettingsIcon = () => <IconSettings className="nav-icon" size={20} stroke={1.8} />;
 
-const SettingsIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-  </svg>
-);
+const UsersIcon = () => <IconUsers className="nav-icon" size={20} stroke={1.8} />;
 
-const UsersIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-  </svg>
-);
+const EyeIcon = () => <IconEye size={16} stroke={1.8} />;
 
-const EyeIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-);
+const EyeOffIcon = () => <IconEyeOff size={16} stroke={1.8} />;
 
-const EyeOffIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-    <line x1="1" y1="1" x2="23" y2="23" />
-  </svg>
-);
+const CPCBIcon = () => <IconFileText className="nav-icon" size={20} stroke={1.8} />;
 
-const CPCBIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-    <polyline points="14 2 14 8 20 8"/>
-    <line x1="16" y1="13" x2="8" y2="13"/>
-    <line x1="16" y1="17" x2="8" y2="17"/>
-    <circle cx="12" cy="15" r="1" fill="currentColor"/>
-  </svg>
-);
+const CalibrationIcon = () => <IconShieldCheck className="nav-icon" size={20} stroke={1.8} />;
 
+const ContactIcon = () => <IconMail className="nav-icon" size={20} stroke={1.8} />;
 
-const CalibrationIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    <polyline points="9 12 11 14 15 10" />
-  </svg>
-);
+const LogsIcon = () => <IconLogs className="nav-icon" size={20} stroke={1.8} />;
 
-const ContactIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="nav-icon">
-    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-    <polyline points="22,6 12,13 2,6" />
-  </svg>
-);
+// ─── Clock — self-contained, prevents App re-render on every second ──────────
+const Clock = React.memo(() => {
+  const [timeStr, setTimeStr] = useState('');
+  useEffect(() => {
+    const updateClock = () => {
+      const d = new Date();
+      const pad = (n, width = 2) => String(n).padStart(width, '0');
+      const year = d.getFullYear();
+      const month = pad(d.getMonth() + 1);
+      const date = pad(d.getDate());
+      const rawHours = d.getHours();
+      const ampm = rawHours >= 12 ? 'PM' : 'AM';
+      let hours = rawHours % 12;
+      if (hours === 0) hours = 12;
+      setTimeStr(`${year}.${month}.${date} || ${pad(hours)}:${pad(d.getMinutes())}:${pad(d.getSeconds())} ${ampm}`);
+    };
+    updateClock();
+    const interval = setInterval(updateClock, 1000);
+    return () => clearInterval(interval);
+  }, []);
+  return <>{timeStr}</>;
+});
 
 // ─── Nav definitions ──────────────────────────────────────────────────────────
 const ALL_NAV = [
   { key: 'dashboardScreen', label: 'Dashboard Overview', Icon: DashboardIcon, roles: ['admin', 'client'] },
   { key: 'devicesScreen', label: 'Devices & Config', Icon: DevicesIcon, roles: ['admin'] },
-  { key: 'trendsScreen', label: 'Trends Analysis', Icon: TrendsIcon, roles: ['admin', 'client'] },
-  { key: 'reportsScreen', label: 'Reports Generator', Icon: ReportsIcon, roles: ['admin', 'client'] },
-  { key: 'logsScreen', label: 'System Logs', Icon: LogsIcon, roles: ['admin'] },
+  { key: 'logsScreen', label: 'Logs', Icon: LogsIcon, roles: ['admin'] },
+  { key: 'reportsScreen', label: 'Reports & Trends', Icon: ReportsIcon, roles: ['admin', 'client'] },
+
   { key: 'settingsScreen', label: 'System Settings', Icon: SettingsIcon, roles: ['admin'] },
-  { key: 'usersScreen', label: 'User Management', Icon: UsersIcon, roles: ['admin'] },
+
   { key: 'cpcbScreen', label: 'Server Management', Icon: CPCBIcon, roles: ['admin'] },
   { key: 'calibrationScreen', label: 'Calibration', Icon: CalibrationIcon, roles: ['admin'] },
   { key: 'contactScreen', label: 'Contact', Icon: ContactIcon, roles: ['admin', 'client'] },
@@ -133,6 +85,8 @@ function App() {
   const {
     currentUser,
     currentUserRole,
+    allowServerMgmt,
+    isSuperAdmin,
     login,
     logout,
     activeScreen,
@@ -140,15 +94,76 @@ function App() {
     plantName,
     plantAddress,
     plantLogo,
-    fetchLatestTelemetryAndKpis,
     showToast,
     broadcasts,
     amcExpiry,
     API_BASE,
+    isLicensed,
+    setIsLicensed,
+    lockStatus,
+    setLockStatus,
+    lockReason,
+    prefetchScreen,
+    authFetch,
   } = useContext(AppContext);
+  const liveDataCtx = useContext(LiveDataContext) || {};
+  const fetchLatestTelemetryAndKpis = liveDataCtx.fetchLatestTelemetryAndKpis;
 
   const [refreshing, setRefreshing] = useState(false);
   const [localVersion, setLocalVersion] = useState('');
+
+  useEffect(() => {
+    document.body.style.zoom = '1.0';
+    localStorage.removeItem('ultron_ui_zoom');
+  }, []);
+
+  // Activation & lock screen states
+  const [activationKey, setActivationKey] = useState('');
+  const [activating, setActivating] = useState(false);
+  const [activationError, setActivationError] = useState('');
+
+  const [passcode, setPasscode] = useState('');
+  const [passcodeError, setPasscodeError] = useState('');
+  const [bypassed, setBypassed] = useState(false);
+
+  const handleActivationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activationKey.trim()) {
+      setActivationError('API Key is required.');
+      return;
+    }
+    setActivationError('');
+    setActivating(true);
+    try {
+      const res = await fetch(`${API_BASE}/license/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: activationKey }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIsLicensed(true);
+        if (showToast) showToast('License activated successfully!', 'success');
+        window.location.reload();
+      } else {
+        setActivationError(data.detail || 'Activation failed.');
+      }
+    } catch {
+      setActivationError('Failed to connect to the backend server.');
+    } finally {
+      setActivating(false);
+    }
+  };
+
+  const handlePasscodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passcode === 'Ultronpoiu') {
+      setBypassed(true);
+      if (showToast) showToast('Technician Lock Bypass Active.', 'warning');
+    } else {
+      setPasscodeError('Invalid technician passcode.');
+    }
+  };
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -188,18 +203,7 @@ function App() {
     if (showToast) {
       showToast('Performing hard refresh...', 'info');
     }
-    // Clear browser caches if available
-    if (window.caches) {
-      window.caches.keys().then((names) => {
-        names.forEach((name) => {
-          window.caches.delete(name);
-        });
-      });
-    }
-    // Force reload bypassing cache after a tiny delay to show the toast
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
+    setTimeout(() => window.location.reload(), 500);
   };
 
   // Login form state
@@ -208,30 +212,6 @@ function App() {
   const [loginError, setLoginError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
-
-  // Clock state
-  const [timeStr, setTimeStr] = useState('');
-
-  useEffect(() => {
-    const updateClock = () => {
-      const d = new Date();
-      const pad = (n, width = 2) => String(n).padStart(width, '0');
-      const year = d.getFullYear();
-      const month = pad(d.getMonth() + 1);
-      const date = pad(d.getDate());
-      const rawHours = d.getHours();
-      const ampm = rawHours >= 12 ? 'PM' : 'AM';
-      let hours = rawHours % 12;
-      if (hours === 0) hours = 12;
-      const hoursStr = pad(hours);
-      const minutes = pad(d.getMinutes());
-      const seconds = pad(d.getSeconds());
-      setTimeStr(`${year}.${month}.${date} || ${hoursStr}:${minutes}:${seconds} ${ampm}`);
-    };
-    updateClock();
-    const interval = setInterval(updateClock, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -251,112 +231,303 @@ function App() {
   // Filter nav items based on role
   const visibleNav = ALL_NAV.filter(item =>
     currentUserRole && item.roles.includes(currentUserRole)
+    && (item.key !== 'cpcbScreen' || allowServerMgmt)
+    && (item.key !== 'calibrationScreen' || currentUserRole === 'admin')
   );
 
   // Ensure active screen is accessible by this role
   useEffect(() => {
     if (currentUserRole === 'client') {
-      const allowedScreens = ['dashboardScreen', 'trendsScreen', 'reportsScreen', 'calibrationScreen', 'contactScreen'];
+      const allowedScreens = ['dashboardScreen', 'trendsScreen', 'reportsScreen'];
       if (!allowedScreens.includes(activeScreen)) {
         setActiveScreen('dashboardScreen');
       }
+    } else if (!allowServerMgmt && activeScreen === 'cpcbScreen') {
+      setActiveScreen('dashboardScreen');
     }
-  }, [currentUserRole, activeScreen, setActiveScreen]);
+  }, [currentUserRole, activeScreen, setActiveScreen, allowServerMgmt]);
+
+  // ─── System IP + internet indicator (header) ────────────────────────────────
+  const [sysNet, setSysNet] = useState<{ lan_ip: string; internet_connected: boolean; hostname?: string } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const res = await authFetch(`${API_BASE}/settings/network-info`);
+        if (res.ok && alive) setSysNet(await res.json());
+      } catch {}
+    };
+    if (currentUserRole) load();
+    window.addEventListener('online', load);
+    window.addEventListener('offline', load);
+    return () => { alive = false; window.removeEventListener('online', load); window.removeEventListener('offline', load); };
+  }, [authFetch, API_BASE, currentUserRole]);
+
+  // ─── License Setup Screen ──────────────────────────────────────────────────
+  if (!isLicensed) {
+    return (
+      <div className="login-screen" style={{ background: 'linear-gradient(135deg, var(--text-primary) 0%, var(--text-primary) 100%)', color: 'var(--surface-muted)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <div className="login-card" style={{ maxWidth: '450px', width: '100%', padding: '40px', background: 'rgba(4, 52, 44, 0.7)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <img src="/assets/Ultron_logo.png" className="login-logo" alt="UltrON Logo" style={{ height: '70px', marginBottom: '16px', objectFit: 'contain' }} />
+            <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '6px', color: 'var(--info)' }}>License Activation</h2>
+            <p style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.75)' }}>Please activate your UltrON installation with your station key.</p>
+          </div>
+          <form onSubmit={handleActivationSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ fontSize: '12px', fontWeight: '600', color: 'rgba(255, 255, 255, 0.75)' }}>Station API Key</label>
+              <input
+                type="text"
+                placeholder="Enter API Key (e.g. IN_UltronSST_...)"
+                value={activationKey}
+                onChange={e => setActivationKey(e.target.value)}
+                style={{ padding: '12px 16px', borderRadius: '10px', border: '1.5px solid rgba(255,255,255,0.1)', background: 'rgba(26, 29, 28, 0.6)', color: '#fff', fontSize: '13px', outline: 'none' }}
+                disabled={activating}
+              />
+            </div>
+            {activationError && (
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: 'rgba(226, 75, 74, 0.1)', border: '1px solid rgba(226, 75, 74, 0.2)', color: 'var(--danger)', fontSize: '12px', fontWeight: '500' }}>
+                ⚠️ {activationError}
+              </div>
+            )}
+            <button type="submit" disabled={activating} style={{ padding: '14px', borderRadius: '10px', border: 'none', background: 'var(--info)', color: '#fff', fontSize: '14px', fontWeight: '700', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(55, 138, 221, 0.3)' }}>
+              {activating ? 'Activating Installation...' : 'Activate System'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Remote Administrator Lock Screen ──────────────────────────────────────
+  if ((lockStatus === 'manual_lock' || lockStatus === 'amc_expired') && !bypassed) {
+    return (
+      <div className="login-screen" style={{ background: 'linear-gradient(135deg, var(--danger-text) 0%, var(--danger-text) 100%)', color: 'var(--surface-muted)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+        <div className="login-card" style={{ maxWidth: '450px', width: '100%', padding: '40px', background: 'rgba(40, 10, 10, 0.7)', backdropFilter: 'blur(16px)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: '20px', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '50px', marginBottom: '12px' }}>🔒</div>
+            <h2 style={{ fontSize: '24px', fontWeight: '800', marginBottom: '8px', color: 'var(--danger)' }}>System Locked</h2>
+            <p style={{ fontSize: '13px', color: 'var(--danger-bg)', lineHeight: '1.5' }}>
+              {lockStatus === 'amc_expired' 
+                ? 'Your AMC License has expired. Please contact Neeraj for renewal.' 
+                : (lockReason || 'This system has been locked remotely by the administrator.')}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+              <div style={{ background: '#fff', padding: '10px', borderRadius: '10px', display: 'inline-flex' }}>
+                <QRCodeSVG
+                  value={`Support Helpline
+7659091468, 9133377852, 853
+Sales Enquiries
+8801231166, 9133377854
+Email
+tst@sunshinetechno.com, support@sunshinetechno.com, service@sunshinetechno.com
+Website
+sunshinetechno.com
+Our Offices
+Registered
+#4-7-83, Flat No. 403-404, Kalanjali Classic, Scientist Colony, Habsiguda, Hyderabad - 500007
+Corporate
+#213, Fairmount Fortune One, 7-2-1813/5/A/1, Czech Colony, Sanath Nagar, Hyderabad - 500018
+Branch - Visakhapatnam
+#413, Dattathreya Enclave, Siddhartha Nagar, Kurmannapalem, Andhra Pradesh - 530046`}
+                  size={140}
+                  level="M"
+                  bgColor="#ffffff"
+                  fgColor="#000000"
+                />
+              </div>
+            </div>
+            <p style={{ fontSize: '11px', color: 'var(--danger-bg)', marginTop: '8px' }}>
+              Scan for <strong>Support Helpline</strong> &amp; branch details
+            </p>
+          </div>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '20px' }}>
+            <form onSubmit={handlePasscodeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '11px', color: 'var(--danger-bg)', fontWeight: '600' }}>Technician Bypass Passcode</label>
+                <input
+                  type="password"
+                  placeholder="Enter passcode to unlock locally"
+                  value={passcode}
+                  onChange={e => setPasscode(e.target.value)}
+                  style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '13px', outline: 'none' }}
+                />
+              </div>
+              {passcodeError && (
+                <div style={{ color: 'var(--danger)', fontSize: '11px', fontWeight: '500' }}>
+                  ❌ {passcodeError}
+                </div>
+              )}
+              <button type="submit" style={{ padding: '10px', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
+                Unlock Temporarily
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ─── Login Screen ──────────────────────────────────────────────────────────
   if (!currentUser) {
     return (
       <div className="login-screen">
-        <div className="login-card">
-          <img src="/assets/Ultron_logo.png" className="login-logo" alt="UltrON Logo" />
-          <h2 className="login-title" style={{ marginBottom: localVersion ? '2px' : '8px' }}>Industrial Monitoring Platform</h2>
-          {localVersion && (
-            <div style={{
-              fontSize: '11px',
-              fontWeight: '800',
-              color: '#0f766e',
-              background: 'rgba(15,118,110,0.08)',
-              padding: '3px 10px',
-              borderRadius: '99px',
-              display: 'inline-block',
-              marginBottom: '12px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em'
-            }}>
-              Version {localVersion}
-            </div>
-          )}
-          <p className="login-description">
-            Sign in with your credentials to access the system
-          </p>
-
-          <form onSubmit={handleLoginSubmit}>
-            <div className="form-group">
-              <label className="form-label">Username</label>
-              <input
-                id="login-username"
-                type="text"
-                className={`form-input ${loginError ? 'error' : ''}`}
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                placeholder="Enter username"
-                autoComplete="username"
-              />
-            </div>
-
-            <div className="form-group relative-group">
-              <label className="form-label">Password</label>
-              <input
-                id="login-password"
-                type={showPassword ? 'text' : 'password'}
-                className={`form-input password-input ${loginError ? 'error' : ''}`}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Enter password"
-                autoComplete="current-password"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(v => !v)}
-                className="password-toggle-btn"
-              >
-                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-              </button>
-            </div>
-
-            {loginError && (
-              <div className="form-error-msg show" style={{ marginBottom: '18px', textAlign: 'left' }}>
-                {loginError}
+        <div className="login-main">
+          {/* Left: deep-green industrial brand panel */}
+          <div className="login-brand-panel">
+            <img src="/assets/Ultron_logo.png" className="login-brand-logo" alt="UltrON Logo" />
+            <div className="login-brand-body">
+              <h2 className="login-tagline">
+                Industrial data.
+                <span>Logged. Monitored. Connected.</span>
+              </h2>
+              <p className="login-subtext">
+                Acquire, record, and monitor device data, process parameters, alarms, and system health from one platform.
+              </p>
+              <div className="login-caps">
+                <div className="login-cap">
+                  <IconGauge size={18} stroke={1.5} className="login-cap-icon" />
+                  <span>Live data</span>
+                </div>
+                <div className="login-cap">
+                  <IconChartLine size={18} stroke={1.5} className="login-cap-icon" />
+                  <span>Analytics</span>
+                </div>
+                <div className="login-cap">
+                  <IconBellRinging size={18} stroke={1.5} className="login-cap-icon" />
+                  <span>Alarms</span>
+                </div>
+                <div className="login-cap">
+                  <IconFileText size={18} stroke={1.5} className="login-cap-icon" />
+                  <span>Reporting</span>
+                </div>
               </div>
-            )}
+            </div>
+            <div className="login-telemetry" aria-hidden="true">
+              <svg viewBox="0 0 520 74" preserveAspectRatio="none" fill="none">
+                <path d="M0 40 L40 34 L80 46 L120 30 L160 52 L200 26 L240 48 L280 38 L320 44 L360 28 L400 50 L440 36 L480 42 L520 32" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" strokeLinecap="round" />
+                <line x1="0" y1="60" x2="520" y2="60" stroke="currentColor" strokeWidth="1" strokeDasharray="3 5" />
+                <circle cx="120" cy="30" r="2.5" fill="currentColor" />
+                <circle cx="240" cy="48" r="2.5" fill="currentColor" />
+                <circle cx="360" cy="28" r="2.5" fill="currentColor" />
+                <circle cx="480" cy="42" r="2.5" fill="currentColor" />
+              </svg>
+            </div>
+          </div>
 
-            <button
-              type="submit"
-              className="btn btn-primary btn-wide"
-              style={{ height: '42px', fontSize: '14px' }}
-              disabled={loggingIn}
-            >
-              {loggingIn ? 'Signing in…' : 'Sign In to System'}
-            </button>
-          </form>
+          {/* Right: light form panel */}
+          <div className="login-form-panel">
+            <img
+              src="/assets/sunshine_logo.png"
+              className="login-form-logo"
+              alt="Sunshine Technologies"
+              title="Click to perform hard refresh"
+              onClick={handleHardRefresh}
+              style={{ cursor: 'pointer', transition: 'opacity 0.2s ease' }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '0.7'; }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+            />
+            <div className="login-form-inner">
+              <h1 className="login-heading">ULTRON</h1>
+              <p className="login-platform">Industrial Monitoring Platform</p>
+              <p className="login-powered">Powered by Sunshine Technologies</p>
+              {localVersion && (
+                <div className="login-version">
+                  VERSION {localVersion}
+                </div>
+              )}
+              <p className="login-subheading">
+                Sign in with your credentials to access the system.
+              </p>
 
+              <form onSubmit={handleLoginSubmit}>
+                <div className="login-field">
+                  <label className="login-label" htmlFor="login-username">Username</label>
+                  <div className="login-input-wrap">
+                    <IconUser size={16} stroke={1.5} className="login-input-icon" />
+                    <input
+                      id="login-username"
+                      type="text"
+                      className={`login-input ${loginError ? 'error' : ''}`}
+                      value={username}
+                      onChange={e => setUsername(e.target.value)}
+                      placeholder="Enter username"
+                      autoComplete="username"
+                      aria-invalid={!!loginError}
+                    />
+                  </div>
+                </div>
 
-          <img
-            src="/assets/sunshine_logo.png"
-            className="brand-logo"
-            alt="Sunshine Technologies"
-            title="Click to perform hard refresh"
-            onClick={handleHardRefresh}
-            style={{ cursor: 'pointer', transition: 'transform 0.2s ease' }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
-          />
+                <div className="login-field">
+                  <label className="login-label" htmlFor="login-password">Password</label>
+                  <div className="login-input-wrap">
+                    <IconLock size={16} stroke={1.5} className="login-input-icon" />
+                    <input
+                      id="login-password"
+                      type={showPassword ? 'text' : 'password'}
+                      className={`login-input ${loginError ? 'error' : ''}`}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Enter password"
+                      autoComplete="current-password"
+                      aria-invalid={!!loginError}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(v => !v)}
+                      className="login-pw-toggle"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="login-forgot-row">
+                  <a
+                    href="#"
+                    className="login-forgot"
+                    title="Contact support to reset your password"
+                    onClick={e => e.preventDefault()}
+                  >
+                    Forgot password?
+                  </a>
+                </div>
+
+                {loginError && (
+                  <div className="login-error">
+                    {loginError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="login-btn"
+                  disabled={loggingIn}
+                >
+                  {loggingIn ? 'Signing in...' : 'Sign in to UltrON'}
+                </button>
+                <p className="login-secure-note">Secure access &bull; Authorized users only</p>
+              </form>
+            </div>
+          </div>
         </div>
-        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(8px)', borderTop: '1px solid #e2e8f0', padding: '6px 20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '20px', fontSize: '11px', fontWeight: '600', color: '#64748b', flexWrap: 'wrap', zIndex: 10 }}>
-          <span>&copy; 2026 <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#14b8a6', textDecoration: 'none' }}>Sunshine Technologies!</a></span>
-          <span>Support: 7659091468, 9133377852, 853</span>
-          <span>Sales: 8801231166, 9133377852</span>
+
+        <div className="login-footer" style={{ flexDirection: 'column', gap: '6px', padding: '12px 24px', fontSize: '11px', lineHeight: 1.5 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: '14px', color: 'var(--text-secondary)' }}>
+            <span><strong>Support Helpline:</strong> 7659091468, 9133377852, 853</span>
+            <span>&bull;</span>
+            <span><strong>Sales:</strong> 8801231166, 9133377854</span>
+            <span>&bull;</span>
+            <span><strong>Email:</strong> <a href="mailto:tst@sunshinetechno.com" className="login-footer-link">tst@sunshinetechno.com</a>, <a href="mailto:support@sunshinetechno.com" className="login-footer-link">support@sunshinetechno.com</a></span>
+            <span>&bull;</span>
+            <span><strong>Website:</strong> <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" className="login-footer-link">sunshinetechno.com</a></span>
+          </div>
+          <div style={{ color: 'var(--text-secondary)', opacity: 0.85, fontSize: '10.5px' }}>
+            <span>&copy; 2026 Sunshine Technologies. Hyderabad &bull; Visakhapatnam. All rights reserved.</span>
+          </div>
         </div>
+
         <div id="toastContainer"></div>
       </div>
     );
@@ -364,19 +535,24 @@ function App() {
 
   // ─── Screen renderer ───────────────────────────────────────────────────────
   const renderScreen = () => {
+    let screenComponent;
     switch (activeScreen) {
-      case 'dashboardScreen': return <DashboardScreen />;
-      case 'devicesScreen': return currentUserRole === 'admin' ? <DevicesScreen /> : <DashboardScreen />;
-      case 'trendsScreen': return <TrendsScreen />;
-      case 'reportsScreen': return <ReportsScreen />;
-      case 'logsScreen': return currentUserRole === 'admin' ? <LogsScreen /> : <DashboardScreen />;
-      case 'settingsScreen': return currentUserRole === 'admin' ? <SettingsScreen /> : <DashboardScreen />;
-      case 'usersScreen': return currentUserRole === 'admin' ? <UsersScreen /> : <DashboardScreen />;
-      case 'cpcbScreen': return currentUserRole === 'admin' ? <CPCB /> : <DashboardScreen />;
-      case 'calibrationScreen': return currentUserRole === 'admin' ? <CalibrationScreen /> : <DashboardScreen />;
-      case 'contactScreen': return <ContactScreen />;
-      default: return <DashboardScreen />;
+      case 'dashboardScreen': screenComponent = <DashboardScreen />; break;
+      case 'devicesScreen': screenComponent = currentUserRole === 'admin' ? <DevicesScreen /> : <DashboardScreen />; break;
+      case 'logsScreen': screenComponent = currentUserRole === 'admin' ? <LogsScreen /> : <DashboardScreen />; break;
+      case 'trendsScreen': screenComponent = <TrendsScreen />; break;
+      case 'reportsScreen': screenComponent = <ReportsScreen />; break;
+      case 'settingsScreen': screenComponent = currentUserRole === 'admin' ? <SettingsScreen /> : <DashboardScreen />; break;
+      case 'cpcbScreen': screenComponent = currentUserRole === 'admin' && allowServerMgmt ? <CPCB /> : <DashboardScreen />; break;
+      case 'calibrationScreen': screenComponent = currentUserRole === 'admin' ? <CalibrationScreen /> : <DashboardScreen />; break;
+      case 'contactScreen': screenComponent = <ContactScreen />; break;
+      default: screenComponent = <DashboardScreen />; break;
     }
+    return (
+      <React.Suspense fallback={<div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '600' }}>Loading module…</div>}>
+        {screenComponent}
+      </React.Suspense>
+    );
   };
 
   return (
@@ -398,6 +574,8 @@ function App() {
               key={key}
               className={`nav-rail-btn ${activeScreen === key ? 'active' : ''}`}
               onClick={() => setActiveScreen(key)}
+              onMouseEnter={() => prefetchScreen && prefetchScreen(key)}
+              onFocus={() => prefetchScreen && prefetchScreen(key)}
               title={label}
             >
               <Icon />
@@ -418,8 +596,8 @@ function App() {
         <header className="top-bar">
           <div className="top-left" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {/* System Live Clock */}
-            <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f766e', background: 'rgba(15,118,110,0.06)', padding: '6px 14px', borderRadius: '6px', border: '1px solid rgba(15,118,110,0.15)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
-              {timeStr}
+            <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--primary-600)', background: 'rgba(13,79,73,0.06)', padding: '6px 14px', borderRadius: '6px', border: '1px solid rgba(13,79,73,0.15)', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+              <Clock />
             </div>
           </div>
 
@@ -433,11 +611,11 @@ function App() {
               />
             )}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: plantLogo ? 'flex-start' : 'center' }}>
-              <div style={{ fontSize: '16px', fontWeight: '700', color: '#0f766e', fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              <div style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary-600)', fontFamily: 'Outfit, sans-serif', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                 {plantName}
               </div>
               {plantAddress && (
-                <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '500', marginTop: '1px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '500', marginTop: '1px' }}>
                   {plantAddress}
                 </div>
               )}
@@ -445,7 +623,24 @@ function App() {
           </div>
 
           <div className="top-right" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div style={{ textAlign: 'right', fontSize: '12px', color: '#475569' }}>
+            {sysNet && (
+              <div style={{ textAlign: 'right', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'flex-end' }}>
+                  <span>PC: <strong style={{ fontFamily: 'Consolas, monospace', color: 'var(--text-primary)', fontSize: '12px' }}>{sysNet.lan_ip && sysNet.lan_ip !== '127.0.0.1' ? sysNet.lan_ip : 'Not available'}</strong></span>
+                  {sysNet.hostname && (
+                    <>
+                      <span style={{ opacity: 0.5 }}>/</span>
+                      <span style={{ fontWeight: 600 }}>HOST: {sysNet.hostname}</span>
+                    </>
+                  )}
+                </div>
+                <div style={{ marginTop: '2px', display: 'flex', alignItems: 'center', gap: '5px', justifyContent: 'flex-end', fontWeight: '600' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', display: 'inline-block', background: sysNet.internet_connected ? 'var(--success)' : 'var(--danger)' }}></span>
+                  Internet {sysNet.internet_connected ? 'Online' : 'Offline'}
+                </div>
+              </div>
+            )}
+            <div style={{ textAlign: 'right', fontSize: '12px', color: 'var(--text-secondary)' }}>
               <div>
                 Operator: <strong>{currentUser}</strong>
               </div>
@@ -459,11 +654,11 @@ function App() {
                   fontWeight: '700',
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase',
-                  background: currentUserRole === 'admin' ? 'rgba(220,38,38,0.1)' : 'rgba(15,118,110,0.1)',
-                  color: currentUserRole === 'admin' ? '#dc2626' : '#0f766e',
-                  border: currentUserRole === 'admin' ? '1px solid rgba(220,38,38,0.3)' : '1px solid rgba(15,118,110,0.3)',
+                  background: isSuperAdmin ? 'rgba(15, 118, 110, 0.12)' : (currentUserRole === 'admin' ? 'rgba(239, 159, 39, 0.12)' : 'rgba(13, 79, 73, 0.1)'),
+                  color: isSuperAdmin ? '#0F766E' : (currentUserRole === 'admin' ? '#C07E12' : 'var(--primary-600)'),
+                  border: isSuperAdmin ? '1px solid rgba(15, 118, 110, 0.3)' : (currentUserRole === 'admin' ? '1px solid rgba(239, 159, 39, 0.3)' : '1px solid rgba(13, 79, 73, 0.3)'),
                 }}>
-                  {currentUserRole === 'admin' ? 'Admin' : 'Client View'}
+                  {isSuperAdmin ? 'SuperMaster' : (currentUserRole === 'admin' ? 'Master' : 'Client View')}
                 </span>
               </div>
             </div>
@@ -501,9 +696,9 @@ function App() {
             padding: '0 20px',
             fontWeight: '700',
             fontSize: '12px',
-            color: '#0f766e',
+            color: 'var(--primary-600)',
             whiteSpace: 'nowrap',
-            borderRight: '1px solid rgba(15,118,110,0.2)',
+            borderRight: '1px solid rgba(13,79,73,0.2)',
             background: 'rgba(255, 255, 255, 0.4)',
             display: 'flex',
             flexDirection: 'column',
@@ -513,26 +708,22 @@ function App() {
             textTransform: 'uppercase',
             lineHeight: 1.4
           }}>
-            <div>All &copy; 2026 rights reserved
-              <a href="https://sunshinetechno.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#14b8a6', marginLeft: '4px', textDecoration: 'none', transition: 'color 0.2s' }} onMouseOver={e => (e.target as HTMLElement).style.color = '#0f766e'} onMouseOut={e => (e.target as HTMLElement).style.color = '#14b8a6'}>
-                Sunshine Technologies!
-              </a>
-            </div>
-            <div style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'none', letterSpacing: '0.02em' }}>
-              Support: 7659091468, 9133377852, 853 &nbsp;|&nbsp; Sales: 8801231166, 9133377852
+            <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'none', letterSpacing: '0.02em', lineHeight: 1.6 }}>
+              &copy; 2026 <a href="https://www.sunshinetechno.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-600)', textDecoration: 'underline' }}>Sunshine Technologies</a>. All rights reserved.
+              <br />Support: 7659091468, 9133377852 &nbsp;|&nbsp; Sales: 8801231166, 9133377854
             </div>
           </div>
           <div className="marquee-container" style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
             <div style={{ width: '100%', overflow: 'hidden' }}>
               <div className="marquee-content" style={{ animationDuration: broadcasts && broadcasts.length > 0 ? '25s' : '35s' }}>
-                {broadcasts && broadcasts.length > 0 ? (
+                {broadcasts && broadcasts.length > 0 && localStorage.getItem('ultron_broadcast_enabled') !== 'false' ? (
                   broadcasts.map((b, i) => (
-                    <span key={b.id} style={{ color: b.severity === 'critical' ? '#ef4444' : b.severity === 'warn' ? '#f59e0b' : 'inherit' }}>
+                    <span key={b.id} style={{ color: b.severity === 'critical' ? 'var(--danger)' : b.severity === 'warn' ? 'var(--warning)' : 'inherit' }}>
                       {b.message}{i < broadcasts.length - 1 ? '  ◆  ' : ''}
                     </span>
                   ))
                 ) : (
-                  <span>Data available at this portal is as per CPCB prescribed procedure published at cpcb.nic.in!</span>
+                  <span>UltrON | Environmental monitoring data acquisition and transmission platform designed for applicable CPCB, SPCB/PCC requirements and regulatory protocols.</span>
                 )}
               </div>
             </div>

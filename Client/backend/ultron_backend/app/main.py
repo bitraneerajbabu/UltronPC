@@ -5,6 +5,7 @@ CORS for the frontend, and APScheduler for averaging + heartbeat.
 """
 
 import asyncio
+import json
 import os
 import threading
 from contextlib import asynccontextmanager
@@ -32,39 +33,17 @@ from app.api import led as led_api
 from app.api import broadcasts as broadcasts_api
 from app.api import cpcb as cpcb_api
 from app.api import calibration as calibration_api
+from app.api import rajapi as rajapi_api
+from app.core.security_middleware import SecurityHeadersMiddleware, RequestSizeLimitMiddleware
+from app.core.rate_limiter import RateLimitMiddleware
+from app.core.error_handler import RequestIDMiddleware, GlobalExceptionMiddleware, AccessLogMiddleware
+from app.core.secrets_vault import validate_secrets_on_startup, vault
 
 log = get_logger("ultron.main")
 
 
 # ─── Seed Default Admin ───────────────────────────────────────────────────────
-async def _seed_admin():
-    """
-    Create the default admin account on first startup if no users exist.
-    Credentials are taken from settings: ADMIN_USERNAME / ADMIN_PASSWORD.
-    """
-    from app.database import AsyncSessionLocal
-    from app.models.user import User
-    from app.core.security import hash_password
-    from sqlalchemy import select, func
-
-    async with AsyncSessionLocal() as db:
-        count_res = await db.execute(select(func.count(User.id)))
-        count = count_res.scalar() or 0
-        if count == 0:
-            admin = User(
-                username=settings.ADMIN_USERNAME,
-                hashed_password=hash_password(settings.ADMIN_PASSWORD),
-                role="admin",
-                full_name="System Administrator",
-                is_active=True,
-                created_by="system",
-            )
-            db.add(admin)
-            await db.commit()
-            log.info(
-                f"Default admin user seeded: username='{settings.ADMIN_USERNAME}' "
-                "Change the default password in production."
-            )
+# Default users (Master & SuperMaster) are managed exclusively by app.database_initializer
 
 
 
@@ -85,6 +64,12 @@ async def _start_led_http_server(port: int):
         from fastapi import FastAPI
         from fastapi.middleware.cors import CORSMiddleware
         from app.api import led as led_api
+
+        if not settings.LED_AUTH_TOKEN:
+            log.warning(
+                "[LED] LED_AUTH_TOKEN is not set — LED endpoints fall back to username-only "
+                "authentication. Set LED_AUTH_TOKEN in .env for a stronger static token."
+            )
 
         led_app = FastAPI(title="UltrON LED", docs_url=None, redoc_url=None)
         led_app.add_middleware(
@@ -134,12 +119,20 @@ async def lifespan(app: FastAPI):
             import shutil
             from pathlib import Path
             bundle_db = Path(sys._MEIPASS) / "ultron.db"
-            app_db = APP_DIR / "ultron.db"
-            if bundle_db.is_file() and not app_db.is_file():
+            app_dir = Path(os.environ.get("PROGRAMDATA", "C:\\ProgramData")) / "UltrON"
+            app_db = app_dir / "ultron.db"
+            dest_empty = app_db.is_file() and app_db.stat().st_size < 50000 and bundle_db.stat().st_size > 50000
+            if bundle_db.is_file() and (not app_db.is_file() or dest_empty):
                 shutil.copy2(str(bundle_db), str(app_db))
-                log.info(f"Copied pre-seeded database from bundle to {app_db}")
+                log.info(f"Copied pre-seeded database ({bundle_db.stat().st_size // 1024} KB) from bundle to {app_db}")
     except Exception as e:
         log.warning(f"Could not copy bundled database: {e}")
+
+    # 1.75 Validate secrets
+    missing = vault.validate()
+    if missing:
+        for m in missing:
+            log.warning(f"Missing secret: {m}")
 
     # 2. Init DB tables
     await init_db()
@@ -149,11 +142,20 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as restore_db:
         await alarm_engine.load_active_from_db(restore_db)
 
+    # 2.75 Start Online Time Sync service
+    from app.services.time_sync import start_time_sync_loop
+    asyncio.create_task(start_time_sync_loop(), name="time-sync-loop")
+
     # 3. Start polling engine
     await polling_engine.start_polling()
 
-    # 4. Seed default admin user if no users exist
-    await _seed_admin()
+    # 3.5 Start Historian Service (records LiveCache history for trends & reports)
+    from app.services.historian_service import historian_service
+    historian_service.start()
+
+    # 4. Seed default admin users (Master and SuperMaster if missing)
+    from app.database_initializer import initialize_defaults
+    await initialize_defaults()
 
     # 4.25 Seed default CPCB parameter mappings
     from app.services.cpcb.mapping_service import seed_default_mappings
@@ -189,7 +191,7 @@ async def lifespan(app: FastAPI):
         run_server_push,
         args=["live"],
         trigger="interval",
-        seconds=5,
+        seconds=60,
         id="server_push_live",
         replace_existing=True,
     )
@@ -197,7 +199,7 @@ async def lifespan(app: FastAPI):
         run_server_push,
         args=["delay"],
         trigger="interval",
-        seconds=5,
+        seconds=900,
         id="server_push_delay",
         replace_existing=True,
     )
@@ -217,12 +219,12 @@ async def lifespan(app: FastAPI):
         id="heartbeat_monitor",
         replace_existing=True,
     )
-    # CPCB CAAQM Legacy Export — run every 5 seconds
+    # CPCB CAAQM Legacy Export — run every 60 seconds (CPCB spec is 15-min data)
     from app.services.cpcb.scheduler_service import run_cpcb_pipeline
     scheduler.add_job(
         run_cpcb_pipeline,
         trigger="interval",
-        seconds=5,
+        seconds=60,
         id="cpcb_export",
         replace_existing=True,
     )
@@ -234,6 +236,8 @@ async def lifespan(app: FastAPI):
     # ─── Shutdown ─────────────────────────────────────────────────────────────
     log.info("UltrON shutting down …")
     scheduler.shutdown(wait=False)
+    from app.services.historian_service import historian_service
+    await historian_service.stop()
     await polling_engine.stop_polling()
     log.info("UltrON stopped")
 
@@ -242,7 +246,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="UltrON Industrial Monitoring API",
     description="""
-## UltrON — Powered by Sunshine Technologies
+## UltrON — All Rights Reserved to Neeraj
 
 Real-time industrial telemetry platform supporting:
 - **Modbus TCP / RTU / RS485**
@@ -282,14 +286,23 @@ class CSPMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(CSPMiddleware)
 
-# ─── Rate Limiting (slowapi) ─────────────────────────────────────────────────
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
+# ─── Security Headers (HSTS, X-Content-Type-Options, etc.) ────────────────────
+app.add_middleware(SecurityHeadersMiddleware)
 
-_app_limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = _app_limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# ─── Request Size Limit (10 MB) ───────────────────────────────────────────────
+app.add_middleware(RequestSizeLimitMiddleware, max_size=10 * 1024 * 1024)
+
+# ─── Request ID / Correlation ID ──────────────────────────────────────────────
+app.add_middleware(RequestIDMiddleware)
+
+# ─── Global Exception Handler ─────────────────────────────────────────────────
+app.add_middleware(GlobalExceptionMiddleware)
+
+# ─── Access Logging ───────────────────────────────────────────────────────────
+app.add_middleware(AccessLogMiddleware)
+
+# ─── Rate Limiting ────────────────────────────────────────────────────────────
+app.add_middleware(RateLimitMiddleware)
 
 # ─── API Routes ───────────────────────────────────────────────────────────────
 PREFIX = "/api/v1"
@@ -310,6 +323,7 @@ app.include_router(led_api.router,      prefix=PREFIX)  # LED Board LAN endpoint
 app.include_router(broadcasts_api.router, prefix=PREFIX)
 app.include_router(cpcb_api.router, prefix=PREFIX)
 app.include_router(calibration_api.router, prefix=PREFIX)
+app.include_router(rajapi_api.router, prefix=PREFIX)
 
 # ─── Public Version Endpoint ──────────────────────────────────────────────────
 @app.get("/api/v1/version")
@@ -327,28 +341,47 @@ async def websocket_live(
     """
     WebSocket endpoint for live dashboard data.
 
-    Connect: ws://localhost:8000/ws/live?token=JWT_TOKEN&station_ids=1,2,3
+    Connect: ws://localhost:8000/ws/live?station_ids=1,2,3
+    Auth: send {"type": "auth", "token": "JWT"} as the first message,
+          or pass ?token=JWT for backward compatibility.
     Messages received:
       - {"type": "live_data", "device_id": ..., "data": [...], "ts": "..."}
       - {"type": "alarm", "alarm_id": ..., "severity": ..., ...}
       - {"type": "heartbeat", "ts": ..., "clients": ...}
     """
+    await websocket.accept()
+    if not token:
+        try:
+            data = await websocket.receive_text()
+            try:
+                token = json.loads(data).get("token", "")
+            except Exception:
+                token = ""
+        except WebSocketDisconnect:
+            return
     if not token:
         await websocket.close(code=4001, reason="Missing auth token")
         return
     try:
         from app.core.security import decode_token
         payload = decode_token(token)
-        if not payload.get("sub"):
+        username = payload.get("sub")
+        if not username:
             await websocket.close(code=4001, reason="Invalid token")
             return
+        # Blacklist check on WS connect
+        if settings.JWT_BLACKLIST_ENABLED:
+            from app.core.security import is_token_blacklisted
+            async with AsyncSessionLocal() as ws_db:
+                if await is_token_blacklisted(token, ws_db):
+                    await websocket.close(code=4001, reason="Token revoked")
+                    return
     except Exception:
         await websocket.close(code=4001, reason="Invalid token")
         return
 
-    sids = [int(x) for x in station_ids.split(",") if x.strip().isdigit()] if station_ids else []
-    await ws_manager.connect(websocket, sids)
-    log.info(f"WS client connected (user={payload.get('sub')}). Subscribed stations: {sids or 'all'}")
+    await ws_manager.connect(websocket)
+    log.info(f"WS client connected (user={username}).")
 
     try:
         # Send welcome message
@@ -356,7 +389,7 @@ async def websocket_live(
             "type": "connected",
             "message": f"Connected to {settings.APP_NAME} live stream",
             "ts": datetime.now(timezone.utc).isoformat(),
-            "subscribed_stations": sids,
+            "subscribed_stations": [],
         })
         # Keep connection open — just drain incoming (clients can send ping)
         while True:
@@ -454,7 +487,7 @@ if _UI_DIST.is_dir():
             return FileResponse(str(file))
         index = _UI_DIST / "index.html"
         if index.is_file():
-            return FileResponse(str(index))
+            return FileResponse(str(index), headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
         return JSONResponse({"detail": "UI not built — run python run.py"}, status_code=503)
 else:
     log.warning(

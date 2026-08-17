@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button,
-  Select, MenuItem, FormControl, InputLabel, Box, Typography,
+  Select, MenuItem, FormControl, InputLabel, Box,
 } from '@mui/material';
-import { Megaphone } from 'lucide-react';
+import { IconMessage } from '@tabler/icons-react';
 
-interface SiteOption { id: number; name: string; location?: string; }
+interface SiteOption { id: number; name: string; location?: string | null; }
 
 interface BroadcastDialogProps {
   open: boolean;
@@ -57,8 +57,8 @@ export default function BroadcastDialog({ open, editData, sites, onClose, onSave
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <form onSubmit={handleSubmit}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box sx={{ width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#EFF6FF', color: '#2563EB' }}>
-            <Megaphone size={20} />
+          <Box sx={{ width: 36, height: 36, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'primary.light', color: 'primary.main' }}>
+            <IconMessage size={20} />
           </Box>
           {editData ? 'Edit Broadcast' : 'New Broadcast'}
         </DialogTitle>
@@ -98,28 +98,27 @@ export default function BroadcastDialog({ open, editData, sites, onClose, onSave
                 <InputLabel>Select Plant</InputLabel>
                 <Select value={targetSiteId ?? ''} label="Select Plant" onChange={(e) => setTargetSiteId(Number(e.target.value))}>
                   {sites.map((s) => (
-                    <MenuItem key={s.id} value={s.id}>{s.name}{s.location ? ` (${s.location})` : ''}</MenuItem>
+                    <MenuItem key={s.id} value={s.id}>
+                      {s.name} {s.location ? `(${s.location})` : ''}
+                    </MenuItem>
                   ))}
                 </Select>
               </FormControl>
             )}
             <TextField
-              label="Expires At (Optional)"
+              label="Expiry (optional)"
               type="datetime-local"
               value={expiry}
               onChange={(e) => setExpiry(e.target.value)}
               fullWidth
               slotProps={{ inputLabel: { shrink: true } }}
             />
-            <Typography variant="caption" sx={{ color: '#9CA3AF', mt: -1 }}>
-              Leave empty for no expiry.
-            </Typography>
           </Box>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
           <Button onClick={onClose} disabled={loading}>Cancel</Button>
-          <Button type="submit" variant="contained" disabled={loading || !message.trim()}>
-            {loading ? 'Saving...' : editData ? 'Update' : 'Create'}
+          <Button type="submit" variant="contained" disabled={loading}>
+            {loading ? <span className="loader"></span> : 'Save'}
           </Button>
         </DialogActions>
       </form>

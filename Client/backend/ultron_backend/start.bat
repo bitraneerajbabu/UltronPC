@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 echo ============================================================
 echo   UltrON Backend - Setup and Launch
-echo   Powered by Sunshine Technologies
+echo   All Rights Reserved to Neeraj
 echo ============================================================
 echo.
 

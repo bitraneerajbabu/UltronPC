@@ -28,14 +28,27 @@ def _update_env_enc(updates: dict) -> None:
     """
     Merge `updates` into the existing .env.enc without losing other keys.
     This prevents overwriting ADMIN_PASSWORD, SECRET_KEY, etc.
+    Writes to a temp file first then os.replace() to avoid OneDrive reparse-point locks.
     """
+    import tempfile
     enc_file = str(APP_DIR / ".env.enc")
     existing = _read_existing_env_enc()
     existing.update(updates)
-    write_env_enc_from_dict(existing, enc_file)
+    # Write to sibling temp file then atomic replace
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=str(APP_DIR), suffix=".enc.tmp")
+    try:
+        os.close(tmp_fd)
+        write_env_enc_from_dict(existing, tmp_path)
+        os.replace(tmp_path, enc_file)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
-from app.config import CENTRAL_API_URL, RAJAPI_SYNC_URL
+from app.config import settings
 
 class LicenseVerifyRequest(BaseModel):
     api_key: str
@@ -43,8 +56,18 @@ class LicenseVerifyRequest(BaseModel):
 
 @router.get("/status")
 async def get_license_status():
-    """License check removed — always returns True for direct Master login."""
-    return {"licensed": True, "server_url": CENTRAL_API_URL}
+    from app.services.lock_store import get_lock_status
+    lock_data = await get_lock_status()
+    raw = getattr(settings, "CENTRAL_API_KEY", "") or ""
+    masked = raw[:4] + "*" * (len(raw) - 4) if len(raw) > 4 else raw
+    return {
+        "licensed": True,
+        "server_url": getattr(settings, "CENTRAL_API_URL", "https://rajapi.com/api/v1/sync/"),
+        "lock_status": lock_data.get("lock_status", "unlocked"),
+        "lock_reason": lock_data.get("lock_reason"),
+        "amc_expiry": lock_data.get("amc_expiry"),
+        "key": masked or None,
+    }
 
 @router.post("/verify")
 async def verify_and_save_license(req: LicenseVerifyRequest):
@@ -54,28 +77,33 @@ async def verify_and_save_license(req: LicenseVerifyRequest):
     if not key:
         raise HTTPException(status_code=400, detail="API Key is required.")
     
-    # Always use the hardcoded RajAPI server URL — clients cannot change this
-    url = CENTRAL_API_URL
-    payload = {"client_id": "setup_test", "points": []}
+    url = settings.RAJAPI_SYNC_URL
+    payload = {
+        "gateway_id": settings.RAJAPI_STATION_ID or "setup_verify",
+        "device_secret": key,
+        "version": settings.APP_VERSION,
+        "status": "online"
+    }
     
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload, headers={"X-API-Key": key}, timeout=10.0)
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            resp = await client.post(url, json=payload, timeout=15.0)
             
             if resp.status_code != 200:
                 raise HTTPException(status_code=401, detail=f"Server rejected key (Code {resp.status_code})")
                 
-            amc_key = req.amc_key.strip() if req.amc_key else ""
+            data = resp.json()
+            
             updates = {
                 "CENTRAL_API_KEY": key,
             }
-            if amc_key:
-                updates["AMC_KEY"] = amc_key
             _update_env_enc(updates)
             
+            settings.CENTRAL_API_KEY = key
             os.environ["CENTRAL_API_KEY"] = key
-            if amc_key:
-                os.environ["AMC_KEY"] = amc_key
+            
+            from app.services.lock_store import update_from_sync_response
+            await update_from_sync_response(data)
             
             log.info(f"License verified and saved: key={key[:10]}...")
             return {"success": True, "detail": "License verified and saved successfully."}

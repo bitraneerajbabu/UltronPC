@@ -16,7 +16,14 @@ log = get_logger("ultron.lock_store")
 
 LOCK_FILE = Path(__file__).parent.parent.parent / "client_lock.json"
 
-_lock = asyncio.Lock()
+_lock = None
+
+def _get_lock() -> asyncio.Lock:
+    global _lock
+    if _lock is None:
+        _lock = asyncio.Lock()
+    return _lock
+
 _cache = {
     "lock_status": "unlocked",
     "lock_reason": None,
@@ -26,12 +33,11 @@ _cache = {
 
 
 def _read_sync() -> dict:
-    if LOCK_FILE.is_file():
-        try:
-            return json.loads(LOCK_FILE.read_text(encoding="utf-8"))
-        except Exception as e:
-            log.warning(f"Failed to read lock file: {e}")
-    return dict(_cache)
+    try:
+        return json.loads(LOCK_FILE.read_text(encoding="utf-8")) if LOCK_FILE.is_file() else dict(_cache)
+    except Exception as e:
+        log.warning(f"Failed to read lock file: {e}")
+        return dict(_cache)
 
 
 def _write_sync(data: dict):
@@ -43,7 +49,7 @@ def _write_sync(data: dict):
 
 async def update_from_sync_response(sync_resp: dict):
     """Update lock status from RajAPI sync response."""
-    async with _lock:
+    async with _get_lock():
         data = _read_sync()
         changed = False
         for key in ("lock_status", "lock_reason", "allow_spcbcpcb_push", "amc_expiry"):
@@ -58,8 +64,9 @@ async def update_from_sync_response(sync_resp: dict):
 
 async def get_lock_status() -> dict:
     """Return current lock status."""
-    async with _lock:
+    async with _get_lock():
         return dict(_cache | _read_sync())
+
 
 
 async def is_push_allowed() -> bool:

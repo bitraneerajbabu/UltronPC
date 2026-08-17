@@ -10,6 +10,7 @@ a GitHub release with both UltrON.exe and UltrON_Installer.exe attached.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -255,6 +256,17 @@ def _get_git_log_since(tag: str) -> str:
         return "(see commit log)"
 
 
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(65536)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def create_or_update_release(version: str):
     tag_name = f"v{version}"
     print(f"\n[release] Checking for existing release {tag_name}...")
@@ -286,14 +298,26 @@ def create_or_update_release(version: str):
         release_id = release["id"]
         print(f"  Created release (ID: {release_id})")
 
+    # Generate checksums.json
+    checksums = {}
+    if EXE_PATH.exists():
+        checksums["UltrON.exe"] = _sha256_file(EXE_PATH)
+    if INSTALLER_PATH.exists():
+        checksums["UltrON_Installer.exe"] = _sha256_file(INSTALLER_PATH)
+    checksums_path = DIST_DIR / "checksums.json"
+    checksums_path.write_text(json.dumps(checksums, indent=2), encoding="utf-8")
+    print(f"  checksums.json generated ({len(checksums)} entries)")
+
     # Delete old assets, then upload new ones
     _delete_asset(release_id, "UltrON.exe")
     _delete_asset(release_id, "UltrON_Installer.exe")
+    _delete_asset(release_id, "checksums.json")
 
     if EXE_PATH.exists():
         _upload_asset(release_id, EXE_PATH, "UltrON.exe")
     if INSTALLER_PATH.exists():
         _upload_asset(release_id, INSTALLER_PATH, "UltrON_Installer.exe")
+    _upload_asset(release_id, checksums_path, "checksums.json")
 
     print(f"\n  Release URL: https://github.com/{REPO}/releases/tag/{tag_name}")
 

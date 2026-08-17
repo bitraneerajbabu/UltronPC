@@ -25,11 +25,11 @@ from pathlib import Path
 # Get api_key from rajapi.com dashboard (click the site, copy the key)
 # =============================================================================
 CLIENT_LIST = [
-    # {
-    #     "name":       "example_site",
-    #     "api_key":    "your-rajapi-api-key",
-    #     "station_id": "example_station",
-    # },
+    {
+        "name":       "KTPP_AAQMS1",
+        "api_key":    "IN_UltronSST_260725_4b545050_6e656572616a5f776f6b_899fe672b29bac2115fb2a3439d6e564",
+        "station_id": "AAQMS 1",
+    },
 ]
 
 # =============================================================================
@@ -88,6 +88,19 @@ def clean_enc() -> None:
         ENV_ENC_FILE.unlink()
 
 
+def clean_build_cache() -> None:
+    """Remove PyInstaller build cache & .spec so next build is fresh, not incremental."""
+    build_dir = BACKEND_DIR / "build"
+    for spec in ("UltrON.spec", "UltrON_Installer.spec"):
+        p = BACKEND_DIR / spec
+        if p.exists():
+            p.unlink()
+    for sub in ("UltrON", "UltrON_Installer"):
+        p = build_dir / sub
+        if p.exists():
+            shutil.rmtree(p)
+
+
 def run_build() -> bool:
     """Run build_exe.bat and return True if successful."""
     result = subprocess.run(
@@ -142,11 +155,14 @@ def main():
         # 2. Remove old encrypted config so it re-encrypts
         clean_enc()
 
-        # 3. Run the full build
+        # 3. Wipe PyInstaller cache so build is fresh (not incremental/stale)
+        clean_build_cache()
+
+        # 4. Run the full build
         print(f"    Building exe (this takes ~2 min)...")
         success = run_build()
 
-        # 4. Collect the installer
+        # 5. Collect the installer
         if success:
             ok = collect_installer(name)
             results.append((name, ok))
@@ -154,7 +170,7 @@ def main():
             print(f"    FAIL Build FAILED for {name}")
             results.append((name, False))
 
-        # 5. Clean up .env
+        # 6. Clean up .env
         cleanup_env()
 
     # Final summary

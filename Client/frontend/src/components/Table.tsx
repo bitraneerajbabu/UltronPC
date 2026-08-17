@@ -20,7 +20,7 @@ interface TableProps {
   emptyMsg?: string;
 }
 
-export const Table: React.FC<TableProps> = ({
+export const Table: React.FC<TableProps> = React.memo(({
   headers = [],
   rows = [],
   selectable = true,
@@ -144,4 +144,4 @@ export const Table: React.FC<TableProps> = ({
       </table>
     </div>
   );
-};
+});

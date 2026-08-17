@@ -19,28 +19,30 @@ router = APIRouter(
 
 @router.get("/", response_model=List[SystemLogOut])
 async def list_logs(
-    log_type: Optional[str] = None,         # comm | system | audit | alarm
-    level: Optional[str] = None,            # DEBUG | INFO | WARNING | ERROR
-    source: Optional[str] = None,
-    start: Optional[datetime] = None,
-    end: Optional[datetime] = None,
-    limit: int = Query(500, le=10000),
     db: AsyncSession = Depends(get_db),
+    log_type: Optional[str] = Query(None),         # comm | system | audit | alarm
+    level: Optional[str] = Query(None),            # DEBUG | INFO | WARNING | ERROR
+    source: Optional[str] = Query(None),
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
+    limit: int = Query(500, le=10000),
 ):
     query = select(SystemLog).order_by(SystemLog.timestamp.desc())
 
-    if log_type:
+    if log_type and isinstance(log_type, str):
         query = query.where(SystemLog.log_type == log_type)
-    if level:
+    if level and isinstance(level, str):
         query = query.where(SystemLog.level == level)
-    if source:
+    if source and isinstance(source, str):
         query = query.where(SystemLog.source.contains(source))
-    if start:
+    if start and isinstance(start, datetime):
         query = query.where(SystemLog.timestamp >= start)
-    if end:
+    if end and isinstance(end, datetime):
         query = query.where(SystemLog.timestamp <= end)
 
-    query = query.limit(limit)
+    lim_val = limit if isinstance(limit, int) else 500
+    query = query.limit(lim_val)
+
     result = await db.execute(query)
     return result.scalars().all()
 

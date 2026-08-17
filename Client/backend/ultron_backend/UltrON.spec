@@ -122,12 +122,6 @@ hidden = [
     # python-dotenv
     "dotenv",
     # Rate limiting (slowapi) & dependencies
-    "slowapi",
-    "slowapi.util",
-    "slowapi.errors",
-    "limits",
-    "limits.storage",
-    "limits.strategies",
     "packaging",
     "deprecated",
     # httpx (async HTTP client for license, poll, push, rajapi)
@@ -154,6 +148,8 @@ hidden = [
     "app.models",
     "app.schemas",
     "app.services",
+    # psutil — system monitoring (used by rajapi_sync)
+    "psutil",
     # pywebview (desktop native window wrapper)
     "webview",
     "webview.platforms",
@@ -183,23 +179,28 @@ ENV_TEMPLATE = HERE / ".env.template"
 if ENV_TEMPLATE.is_file():
     datas.append((str(ENV_TEMPLATE), "."))
 
-# 3. fpdf2 ships font & image data inside its package
+# 4. Sunshine logo for PDF reports
+LOGO_FILE = HERE / "assets" / "sunshine_logo.png"
+if LOGO_FILE.is_file():
+    datas.append((str(LOGO_FILE), "assets"))
+
+# 5. fpdf2 ships font & image data inside its package
 datas += collect_data_files("fpdf")
 
-# 4. openpyxl has XML templates
+# 6. openpyxl has XML templates
 datas += collect_data_files("openpyxl")
 
-# 5. tzdata zone files
+# 7. tzdata zone files
 datas += collect_data_files("tzdata")
 
-# 6. pydantic_core has Rust extension wheels with embedded resources
+# 8. pydantic_core has Rust extension wheels with embedded resources
 datas += collect_data_files("pydantic_core")
 
-# 7. aiosqlite — ensure all sub-modules are bundled for PyInstaller
+# 9. aiosqlite — ensure all sub-modules are bundled for PyInstaller
 datas += collect_data_files("aiosqlite")
 datas += collect_data_files("sqlite3")
 
-# 7. Mako templates used by alembic (not needed at runtime but safe to include)
+# (Mako templates not needed at runtime — skip)
 # datas += collect_data_files("mako")
 
 # ── Binaries ──────────────────────────────────────────────────────────────────
