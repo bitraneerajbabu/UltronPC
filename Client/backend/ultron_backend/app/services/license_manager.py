@@ -56,6 +56,7 @@ from app.services.offline_license import (
 from app.services.validation_state import (
     get_last_seen_timestamp,
     get_last_successful_validation,
+    set_last_successful_validation,
 )
 
 log = get_logger("ultron.license_manager")
