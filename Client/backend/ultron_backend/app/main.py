@@ -43,52 +43,7 @@ log = get_logger("ultron.main")
 
 
 # ─── Seed Default Admin ───────────────────────────────────────────────────────
-async def _seed_admin():
-    """
-    Create or unlock the default admin account on startup.
-    Credentials are taken from settings: ADMIN_USERNAME / ADMIN_PASSWORD.
-    """
-    from app.database import AsyncSessionLocal
-    from app.models.user import User
-    from app.core.security import hash_password, verify_password
-    from sqlalchemy import select
-
-    async with AsyncSessionLocal() as db:
-        res = await db.execute(select(User).where(User.username == settings.ADMIN_USERNAME))
-        admin = res.scalar_one_or_none()
-        if not admin:
-            admin = User(
-                username=settings.ADMIN_USERNAME,
-                hashed_password=hash_password(settings.ADMIN_PASSWORD),
-                role="admin",
-                full_name="System Administrator",
-                is_active=True,
-                created_by="system",
-            )
-            db.add(admin)
-            await db.commit()
-            log.info(f"Default admin user seeded: username='{settings.ADMIN_USERNAME}'")
-        else:
-            changed = False
-            if not admin.is_active:
-                admin.is_active = True
-                changed = True
-            if admin.failed_login_attempts != 0:
-                admin.failed_login_attempts = 0
-                changed = True
-            if admin.locked_until is not None:
-                admin.locked_until = None
-                changed = True
-            if changed:
-                await db.commit()
-                log.info(f"Admin account '{settings.ADMIN_USERNAME}' state re-activated.")
-
-            # Password is NOT synced here — Master password is authoritative in the
-            # database only (matches users.py guard: only manual DB edit changes it).
-
-
-async def _sync_admin_password():
-    await _seed_admin()
+# Default users (Master & SuperMaster) are managed exclusively by app.database_initializer
 
 
 
@@ -164,10 +119,12 @@ async def lifespan(app: FastAPI):
             import shutil
             from pathlib import Path
             bundle_db = Path(sys._MEIPASS) / "ultron.db"
-            app_db = APP_DIR / "ultron.db"
-            if bundle_db.is_file() and not app_db.is_file():
+            app_dir = Path(os.environ.get("PROGRAMDATA", "C:\\ProgramData")) / "UltrON"
+            app_db = app_dir / "ultron.db"
+            dest_empty = app_db.is_file() and app_db.stat().st_size < 50000 and bundle_db.stat().st_size > 50000
+            if bundle_db.is_file() and (not app_db.is_file() or dest_empty):
                 shutil.copy2(str(bundle_db), str(app_db))
-                log.info(f"Copied pre-seeded database from bundle to {app_db}")
+                log.info(f"Copied pre-seeded database ({bundle_db.stat().st_size // 1024} KB) from bundle to {app_db}")
     except Exception as e:
         log.warning(f"Could not copy bundled database: {e}")
 
@@ -196,13 +153,9 @@ async def lifespan(app: FastAPI):
     from app.services.historian_service import historian_service
     historian_service.start()
 
-    # 4. Seed default admin users (Master and SuperMaster)
+    # 4. Seed default admin users (Master and SuperMaster if missing)
     from app.database_initializer import initialize_defaults
     await initialize_defaults()
-    await _seed_admin()
-
-    # 4.1 Sync admin password from .env if it changed
-    await _sync_admin_password()
 
     # 4.25 Seed default CPCB parameter mappings
     from app.services.cpcb.mapping_service import seed_default_mappings
@@ -534,7 +487,7 @@ if _UI_DIST.is_dir():
             return FileResponse(str(file))
         index = _UI_DIST / "index.html"
         if index.is_file():
-            return FileResponse(str(index))
+            return FileResponse(str(index), headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
         return JSONResponse({"detail": "UI not built — run python run.py"}, status_code=503)
 else:
     log.warning(

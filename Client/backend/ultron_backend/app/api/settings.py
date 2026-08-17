@@ -150,20 +150,12 @@ async def factory_reset_core(*, restart: bool = True):
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
-    # 3. Re-seed default admin user (dropped with all other tables)
+    # 3. Re-seed default admin and super-admin users (dropped with all other tables)
+    from app.database_initializer import seed_default_admin
     async with AsyncSessionLocal() as seed_db:
-        admin = User(
-            username=settings.ADMIN_USERNAME,
-            hashed_password=hash_password(settings.ADMIN_PASSWORD),
-            role="admin",
-            full_name="System Administrator",
-            is_active=True,
-            created_by="system",
-        )
-        seed_db.add(admin)
-        await seed_db.commit()
+        await seed_default_admin(seed_db)
 
-    log.warning("Full database reset complete — all tables recreated, admin re-seeded")
+    log.warning("Full database reset complete — all tables recreated, default admin accounts re-seeded")
 
     # 4. Auto-restart the process so background jobs start fresh
     if restart:

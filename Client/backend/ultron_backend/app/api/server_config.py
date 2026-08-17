@@ -130,6 +130,21 @@ async def update_mappings(updates: List[BulkMappingUpdate], db: AsyncSession = D
                 db.add(new_mapping)
 
     await db.commit()
+
+    # Trigger immediate push for active CPCB servers if configured
+    try:
+        from app.services.server_push import _push_cpcb
+        cpcb_res = await db.execute(
+            select(ServerConfig).where(
+                ServerConfig.is_active == True,
+                ServerConfig.protocol.in_(["cpcb", "both"])
+            )
+        )
+        for cpcb_srv in cpcb_res.scalars().all():
+            await _push_cpcb(cpcb_srv, db)
+    except Exception as cpcb_err:
+        log.warning(f"Immediate CPCB push on mapping update skipped: {cpcb_err}")
+
     return {"detail": "Mappings updated successfully"}
 
 @router.put("/{server_id}", response_model=ServerConfigResponse, dependencies=[Depends(require_server_mgmt)])

@@ -162,6 +162,27 @@ async def start_polling():
         log.warning("No active devices found — polling engine idle")
         return
 
+    # Initialize all parameters as OFFLINE in LiveCache until real hardware responses arrive
+    for device in devices:
+        for param in device.parameters:
+            telemetry_service.record_reading(
+                parameter_id=param.id,
+                tag_name=param.tag_name,
+                station_name=device.station_name,
+                device_name=device.name,
+                device_id=device.id,
+                value=None,
+                raw_value=None,
+                quality="E",
+                unit=param.unit or "",
+                timestamp=get_utc_now(),
+            )
+        telemetry_service.set_device_state(
+            device_id=device.id,
+            state=DeviceState.STARTING,
+            device_name=device.name,
+        )
+
     # Step 2: Start per-device poll loops
     for device in devices:
         interval = device.poll_interval or settings.POLLING_DEFAULT_INTERVAL

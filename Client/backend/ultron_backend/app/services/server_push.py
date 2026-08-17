@@ -1081,8 +1081,12 @@ async def generate_historical_cpcb_file(db, config: ServerConfig, date_str: str)
             with open(makeup_file_path, "w", encoding="utf-8") as f:
                 f.write(file_content)
             log.info(f"[CPCB] Saved historical makeup file: '{makeup_file_path}'")
+
+            # Also update primary destination file directly with historical rows
+            _append_to_cpcb_file(base_file_path, new_rows)
+            log.info(f"[CPCB] Synced {len(new_rows)} rows to primary CPCB file: '{base_file_path}'")
         except Exception as write_err:
-            log.error(f"[CPCB] Failed to write makeup file '{makeup_file_path}': {write_err}")
+            log.error(f"[CPCB] Failed to write makeup/primary file '{base_file_path}': {write_err}")
 
     return file_content
 

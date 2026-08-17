@@ -286,8 +286,8 @@ class TestAverageModeFallback(unittest.IsolatedAsyncioTestCase):
         param_result = MagicMock()
         param_result.scalars.return_value.all.return_value = [self.param_mock]
 
-        # 3 calls: param, Averages(empty), HistoricalData
-        self.db.execute = AsyncMock(side_effect=[param_result, avg_result, hd_result])
+        # 2 calls: param, HistoricalData (bucketed directly at interval)
+        self.db.execute = AsyncMock(side_effect=[param_result, hd_result])
 
         params, readings = await fetch_interval_data(
             db=self.db,

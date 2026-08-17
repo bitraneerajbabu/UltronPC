@@ -87,14 +87,42 @@ export const AppProvider = ({ children }) => {
       localStorage.removeItem('ultron_refresh');
       localStorage.removeItem('ultron_user');
       localStorage.removeItem('ultron_role');
+      localStorage.removeItem('ultron_allow_sm');
+      localStorage.removeItem('ultron_super');
       setAuthToken(null);
       setCurrentUser(null);
       setCurrentUserRole(null);
+      setAllowServerMgmt(true);
+      setIsSuperAdmin(false);
     };
     fetch(`${API_BASE}/auth/me`, {
       headers: { 'Authorization': `Bearer ${storedToken}` },
     })
-      .then(res => { if (res.status === 401) doRefresh(); })
+      .then(async res => {
+        if (res.status === 401) {
+          doRefresh();
+        } else if (res.ok) {
+          try {
+            const data = await res.json();
+            if (data.username) {
+              setCurrentUser(data.username);
+              localStorage.setItem('ultron_user', data.username);
+            }
+            if (data.role) {
+              setCurrentUserRole(data.role);
+              localStorage.setItem('ultron_role', data.role);
+            }
+            if (data.allow_server_mgmt !== undefined) {
+              setAllowServerMgmt(data.allow_server_mgmt);
+              localStorage.setItem('ultron_allow_sm', data.allow_server_mgmt ? '1' : '0');
+            }
+            if (data.is_super_admin !== undefined) {
+              setIsSuperAdmin(!!data.is_super_admin);
+              localStorage.setItem('ultron_super', data.is_super_admin ? '1' : '0');
+            }
+          } catch {}
+        }
+      })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

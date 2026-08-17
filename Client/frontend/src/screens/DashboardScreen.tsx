@@ -107,7 +107,7 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
   // Custom Icon based on tag name
   const renderIcon = () => {
     const name = `${p.tag_name || ''} ${p.name || ''}`.toLowerCase();
-    const strokeColor = isOffline ? '#FFFFFF' : paramTheme.color;
+    const strokeColor = isOffline ? 'var(--text-secondary)' : paramTheme.color;
     
     if (name.includes('temp')) {
       return <IconTemperature size={20} stroke={1.5} color={strokeColor} />;
@@ -154,72 +154,77 @@ const ParameterCard = React.memo(({ p, data, currentTime, avgVal, history, devic
     return <IconActivity size={20} stroke={1.5} color={strokeColor} />;
   };
 
+  const statusDotColor = isOffline ? 'var(--text-secondary)' : (isGood ? '#0F766E' : state.dot);
+  const statusBadgeText = state.cls === 'sensor-card-exceeded' ? (state.badge || 'EXCEEDED') : (isOffline ? 'OFFLINE' : 'NOMINAL');
+  const statusTextColor = isOffline ? 'var(--text-secondary)' : (isGood ? 'var(--primary-600)' : state.dot);
+
   return (
     <div className={`sensor-card ${state.cls}`} onClick={onClick} style={{ 
-      display: 'flex', flexDirection: 'column', padding: '14px 16px', 
-      borderRadius: '12px', 
+      display: 'flex', flexDirection: 'column', padding: '10px 12px', 
+      borderRadius: '10px', 
       width: '100%',
-      borderLeft: `3px solid ${isSelected ? paramTheme.color : (isGood ? 'rgba(29, 158, 117, 0.25)' : state.dot)}`,
+      minWidth: 0,
+      borderLeft: `3px solid ${isSelected ? '#0F766E' : (isOffline ? 'rgba(71, 85, 105, 0.4)' : (isGood ? '#0F766E' : state.dot))}`,
       borderTop: '1px solid var(--border)',
       borderRight: '1px solid var(--border)',
       borderBottom: '1px solid var(--border)',
-      backgroundColor: isOffline ? '#E24B4A' : 'var(--surface)', 
+      backgroundColor: 'var(--surface)', 
       position: 'relative', cursor: 'pointer', transition: 'all 0.2s ease',
       boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
     }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', flexWrap: 'wrap', gap: '4px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '34px', height: '34px', backgroundColor: isOffline ? 'rgba(255, 255, 255, 0.18)' : paramTheme.bg, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', flexWrap: 'wrap', gap: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+          <div style={{ width: '28px', height: '28px', backgroundColor: isOffline ? 'var(--surface-muted)' : paramTheme.bg, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             {renderIcon()}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '14px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-primary)', lineHeight: '1.2' }}>{p.name || p.tag_name}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+            <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-primary)', lineHeight: '1.2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name || p.tag_name}</span>
             {deviceName && deviceName.trim().toLowerCase() !== 'global gateway' && (
-              <span style={{ fontSize: '10px', fontWeight: '700', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)', textTransform: 'uppercase' }}>{deviceName}</span>
+              <span style={{ fontSize: '9px', fontWeight: '700', color: 'var(--text-secondary)', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{deviceName}</span>
             )}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ width: '8px', height: '8px', backgroundColor: isOffline ? '#FFFFFF' : (isGood ? '#1D9E75' : state.dot), borderRadius: '50%', animation: isOffline ? 'alertPulse 1.2s ease-in-out infinite' : 'none' }}></span>
-          <span style={{ fontSize: '9px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{state.cls === 'sensor-card-exceeded' ? (state.badge || 'EXCEEDED') : (isOffline ? 'OFFLINE' : 'NOMINAL')}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+          <span style={{ width: '7px', height: '7px', backgroundColor: statusDotColor, borderRadius: '50%', animation: isOffline ? 'alertPulse 1.4s ease-in-out infinite' : 'none' }}></span>
+          <span style={{ fontSize: '8.5px', fontWeight: '800', color: statusTextColor, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{statusBadgeText}</span>
         </div>
       </div>
 
       {/* Main Value Block */}
-      <div style={{ backgroundColor: isOffline ? 'rgba(255, 255, 255, 0.14)' : 'var(--surface-muted)', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-        <span style={{ fontSize: '26px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1' }}>{formattedVal}</span>
-        <span style={{ fontSize: '13px', fontWeight: '700', color: isOffline ? '#FFFFFF' : 'var(--text-secondary)' }}>{unit}</span>
+      <div style={{ backgroundColor: 'var(--surface-muted)', borderRadius: '6px', padding: '6px 10px', marginBottom: '8px', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+        <span style={{ fontSize: '20px', fontWeight: '800', color: isOffline ? 'var(--text-secondary)' : 'var(--text-primary)', fontFamily: T.fontMono, lineHeight: '1' }}>{formattedVal}</span>
+        <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)' }}>{unit}</span>
       </div>
 
       {/* Details List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '10px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '8px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '11px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Average (15m):</span>
-          <span style={{ fontSize: '11px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-primary)' }}>{formattedAvgVal} {unit}</span>
+          <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-secondary)' }}>Average (15m):</span>
+          <span style={{ fontSize: '10px', fontWeight: '800', color: isOffline && formattedAvgVal === 'N/A' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>{formattedAvgVal} {unit}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '11px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Warning Limit:</span>
-          <span style={{ fontSize: '11px', fontWeight: '800', color: isOffline ? '#FFFFFF' : 'var(--text-primary)' }}>{limit} {unit}</span>
+          <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-secondary)' }}>Warning Limit:</span>
+          <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-primary)' }}>{limit} {unit}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '11px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Parameter Range:</span>
-          <span style={{ fontSize: '11px', fontWeight: '700', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>{range} {unit}</span>
+          <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text-secondary)' }}>Parameter Range:</span>
+          <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-secondary)' }}>{range} {unit}</span>
         </div>
       </div>
 
       {/* Sparkline Block */}
-      <div style={{ backgroundColor: isOffline ? 'rgba(255, 255, 255, 0.14)' : 'var(--surface-muted)', borderRadius: '6px', padding: '4px 8px', marginBottom: '10px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
-         <div style={{ position: 'absolute', top: '6px', left: '8%', right: '8%', borderTop: `1px dotted ${isOffline ? 'rgba(255, 255, 255, 0.4)' : 'var(--danger)'}`, opacity: 0.4 }}></div>
-         <div style={{ position: 'absolute', top: '14px', left: '8%', right: '8%', borderTop: `1px dotted ${isOffline ? 'rgba(255, 255, 255, 0.4)' : 'var(--warning)'}`, opacity: 0.4 }}></div>
+      <div style={{ backgroundColor: 'var(--surface-muted)', borderRadius: '5px', padding: '3px 6px', marginBottom: '8px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}>
+         <div style={{ position: 'absolute', top: '5px', left: '8%', right: '8%', borderTop: '1px dotted var(--danger)', opacity: isOffline ? 0.2 : 0.4 }}></div>
+         <div style={{ position: 'absolute', top: '11px', left: '8%', right: '8%', borderTop: '1px dotted var(--warning)', opacity: isOffline ? 0.2 : 0.4 }}></div>
          <div style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-           <Sparkline data={history} color={isOffline ? '#FFFFFF' : sparklineColor} width={160} height={18} />
+           <Sparkline data={history} color={isOffline ? 'var(--text-secondary)' : sparklineColor} isOffline={isOffline} width={140} height={16} />
          </div>
       </div>
 
       {/* Footer */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', flexWrap: 'wrap', gap: '4px' }}>
-        <span style={{ fontSize: '10px', fontWeight: '600', color: isOffline ? 'rgba(255, 255, 255, 0.85)' : 'var(--text-secondary)' }}>Received: <span style={{ color: isOffline ? '#FFFFFF' : 'var(--text-primary)', fontWeight: '700' }}>{formattedTimestamp}</span></span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', flexWrap: 'wrap', gap: '3px' }}>
+        <span style={{ fontSize: '9.5px', fontWeight: '600', color: 'var(--text-secondary)' }}>Received: <span style={{ color: 'var(--text-primary)', fontWeight: '700' }}>{formattedTimestamp}</span></span>
       </div>
     </div>
   );
@@ -770,7 +775,7 @@ export const DashboardScreen = React.memo(() => {
         )}
 
         {/* Side rail — health, devices, system info, quick actions */}
-        <aside className="dash-sidebar">
+        <aside className="dash-sidebar dash-rail">
           <div className="card">
             <div className="dash-card-title">Device Status</div>
             <div className="dash-health-row">
@@ -784,7 +789,7 @@ export const DashboardScreen = React.memo(() => {
               <span className="dash-health-count">{String(kpis?.offlineDevices || 0).padStart(2, '0')}</span>
             </div>
             <div className="dash-health-row">
-              <span className="dash-health-dot" style={{ background: 'var(--primary-600)' }}></span>
+              <span className="dash-health-dot" style={{ background: '#7FDBD0' }}></span>
               <span className="dash-health-name">Stations</span>
               <span className="dash-health-count">{String(kpis?.totalStations || stations.length || 0).padStart(2, '0')}</span>
             </div>
@@ -792,17 +797,17 @@ export const DashboardScreen = React.memo(() => {
 
           <div className="card">
             <div className="dash-card-title">Quick Actions</div>
-            <button className="dash-action" onClick={() => { fetchLatestTelemetryAndKpis(); showToast('Telemetry refreshed'); }} style={{ borderColor: '#000000', color: '#000000' }}>
-              <IconRefresh size={16} stroke={2} color="var(--primary-600)" /> Refresh Data
+            <button className="dash-action" onClick={() => { fetchLatestTelemetryAndKpis(); showToast('Telemetry refreshed'); }}>
+              <IconRefresh size={16} stroke={2} /> Refresh Data
             </button>
-            <button className="dash-action" onClick={() => setActiveScreen('reportsScreen')} style={{ borderColor: 'rgba(15, 110, 86, 0.2)' }}>
-              <IconReportAnalytics size={16} stroke={1.75} color="var(--primary-600)" /> View Reports
+            <button className="dash-action" onClick={() => setActiveScreen('reportsScreen')}>
+              <IconReportAnalytics size={16} stroke={1.75} /> View Reports
             </button>
-            <button className="dash-action" onClick={() => setShowAlarmsModal(true)} style={{ borderColor: 'rgba(15, 110, 86, 0.2)' }}>
-              <IconBell size={16} stroke={1.75} color="#C07E12" /> Active Alarms
+            <button className="dash-action" onClick={() => setShowAlarmsModal(true)}>
+              <IconBell size={16} stroke={1.75} /> Active Alarms
             </button>
-            <button className="dash-action" onClick={() => setActiveScreen('contactScreen')} style={{ borderColor: 'rgba(15, 110, 86, 0.2)' }}>
-              <IconMail size={16} stroke={1.75} color="var(--primary-600)" /> Contact
+            <button className="dash-action" onClick={() => setActiveScreen('contactScreen')}>
+              <IconMail size={16} stroke={1.75} /> Contact
             </button>
           </div>
         </aside>

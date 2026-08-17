@@ -67,8 +67,8 @@ const formatError = (detail: unknown, fallback: string): string => {
 
 const SUB_TABS = [
   { key: 'spcb', label: 'SPCB server', icon: 'var(--primary-600)' },
-  { key: 'tnpcb', label: 'TNPCB Server (Tamil Nadu)', icon: 'var(--info)' },
-  { key: 'appcb', label: 'APPCB Server (Encrypted Zip)', icon: 'var(--success)' },
+  { key: 'tnpcb', label: 'TNPCB Server', icon: 'var(--info)' },
+  { key: 'appcb', label: 'APPCB Server', icon: 'var(--success)' },
   { key: 'cpcb', label: 'CPCB TXT File Generation', icon: 'var(--warning)' },
   { key: 'led', label: 'LED Board (LAN)', icon: 'var(--warning)' },
 ];
@@ -565,7 +565,7 @@ export const CPCB = React.memo(() => {
     if (pushLoading) return <p style={{ color: T.textFaint }}>Loading...</p>;
     return (
       <div className="card" style={{ padding: '20px' }}>
-        {sectionHeader(2, 'TNPCB Server (Tamil Nadu PCB - OCEMS REST API)', '', 'var(--info)', () => handleSave('tnpcb'))}
+        {sectionHeader(2, 'TNPCB Server', '', 'var(--info)', () => handleSave('tnpcb'))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {servers.map((conf, idx) => conf.protocol === 'tnpcb' ? renderServerCard(conf, idx, 'tnpcb', null,
             <><label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0, fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}><Toggle checked={!!conf.is_active} onChange={() => handleServerFieldChange(idx, { target: { name: 'is_active', type: 'checkbox', checked: !conf.is_active } })} />{conf.is_active ? 'Enabled' : 'Disabled'}</label>{conf.id && <div style={{ display: 'flex', gap: '6px' }}><button onClick={() => handleTestUrlCheck(conf.id)} disabled={testingUrlCheck[conf.id]} style={{ background: 'var(--warning)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingUrlCheck[conf.id] ? '...' : 'Url Check'}</button><button onClick={() => handleTestPush(conf.id)} disabled={testingPush[conf.id]} style={{ background: 'var(--info)', color: '#fff', border: 'none', height: '30px', padding: '0 14px', fontSize: '11px', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}>{testingPush[conf.id] ? '...' : 'Test TNPCB Push'}</button></div>}</>
@@ -586,7 +586,7 @@ export const CPCB = React.memo(() => {
     if (pushLoading) return <p style={{ color: T.textFaint }}>Loading...</p>;
     return (
       <div className="card" style={{ padding: '20px' }}>
-        {sectionHeader(2, 'APPCB Server (Encrypted Zip Protocol)', '', 'var(--success)', () => handleSave('appcb'))}
+        {sectionHeader(3, 'APPCB Server', '', 'var(--success)', () => handleSave('appcb'))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {servers.map((conf, idx) => conf.protocol === 'appcb' ? renderServerCard(conf, idx, 'appcb',
             <><div style={{ flex: '1 1 120px' }}><label style={s()}>Site ID</label><input type="text" name="appcb_site_id" value={conf.appcb_site_id || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="e.g. site_1392" style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Site UID</label><input type="text" name="appcb_site_uid" value={conf.appcb_site_uid || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="UUID" style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Encryption Key</label><input type="password" name="appcb_encryption_key" value={conf.appcb_encryption_key || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="AES-128 Key (16 bytes)" style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Live URL</label><input type="text" name="live_url" value={conf.live_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://.../api/..." style={ipt} /></div><div style={{ flex: '1 1 200px' }}><label style={s()}>Delay URL</label><input type="text" name="delay_url" value={conf.delay_url || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="https://.../delay" style={ipt} /></div></>,
@@ -608,7 +608,7 @@ export const CPCB = React.memo(() => {
     if (pushLoading) return <p style={{ color: T.textFaint }}>Loading...</p>;
     return (
       <div className="card" style={{ padding: '20px' }}>
-        {sectionHeader(2, 'CPCB TXT File Generation', '', 'var(--warning)', () => handleSave('cpcb'))}
+        {sectionHeader(4, 'CPCB TXT File Generation', '', 'var(--warning)', () => handleSave('cpcb'))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {servers.map((conf, idx) => (conf.protocol === 'cpcb' || conf.protocol === 'both') ? renderServerCard(conf, idx, 'cpcb',
             <><div style={{ flex: '1 1 300px' }}><label style={s()}>Output File Path</label><input type="text" name="cpcb_file_path" value={conf.cpcb_file_path || ''} onChange={e => handleServerFieldChange(idx, e)} placeholder="C:\Data\readings.txt" style={ipt} /></div></>,
@@ -632,7 +632,7 @@ export const CPCB = React.memo(() => {
     if (pushLoading) return <p style={{ color: T.textFaint }}>Loading...</p>;
     return (
       <div className="card" style={{ padding: '20px' }}>
-        {sectionHeader(4, 'LED Board (LAN)', '', 'var(--warning)', () => handleSave('led'))}
+        {sectionHeader(5, 'LED Board (LAN)', '', 'var(--warning)', () => handleSave('led'))}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {servers.map((conf, idx) => conf.protocol === 'led' ? renderServerCard(conf, idx, 'led',
             null,

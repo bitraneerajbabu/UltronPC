@@ -5,9 +5,10 @@ Abstract storage layer decoupling the Historian Service from SQLite database spe
 Enables plug-and-play database backends (SQLite, PostgreSQL, TimescaleDB).
 """
 
+from __future__ import annotations
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Type
 
 from sqlalchemy import select
 from app.core.logger import get_logger

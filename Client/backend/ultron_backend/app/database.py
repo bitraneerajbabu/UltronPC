@@ -284,11 +284,9 @@ async def init_db():
 
         await conn.run_sync(_ensure_broadcast_columns)
 
-        # 2.13 Centralized ORM-driven database defaults initializer
-        from app.database_initializer import initialize_defaults
-        await initialize_defaults()
-
-        # 2.11 Data migrations are no-ops for current deployments.
+    # 2.13 Centralized ORM-driven database defaults initializer
+    from app.database_initializer import initialize_defaults
+    await initialize_defaults()
 
     log.info("Database ready [OK]")
 

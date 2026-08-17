@@ -29,10 +29,15 @@ class DummyStream:
     def encoding(self): return "utf-8"
 
 if getattr(sys, "frozen", False):
-    # Hide the console window immediately on Windows if running in console mode
+    # Set Windows DPI Awareness so PyWebView renders 1:1 crisp identical to browser localhost
     if sys.platform == "win32":
         try:
             import ctypes
+            # Per-Monitor DPI Aware V2 (2) or System Aware (1)
+            try:
+                ctypes.windll.shcore.SetProcessDpiAwareness(2)
+            except Exception:
+                ctypes.windll.user32.SetProcessDPIAware()
             hwnd = ctypes.windll.kernel32.GetConsoleWindow()
             if hwnd:
                 ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE = 0
@@ -609,6 +614,7 @@ def main() -> None:
             y=win_y,
             resizable=True,
             fullscreen=False,
+            zoomable=True,
             min_size=(600, 500),
             confirm_close=False,
         )

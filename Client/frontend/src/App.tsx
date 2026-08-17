@@ -112,6 +112,11 @@ function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [localVersion, setLocalVersion] = useState('');
 
+  useEffect(() => {
+    document.body.style.zoom = '1.0';
+    localStorage.removeItem('ultron_ui_zoom');
+  }, []);
+
   // Activation & lock screen states
   const [activationKey, setActivationKey] = useState('');
   const [activating, setActivating] = useState(false);
@@ -649,11 +654,11 @@ Branch - Visakhapatnam
                   fontWeight: '700',
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase',
-                  background: currentUserRole === 'admin' ? 'rgba(220,38,38,0.1)' : 'rgba(13,79,73,0.1)',
-                  color: currentUserRole === 'admin' ? 'var(--danger)' : 'var(--primary-600)',
-                  border: currentUserRole === 'admin' ? '1px solid rgba(220,38,38,0.3)' : '1px solid rgba(13,79,73,0.3)',
+                  background: isSuperAdmin ? 'rgba(15, 118, 110, 0.12)' : (currentUserRole === 'admin' ? 'rgba(239, 159, 39, 0.12)' : 'rgba(13, 79, 73, 0.1)'),
+                  color: isSuperAdmin ? '#0F766E' : (currentUserRole === 'admin' ? '#C07E12' : 'var(--primary-600)'),
+                  border: isSuperAdmin ? '1px solid rgba(15, 118, 110, 0.3)' : (currentUserRole === 'admin' ? '1px solid rgba(239, 159, 39, 0.3)' : '1px solid rgba(13, 79, 73, 0.3)'),
                 }}>
-                  {currentUserRole === 'admin' ? 'Admin' : 'Client View'}
+                  {isSuperAdmin ? 'SuperMaster' : (currentUserRole === 'admin' ? 'Master' : 'Client View')}
                 </span>
               </div>
             </div>
