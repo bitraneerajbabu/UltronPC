@@ -268,6 +268,10 @@ if exist "{new_exe}" (
     move /y "{new_exe}" "{current_exe}" >nul 2>&1
     if exist "{flag_path}" del /f /q "{flag_path}" >nul 2>&1
 )
+set _MEIPASS2=
+set _MEIPASS=
+set _PYI_SPLASH_IPC=
+set _PYI_ARCHIVE_FILE=
 start "" "{current_exe}"
 del "%~f0" >nul 2>&1
 exit
@@ -276,12 +280,21 @@ exit
             with open(bat_path, "w", encoding="utf-8") as f:
                 f.write(bat_content)
             
+            clean_env = os.environ.copy()
+            for k in list(clean_env.keys()):
+                if k.startswith("_MEI") or k.startswith("_PYI"):
+                    clean_env.pop(k, None)
+
             flags = 0x08000000 | 0x00000008  # CREATE_NO_WINDOW | DETACHED_PROCESS
-            subprocess.Popen(["cmd.exe", "/c", bat_path], creationflags=flags, close_fds=True)
+            subprocess.Popen(["cmd.exe", "/c", bat_path], creationflags=flags, close_fds=True, env=clean_env)
         except Exception as e:
             log.error(f"Restart batch launch failed: {e}")
             try:
-                subprocess.Popen([current_exe], close_fds=True)
+                clean_env = os.environ.copy()
+                for k in list(clean_env.keys()):
+                    if k.startswith("_MEI") or k.startswith("_PYI"):
+                        clean_env.pop(k, None)
+                subprocess.Popen([current_exe], close_fds=True, env=clean_env)
             except Exception as ex2:
                 log.error(f"Direct restart failed: {ex2}")
         
