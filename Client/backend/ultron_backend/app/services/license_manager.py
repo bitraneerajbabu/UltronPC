@@ -261,14 +261,19 @@ async def _get_online_state(db: AsyncSession) -> str:
     Determine license state in online mode from RajAPI heartbeat history.
 
     Mapping:
-      last_successful_validation is None        → LOCKED (never validated)
+      last_successful_validation is None        → GRACE_PERIOD (initial 30-day install grace)
       last_successful_validation within grace   → GRACE_PERIOD
       last_successful_validation beyond grace   → LOCKED
     """
     last_valid = await get_last_successful_validation(db=db)
 
     if last_valid is None:
-        return STATE_LOCKED
+        try:
+            await set_last_successful_validation(db=db)
+            log.info("First-run installation detected: 30-day initial grace period activated.")
+        except Exception as e:
+            log.warning(f"Could not persist initial validation state: {e}")
+        return STATE_GRACE_PERIOD
 
     if is_within_grace(last_valid):
         return STATE_GRACE_PERIOD
