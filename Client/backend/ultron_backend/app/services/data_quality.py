@@ -97,12 +97,19 @@ class DataQualityEngine:
     def bulk_check(self, readings: list[dict], parameters_meta: dict) -> list[dict]:
         """
         readings: list of {parameter_id, value, raw_value, quality}
-        parameters_meta: {parameter_id → {min_valid, max_valid, ...}}
-        Returns same list with 'quality' updated.
+        parameters_meta: {parameter_id → {min_valid, max_valid, alarm_high, ...}}
+        Returns same list with value capped at alarm_high (if exceeded) and 'quality' updated.
         """
         for r in readings:
             pid = r["parameter_id"]
             meta = parameters_meta.get(pid, {})
+            alarm_high = meta.get("alarm_high")
+            val = r.get("value")
+
+            # Warning High Limit Lock: if reading exceeds alarm_high, cap to limit value
+            if val is not None and alarm_high is not None and val > alarm_high:
+                r["value"] = float(alarm_high)
+
             r["quality"] = self.check(
                 parameter_id=pid,
                 value=r.get("value"),

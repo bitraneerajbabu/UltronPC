@@ -1,46 +1,36 @@
 """
-Unit test for P0 Data Integrity: Uncapped Telemetry Preservation.
+Unit test for Warning High Limit Lock / Capping.
 Verifies that when a parameter's real measured value exceeds its configured
-alarm_high (Warning High limit), the saved & published telemetry value is
-PRESERVED as the authentic measurement (e.g. 125.7, 250.0) and NOT capped.
+alarm_high (Warning High limit), the published and stored value is capped
+to the alarm_high limit value (e.g. 88.0 -> 80.0).
 """
 
 import pytest
-from app.models.parameter import Parameter
+from app.services.data_quality import dq_engine
 from app.services.server_push import _cpcb_row
 from datetime import datetime, timezone
 
 
-def test_authentic_uncapped_reading_preservation():
-    """Verify that values exceeding alarm_high remain authentic and uncapped."""
-    param = Parameter(
-        id=101,
-        name="Sulfur Dioxide",
-        tag_name="SO2",
-        alarm_high=100.0,
-        alarm_high_high=200.0,
-    )
+def test_warning_high_limit_capping():
+    """Verify that values exceeding alarm_high are capped to the limit value."""
+    meta = {
+        101: {"min_valid": 0.0, "max_valid": 1000.0, "alarm_high": 80.0}
+    }
 
     readings = [
-        {"parameter_id": 101, "value": 125.70, "quality": "U"},
-        {"parameter_id": 101, "value": 250.00, "quality": "U"},
-        {"parameter_id": 101, "value": 45.00, "quality": "U"},
+        {"parameter_id": 101, "value": 88.00, "raw_value": 88.00, "quality": "U"},
+        {"parameter_id": 101, "value": 120.00, "raw_value": 120.00, "quality": "U"},
+        {"parameter_id": 101, "value": 45.00, "raw_value": 45.00, "quality": "U"},
     ]
 
-    # Process readings preserving authentic readings
-    for r in readings:
-        val = r.get("value")
-        if val is not None and isinstance(val, (int, float)):
-            r["value"] = round(float(val), 2)
+    processed = dq_engine.bulk_check(readings, meta)
 
-    # 1. Authentic readings preserved without capping at alarm_high (100.0)
-    assert readings[0]["value"] == 125.70
-    assert readings[1]["value"] == 250.00
-    assert readings[2]["value"] == 45.00
+    # 1. Values exceeding alarm_high (80.0) are capped to 80.0
+    assert processed[0]["value"] == 80.0
+    assert processed[1]["value"] == 80.0
+    assert processed[2]["value"] == 45.0  # under limit, unchanged
 
-    # 2. CPCB Annexure-I CSV row generation contains authentic values
+    # 2. CPCB Annexure-I CSV row generation contains capped value
     now = datetime(2026, 8, 13, 10, 0, tzinfo=timezone.utc)
-    cpcb_row_1 = _cpcb_row("StationA", "SO2", now, readings[0]["value"], "U")
-    cpcb_row_2 = _cpcb_row("StationA", "SO2", now, readings[1]["value"], "U")
-    assert "125.70" in cpcb_row_1
-    assert "250.00" in cpcb_row_2
+    cpcb_row_1 = _cpcb_row("StationA", "SO2", now, processed[0]["value"], "U")
+    assert "80.00" in cpcb_row_1

@@ -53,10 +53,10 @@ def _cpcb_row(station_name: str, param_code: str, local_from: datetime, value: f
     local_to = local_from + timedelta(minutes=15)
     date_from = local_from.strftime("%d-%m-%Y %H:%M")
     date_to = local_to.strftime("%d-%m-%Y %H:%M")
-    value_str = f"{value:.2f}" if value is not None else ""
+    value_str = f"{value:.2f}" if value is not None else "0.00"
     q = _quality_str(quality)
-    remark = q if q != "U" else ""
-    return f"{station_name},{param_code},{date_from},{date_to},{value_str},0,0,{remark},"
+    remark = q if (q and q != "U") else "0"
+    return f"{station_name},{param_code},{date_from},{date_to},{value_str},0,0,{remark}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -247,7 +247,8 @@ async def _build_spcb_payloads(
                 "Flags": "",
             })
 
-        payloads.append(payload)
+        if payload["Variables"]:
+            payloads.append(payload)
 
     return payloads
 
@@ -922,8 +923,8 @@ async def _push_appcb(config: ServerConfig, db, mode: str, bypass_license: bool 
                 if ld and ld.value is not None:
                     val = ld.value
 
-            if val is None:
-                val = 0.0
+            if val is None or val == "":
+                continue  # Skip offline parameter entirely (no pending record, no posting)
                 
             try:
                 val_rounded = round(float(val), 2)

@@ -141,7 +141,7 @@ export const ReportsScreen = React.memo(() => {
   }, [stations, stationId]);
 
   const filteredParams = useMemo(() => {
-    if (!stationId) return parameters;
+    if (!stationId || stationId === 'all') return parameters;
     return parameters.filter(p => {
       const dev = devices.find(d => String(d.id) === String(p.device_id));
       if (!dev) return false;
@@ -645,6 +645,7 @@ export const ReportsScreen = React.memo(() => {
               value={stationId}
               onChange={e => setStationId(e.target.value)}
             >
+              <option value="all">All Stations (Multi-Station)</option>
               {stations.map(st => (
                 <option key={st.id} value={String(st.id)}>
                   {st.name}

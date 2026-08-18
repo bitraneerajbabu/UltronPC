@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { AppContext, LiveDataContext } from './context/AppContext';
-import { IconLayoutDashboard, IconDeviceDesktop, IconReport, IconSettings, IconUsers, IconEye, IconEyeOff, IconFileText, IconShieldCheck, IconMail, IconGauge, IconChartLine, IconBellRinging, IconRouter, IconUser, IconLock, IconLogs } from '@tabler/icons-react';
+import { IconLayoutDashboard, IconDeviceDesktop, IconReport, IconSettings, IconUsers, IconEye, IconEyeOff, IconFileText, IconShieldCheck, IconMail, IconGauge, IconChartLine, IconBellRinging, IconRouter, IconUser, IconLock, IconLogs, IconSun, IconMoon, IconLogout } from '@tabler/icons-react';
 import { QRCodeSVG } from 'qrcode.react';
 import './App.css';
 
@@ -19,29 +19,29 @@ const CalibrationScreen = React.lazy(() => import('./screens/CalibrationScreen')
 
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
-const DashboardIcon = () => <IconLayoutDashboard className="nav-icon" size={20} stroke={1.8} />;
+const DashboardIcon = () => <IconLayoutDashboard className="nav-icon" size={23} stroke={1.8} />;
 
-const DevicesIcon = () => <IconDeviceDesktop className="nav-icon" size={20} stroke={1.8} />;
+const DevicesIcon = () => <IconDeviceDesktop className="nav-icon" size={23} stroke={1.8} />;
 
-const TrendsIcon = () => <IconChartLine className="nav-icon" size={20} stroke={1.8} />;
+const TrendsIcon = () => <IconChartLine className="nav-icon" size={23} stroke={1.8} />;
 
-const ReportsIcon = () => <IconReport className="nav-icon" size={20} stroke={1.8} />;
+const ReportsIcon = () => <IconReport className="nav-icon" size={23} stroke={1.8} />;
 
-const SettingsIcon = () => <IconSettings className="nav-icon" size={20} stroke={1.8} />;
+const SettingsIcon = () => <IconSettings className="nav-icon" size={23} stroke={1.8} />;
 
-const UsersIcon = () => <IconUsers className="nav-icon" size={20} stroke={1.8} />;
+const UsersIcon = () => <IconUsers className="nav-icon" size={23} stroke={1.8} />;
 
 const EyeIcon = () => <IconEye size={16} stroke={1.8} />;
 
 const EyeOffIcon = () => <IconEyeOff size={16} stroke={1.8} />;
 
-const CPCBIcon = () => <IconFileText className="nav-icon" size={20} stroke={1.8} />;
+const CPCBIcon = () => <IconFileText className="nav-icon" size={23} stroke={1.8} />;
 
-const CalibrationIcon = () => <IconShieldCheck className="nav-icon" size={20} stroke={1.8} />;
+const CalibrationIcon = () => <IconShieldCheck className="nav-icon" size={23} stroke={1.8} />;
 
-const ContactIcon = () => <IconMail className="nav-icon" size={20} stroke={1.8} />;
+const ContactIcon = () => <IconMail className="nav-icon" size={23} stroke={1.8} />;
 
-const LogsIcon = () => <IconLogs className="nav-icon" size={20} stroke={1.8} />;
+const LogsIcon = () => <IconLogs className="nav-icon" size={23} stroke={1.8} />;
 
 // ─── Clock — self-contained, prevents App re-render on every second ──────────
 const Clock = React.memo(() => {
@@ -105,6 +105,8 @@ function App() {
     lockReason,
     prefetchScreen,
     authFetch,
+    theme,
+    toggleTheme,
   } = useContext(AppContext);
   const liveDataCtx = useContext(LiveDataContext) || {};
   const fetchLatestTelemetryAndKpis = liveDataCtx.fetchLatestTelemetryAndKpis;
@@ -557,18 +559,13 @@ Branch - Visakhapatnam
 
   return (
     <div className="app-shell">
-      {/* Navigation Rail */}
-      <aside className="sidebar nav-rail">
-        <div className="nav-rail-logo">
-          <button onClick={handleHardRefresh} title="Click to hard refresh page"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', outline: 'none' }}
-            onMouseEnter={e => { e.currentTarget.style.opacity = '0.75'; }}
-            onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}>
-            <img src="/assets/Ultron_logo.png?t=1" alt="UltrON" className="nav-rail-logo-img" />
-          </button>
+      {/* Modern Capsule Navigation Rail */}
+      <aside className="nav-rail">
+        <div className="nav-rail-logo" onClick={handleHardRefresh} title="Click to hard refresh page">
+          <img src="/assets/Ultron_logo.png?t=1" alt="UltrON" />
         </div>
 
-        <div className="nav-rail-items">
+        <div className="nav-rail-menu">
           {visibleNav.map(({ key, label, Icon }) => (
             <button
               key={key}
@@ -579,13 +576,26 @@ Branch - Visakhapatnam
               title={label}
             >
               <Icon />
-              <span className="nav-rail-label">{label}</span>
             </button>
           ))}
         </div>
 
         <div className="nav-rail-footer">
-          <div className="nav-rail-user">{currentUser}</div>
+          <button
+            className="nav-rail-btn"
+            onClick={toggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+          >
+            {theme === 'dark' ? <IconSun size={22} stroke={1.8} /> : <IconMoon size={22} stroke={1.8} />}
+          </button>
+          <button
+            className="nav-rail-btn"
+            onClick={logout}
+            title="Sign out"
+            style={{ color: 'var(--danger)' }}
+          >
+            <IconLogout size={22} stroke={1.8} />
+          </button>
         </div>
       </aside>
 
@@ -708,8 +718,9 @@ Branch - Visakhapatnam
             textTransform: 'uppercase',
             lineHeight: 1.4
           }}>
+            {/* Developer: Neeraj | Sunshine Technologies */}
             <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'none', letterSpacing: '0.02em', lineHeight: 1.6 }}>
-              &copy; 2026 <a href="https://www.sunshinetechno.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-600)', textDecoration: 'underline' }}>Sunshine Technologies</a>. All rights reserved.
+              Copyright &copy; 2026 <a href="https://www.sunshinetechno.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-600)', textDecoration: 'underline' }}>Sunshine Technologies</a>. All rights reserved.
               <br />Support: 7659091468, 9133377852 &nbsp;|&nbsp; Sales: 8801231166, 9133377854
             </div>
           </div>

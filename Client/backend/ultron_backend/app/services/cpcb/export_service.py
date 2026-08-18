@@ -35,7 +35,8 @@ def build_cpcb_line(
     maintenance_flag: int,
     remark: str,
 ) -> str:
-    return f"{station_name},{parameter},{format_cpcb_timestamp(date_from)},{format_cpcb_timestamp(date_to)},{format_cpcb_value(value)},{calibration_flag},{maintenance_flag},{remark}\n"
+    rem = remark if (remark and remark.strip()) else "0"
+    return f"{station_name},{parameter},{format_cpcb_timestamp(date_from)},{format_cpcb_timestamp(date_to)},{format_cpcb_value(value)},{calibration_flag},{maintenance_flag},{rem}\n"
 
 
 async def export_station_file(db: AsyncSession, config: CPCBStationConfig) -> dict:
@@ -83,7 +84,6 @@ async def export_station_file(db: AsyncSession, config: CPCBStationConfig) -> di
         
         headers = [
             "1,2,3,4,5,6,7,8,\n",
-            "Station name, Parameter, Date from, Date to, Value,calibrationflag,maint flag,Remark,\n"
         ]
         
         lines = [

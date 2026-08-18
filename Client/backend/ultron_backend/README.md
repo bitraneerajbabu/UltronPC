@@ -383,7 +383,7 @@ ultron_backend/
 | `DATABASE_URL` | `sqlite+aiosqlite:///./ultron.db` | Database connection string |
 | `DB_TYPE` | `sqlite` | Embedded database type |
 | `APP_NAME` | `UltrON` | Application display name |
-| `APP_VERSION` | `1.0.0` | Version string |
+| `APP_VERSION` | `1.1` | Version string (v1.1 Production) |
 | `DEBUG` | `false` | Enable debug logging |
 | `POLLING_DEFAULT_INTERVAL` | `60` | Default poll interval (seconds) |
 
