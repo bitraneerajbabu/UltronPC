@@ -60,16 +60,17 @@ if IS_FROZEN:
             except Exception as copy_err:
                 print(f"[UltrON] Failed to copy .env.template: {copy_err}", file=sys.stderr)
     
-    # Copy bundled DB template to APP_DIR on first run (fresh install or empty stub)
+    # Copy bundled DB template to APP_DIR ONLY on brand new fresh install when DB does not exist
     if BUNDLE_DB.is_file():
-        dest_is_empty_stub = DB_FILE.is_file() and DB_FILE.stat().st_size < 50000 and BUNDLE_DB.stat().st_size > 50000
-        if not DB_FILE.is_file() or dest_is_empty_stub:
+        if not DB_FILE.is_file():
             try:
                 import shutil
                 shutil.copy2(str(BUNDLE_DB), str(DB_FILE))
-                print(f"[UltrON] Extracted bundled database ({BUNDLE_DB.stat().st_size // 1024} KB) to {DB_FILE.name}", file=sys.stderr)
+                print(f"[UltrON] Initialized brand new database from template to {DB_FILE.name}", file=sys.stderr)
             except Exception as copy_err:
-                print(f"[UltrON] Failed to extract bundled database: {copy_err}", file=sys.stderr)
+                print(f"[UltrON] Failed to initialize template database: {copy_err}", file=sys.stderr)
+        else:
+            print(f"[UltrON] Preserved existing client database ({DB_FILE.stat().st_size // 1024} KB) at {DB_FILE}", file=sys.stderr)
 
 
 def _recover_config(is_frozen: bool, env_file: Path, env_enc_file: Path, app_dir: Path, bundled_env_enc: Path | None, bundled_env: Path | None = None) -> None:

@@ -35,19 +35,28 @@
 - **API keys:** Static, stored in DB plaintext. No JWTs.
 - **Login:** Returns `admin_key` in response body (plaintext echo)
 
-## Latest Session (2026-08-16) — UltrON v1.1 Official Production Release
-- **APP_VERSION:** `1.1` (Frontend + Backend synced)
-- **Reports & Trends Screen Redesign:**
-  - Standard industrial time-series line chart as default visualization (straight lines, `tension: 0`, genuine telemetry timestamps, zero artificial spline smoothing).
-  - Step mode support for totalizers, discrete/digital states, and counters.
-  - Live summary statistics header (`Current`, `Min`, `Max`, `Avg`) calculated directly from true telemetry values.
-  - Quick time range presets (`1 Hr`, `6 Hr`, `12 Hr`, `1 Day`, `7 Days`, `30 Days`, `Custom`) with instant dynamic updates.
-  - Real communication gap representation (`spanGaps: false`).
-  - Alarm limit threshold reference lines (`H/H`, `High`, `Low`, `L/L`).
-  - Comprehensive export capabilities in PDF, CSV, and Excel.
-- **Orphan Device & Station Auto-Cleanup:**
-  - Deleting parameters/rules automatically purges empty devices and stations to prevent ghost polling loops.
-  - Polling loop synchronization keeps background acquisition strictly 1:1 with active devices.
+## Latest Session (2026-08-19) — UltrON v1.1 Production Release & Full System Lock
+- **Official Version:** Locked to `v1.1` (`1.1.0`) across backend (`config.py`), frontend (`package.json`), installer (`installer.iss`), and fleet sync (`rajapi_sync.py`).
+- **CPCB 15-Minute Averaging & Annexure-I TXT Pipeline:**
+  - Automated 15-min scheduler writes compliant flat files with `1,2,3,4,5,6,7,8,` header and `,0,0,0` normal flags.
+  - Automatic folder/file creation (`os.makedirs`) and 95-interval FIFO rotation.
+- **Warning High Limit Lock (`alarm_high` Capping):**
+  - When real measured telemetry exceeds `alarm_high` (e.g. 88.0 vs limit 80.0), value is clamped to `alarm_high` (`80.00`) across Dashboard, Historian, Reports, and Cloud Pushes (SPCB, TGPCB, APPCB, TNPCB, RajAPI).
+- **Strict Offline Exclusion & Zero Fake Data:**
+  - When a device is offline/disconnected, telemetry is marked Quality `E` (`NA`) and completely skipped from state board pushes (no fake zeros, no dummy data, zero junk in `pending_uploads`).
+  - Genuine `0.00` physical measurements are preserved as valid Quality `U`.
+- **Modbus RTU & Serial Framing (`8-E-1`, `8-N-1`, etc.):**
+  - Added Data Bits (`7`, `8`), Parity (`None`, `Even`, `Odd`), and Stop Bits (`1`, `2`) controls in Device Management.
+  - Unrestricted Baud Rates (`1200` to `921600 bps` + custom entry).
+- **5-Second Deterministic Modbus Loop:**
+  - Multi-parameter batch polling on single slave, reads in ~1-2s, immediately closes/releases serial port, and holds in memory for the remainder of the 5-second interval.
+- **State Board Outages & Backlog Flush:**
+  - Failed live pushes (`HTTP 500`/timeout) queue into SQLite `pending_uploads` and flush rate-controlled to configured `delay_url` upon connectivity restoration.
+- **Reports & Trends Synchronization:**
+  - Reports: Multi-station ("All Stations") + single/multi parameter selection, normal & average modes (`1m` to `24h`), exported in **PDF, CSV, Excel**. Offline intervals display as `"NA"`.
+  - Trends: Time-series line chart with threshold lines, exported exclusively in **PDF and PNG only**.
+- **Role Hierarchy Enforced:** `SuperMaster` (Rank 1 Admin), `Master` (Rank 2 Admin), `Client` (Dashboard & Reports only).
+- **E2E Practical Verification:** 100% test pass on `test_live_practical_verification.py`, `test_warning_high_lock.py`, and `test_server_push_guard.py`. Server live and serving on port 8000.
 
 ## Previous Session (2026-07-07) — UltrON v1.0.69 Release & Fixes
 

@@ -408,7 +408,10 @@ _UI_DIST = Path(__file__).parent.parent / "ui_dist"
 async def root():
     index = _UI_DIST / "index.html"
     if index.is_file():
-        return FileResponse(str(index))
+        return FileResponse(
+            str(index),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+        )
     return JSONResponse({
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,

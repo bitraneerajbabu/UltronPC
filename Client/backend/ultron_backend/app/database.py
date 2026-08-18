@@ -78,154 +78,77 @@ async def init_db():
         except Exception as ts_err:
             log.info(f"TimescaleDB extension check skipped or failed: {ts_err}")
 
-        # 2. One-time column migrations (gated — skip if sentinel column exists)
-        def get_columns(sync_conn, table_name):
-            from sqlalchemy import inspect
-            inspector = inspect(sync_conn)
-            try:
-                return {col["name"] for col in inspector.get_columns(table_name)}
-            except Exception:
-                return set()
-
-        needs_migration = True
-        try:
-            existing_cpcb = await conn.run_sync(get_columns, "cpcb_station_config")
-            if "retention_count" in existing_cpcb:
-                needs_migration = False
-        except Exception:
-            pass
-
-        if needs_migration:
-            log.info("Applying column migrations …")
-            for table, cols in {
-                "server_config": [
-                    ("protocol", "VARCHAR(20) DEFAULT 'tspcb'"),
-                    ("cpcb_file_path", "VARCHAR(500)"),
-                    ("is_cpcb_active", "BOOLEAN DEFAULT TRUE"),
-                    ("led_station_name", "VARCHAR(100)"),
-                    ("live_url", "VARCHAR(500)"),
-                    ("delay_url", "VARCHAR(500)"),
-                ],
-                "server_parameter_mapping": [
-                    ("cpcb_station_name", "VARCHAR(100)"),
-                    ("cpcb_parameter", "VARCHAR(100)"),
-                    ("led_channel_name", "VARCHAR(100)"),
-                    ("led_unit", "VARCHAR(50)"),
-                    ("api_id", "VARCHAR(100)"),
-                    ("api_name", "VARCHAR(100)"),
-                    ("api_password", "VARCHAR(100)"),
-                    ("api_vname", "VARCHAR(100)"),
-                    ("api_unit", "VARCHAR(50)"),
-                ],
-                "devices": [
-                    ("csv_folder", "VARCHAR(500)"),
-                    ("csv_filename_pattern", "VARCHAR(200)"),
-                    ("csv_delimiter", "VARCHAR(5) DEFAULT ','"),
-                    ("csv_timestamp_col", "INTEGER"),
-                    ("request_hex", "VARCHAR(500)"),
-                    ("response_delimiter", "VARCHAR(20) DEFAULT 'newline'"),
-                    ("command_format", "VARCHAR(10)"),
-                    ("request_command", "TEXT"),
-                ],
-                "parameters": [
-                    ("parse_method", "VARCHAR(30) DEFAULT 'csv_col'"),
-                    ("parse_config", "TEXT"),
-                    ("host", "VARCHAR(100)"),
-                    ("port", "INTEGER"),
-                    ("serial_port", "VARCHAR(50)"),
-                    ("baud_rate", "INTEGER"),
-                    ("data_bits", "INTEGER"),
-                    ("parity", "VARCHAR(5)"),
-                    ("stop_bits", "INTEGER"),
-                    ("slave_id", "INTEGER"),
-                ],
-                "stations": [
-                    ("last_seen", "DATETIME"),
-                    ("last_error", "TEXT"),
-                ],
-                "users": [
-                    ("created_by", "VARCHAR(80)"),
-                    ("last_login", "DATETIME"),
-                    ("failed_login_attempts", "INTEGER DEFAULT 0"),
-                    ("locked_until", "DATETIME"),
-                    ("password_changed_at", "DATETIME"),
-                    ("require_password_change", "BOOLEAN DEFAULT FALSE"),
-                ],
-                "cpcb_station_config": [
-                    ("calibration_mode", "BOOLEAN DEFAULT FALSE"),
-                    ("maintenance_mode", "BOOLEAN DEFAULT FALSE"),
-                    ("station_code", "VARCHAR(50)"),
-                    ("export_enabled", "BOOLEAN DEFAULT TRUE"),
-                    ("export_path", "VARCHAR(500) DEFAULT 'C:\\Data'"),
-                    ("cpcb_enabled", "BOOLEAN DEFAULT TRUE"),
-                    ("timezone", "VARCHAR(50) DEFAULT 'Asia/Kolkata'"),
-                    ("retention_count", "INTEGER DEFAULT 97"),
-                ],
-                "pending_uploads": [
-                    ("server_config_id", "INTEGER"),
-                    ("protocol", "VARCHAR(20) DEFAULT 'spcb'"),
-                ],
-            }.items():
+        # 2. Automated Safe Pre-Migration Backup (SQLite)
+        def _backup_sqlite_db():
+            import shutil, glob
+            from datetime import datetime
+            from pathlib import Path
+            db_path_str = settings.DATABASE_URL.replace("sqlite+aiosqlite:///", "").replace("sqlite:///", "")
+            if not db_path_str or db_path_str.startswith(":memory:"):
+                return
+            p = Path(db_path_str)
+            if p.is_file() and p.stat().st_size > 0:
+                backup_dir = p.parent / "backups"
+                backup_dir.mkdir(parents=True, exist_ok=True)
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                backup_file = backup_dir / f"ultron_pre_update_{timestamp}.db"
                 try:
-                    existing = await conn.run_sync(get_columns, table)
-                    for col_name, col_type in cols:
-                        if col_name not in existing:
-                            await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}"))
-                            log.info(f"Migrated: added '{col_name}' to {table}")
-                except Exception as e:
-                    log.warning(f"{table} migration skipped: {e}")
-        else:
-            log.info("Column migrations already applied, skipping.")
+                    shutil.copy2(str(p), str(backup_file))
+                    log.info(f"Database pre-update backup created: {backup_file.name}")
+                    # Keep latest 5 backups
+                    backups = sorted(backup_dir.glob("ultron_pre_update_*.db"), key=os.path.getmtime)
+                    if len(backups) > 5:
+                        for old_b in backups[:-5]:
+                            try:
+                                old_b.unlink()
+                            except Exception:
+                                pass
+                except Exception as b_err:
+                    log.warning(f"Database pre-update backup warning: {b_err}")
 
-        # 2.1 Always-checked migrations (security columns — not gated by sentinel)
-        def _ensure_security_columns(sync_conn):
-            from sqlalchemy import inspect
+        _backup_sqlite_db()
+
+        # 3. Universal Non-Destructive Schema Auto-Migrator
+        # Dynamically inspects all tables/columns across all ORM models against the database.
+        # Safely runs ALTER TABLE ADD COLUMN for any missing column on every startup.
+        def _auto_migrate_all_models(sync_conn):
+            from sqlalchemy import inspect, text
+            from sqlalchemy.dialects import sqlite
+            import enum
             inspector = inspect(sync_conn)
-            try:
-                cols = {col["name"] for col in inspector.get_columns("users")}
-            except Exception:
-                return
-            sec_cols = {
-                "failed_login_attempts",
-                "locked_until",
-                "password_changed_at",
-                "require_password_change",
-                "allow_server_mgmt",
-                "is_super_admin",
-            }
-            missing = sec_cols - cols
-            for col_name in missing:
-                col_type = {
-                    "failed_login_attempts": "INTEGER DEFAULT 0",
-                    "locked_until": "DATETIME",
-                    "password_changed_at": "DATETIME",
-                    "require_password_change": "BOOLEAN DEFAULT FALSE",
-                    "allow_server_mgmt": "BOOLEAN DEFAULT TRUE",
-                    "is_super_admin": "BOOLEAN DEFAULT FALSE",
-                }[col_name]
-                sync_conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type}"))
-                log.info(f"Security migration: added '{col_name}' to users")
+            existing_tables = set(inspector.get_table_names())
+            
+            for table_name, table in Base.metadata.tables.items():
+                if table_name not in existing_tables:
+                    continue
+                try:
+                    existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
+                except Exception:
+                    continue
+                    
+                for column in table.columns:
+                    if column.name not in existing_cols:
+                        col_type = column.type.compile(dialect=sqlite.dialect())
+                        default_clause = ""
+                        if column.default is not None and column.default.arg is not None:
+                            arg = column.default.arg
+                            if isinstance(arg, enum.Enum):
+                                default_clause = f" DEFAULT '{arg.value}'"
+                            elif isinstance(arg, bool):
+                                default_clause = f" DEFAULT {1 if arg else 0}"
+                            elif isinstance(arg, (int, float)):
+                                default_clause = f" DEFAULT {arg}"
+                            elif isinstance(arg, str):
+                                default_clause = f" DEFAULT '{arg}'"
+                        
+                        alter_sql = f"ALTER TABLE {table_name} ADD COLUMN {column.name} {col_type}{default_clause}"
+                        try:
+                            sync_conn.execute(text(alter_sql))
+                            log.info(f"Schema Auto-Migrate: added '{column.name}' ({col_type}) to table '{table_name}' [OK]")
+                        except Exception as alter_err:
+                            log.warning(f"Schema Auto-Migrate warning for {table_name}.{column.name}: {alter_err}")
 
-        await conn.run_sync(_ensure_security_columns)
-
-        # 2.12 Always-checked: Serial ASCII columns (added v1.0.70+)
-        def _ensure_serial_ascii_columns(sync_conn):
-            from sqlalchemy import inspect
-            inspector = inspect(sync_conn)
-            try:
-                cols = {col["name"] for col in inspector.get_columns("devices")}
-            except Exception:
-                return
-            new_cols = {
-                "command_format":  "VARCHAR(10)",
-                "request_command": "TEXT",
-            }
-            for col_name, col_type in new_cols.items():
-                if col_name not in cols:
-                    sync_conn.execute(text(f"ALTER TABLE devices ADD COLUMN {col_name} {col_type}"))
-                    log.info(f"Serial ASCII migration: added '{col_name}' to devices")
-
-        await conn.run_sync(_ensure_serial_ascii_columns)
+        await conn.run_sync(_auto_migrate_all_models)
 
         # 2.14 Always-checked: PendingUpload schema migration (added v1.0.70+)
         def _ensure_pending_upload_columns(sync_conn):

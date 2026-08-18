@@ -59,6 +59,23 @@ export const AppProvider = ({ children }) => {
   const pendingRequestsRef = useRef<Record<string, AbortController>>({});
   const [pendingStatus, setPendingStatus] = useState<Record<string, string>>({});
 
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('ultron_theme') as 'light' | 'dark') || 'light';
+  });
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('ultron_theme', next);
+      document.documentElement.setAttribute('data-theme', next);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
+
   // ─── Startup token validation with auto-refresh ─────────────────────────────
   // On first load, verify the stored token. If expired (401), try refresh.
   // Only clear and force re-login if both token and refresh fail.
@@ -994,7 +1011,8 @@ export const AppProvider = ({ children }) => {
       plantName, plantAddress, plantLogo, saveLocalSettings, pendingStatus,
       loading, parseUtcDate, hasLoadedOnce,
       broadcasts, amcExpiry,
-      isLicensed, setIsLicensed, lockStatus, setLockStatus, lockReason, setLockReason
+      isLicensed, setIsLicensed, lockStatus, setLockStatus, lockReason, setLockReason,
+      theme, toggleTheme, setTheme
     }}>
       <LiveDataContext.Provider value={{
         liveData, kpis,

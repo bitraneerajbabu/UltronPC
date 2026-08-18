@@ -1,54 +1,65 @@
 /**
  * UltrON — Centralized Design Tokens
  * Single source of truth for colors, typography, spacing, shadows, and component styles.
- * Import { T, INP, SEL, PROTO, INPUT_TYPES } from '../theme' wherever needed.
+ * Import { T, INP, SEL, PROTO, INPUT_TYPES, PARAM_STATE, getParamState } from '../theme' wherever needed.
  */
 
 // ─── Core Palette ─────────────────────────────────────────────────────────────
 export const T = {
-  // Brand / Primary — dark teal industrial
+  // Brand / Primary — Dark Teal Industrial Ramp
   primary:       '#0F6E56',
+  primaryDark:   '#04342C',
+  primaryMid:    '#085041',
   primaryAccent: '#1D9E75',
-  primaryGlow:   'rgba(15,110,86,0.25)',
-  primaryBg:     'rgba(15,110,86,0.06)',
-  primaryBorder: 'rgba(15,110,86,0.12)',
+  primaryGlow:   'rgba(15, 110, 86, 0.22)',
+  primaryBg:     'rgba(15, 110, 86, 0.08)',
+  primaryBorder: 'rgba(15, 110, 86, 0.16)',
 
   // Semantic
   success:    '#1D9E75',
-  successBg:  'rgba(29,158,117,0.12)',
+  successBg:  'rgba(29, 158, 117, 0.12)',
   warning:    '#EF9F27',
-  warningBg:  'rgba(239,159,39,0.12)',
+  warningBg:  'rgba(239, 159, 39, 0.12)',
   warningDark:'#C07E12',
   error:      '#E24B4A',
-  errorBg:    'rgba(226,75,74,0.1)',
-  errorGlow:  'rgba(226,75,74,0.35)',
+  errorBg:    'rgba(226, 75, 74, 0.1)',
+  errorGlow:  'rgba(226, 75, 74, 0.35)',
   info:       '#378ADD',
-  infoBg:     'rgba(55,138,221,0.12)',
+  infoBg:     'rgba(55, 138, 221, 0.12)',
 
-  // Neutrals — light mode, slate hierarchy
-  text:        '#0F172A',
-  textMuted:   '#475569',
-  textFaint:   '#64748B',
-  textLabel:   '#334155',
-  border:      'rgba(15, 110, 86, 0.15)',
-  borderSoft:  'rgba(15, 110, 86, 0.08)',
+  // Neutrals — Deep Dark Teal Typography
+  text:        '#04342C',
+  textMuted:   '#085041',
+  textFaint:   '#40534C',
+  textLabel:   '#0F6E56',
+  border:      'rgba(15, 110, 86, 0.14)',
+  borderSoft:  'rgba(15, 110, 86, 0.07)',
 
   // Surfaces
+  surface:     '#FFFFFF',
+  surfaceMuted:'#F0F4F2',
   glass:       '#FFFFFF',
   glassHover:  '#F0FDF4',
   glassDark:   '#F0FDF4',
 
   // Shadows
-  shadowSm:    '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-  shadowMd:    '0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04)',
-  shadowLg:    '0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04)',
-  shadowGlow:  '0 0 16px rgba(15,110,86,0.12)',
+  shadowSm:    '0 1px 2px 0 rgba(4, 52, 44, 0.05)',
+  shadowMd:    '0 4px 12px -2px rgba(4, 52, 44, 0.08), 0 2px 6px -2px rgba(4, 52, 44, 0.04)',
+  shadowLg:    '0 10px 24px -4px rgba(4, 52, 44, 0.1), 0 4px 8px -4px rgba(4, 52, 44, 0.05)',
+  shadowCard:  '0 8px 24px -4px rgba(4, 52, 44, 0.05), 0 2px 6px rgba(4, 52, 44, 0.02)',
+  shadowFloating: '0 12px 32px -4px rgba(4, 52, 44, 0.12), 0 4px 12px rgba(4, 52, 44, 0.04)',
+  shadowGlow:  '0 0 16px rgba(15, 110, 86, 0.14)',
 
   // Radii
   r:           '10px',
   rMd:         '14px',
   rLg:         '18px',
-  rFull:       '99px',
+  rCard:       '20px',
+  rCapsule:    '28px',
+  rFull:       '999px',
+
+  // Featured Gradient
+  featuredGradient: 'linear-gradient(135deg, #085041 0%, #04342C 100%)',
 
   // Font families
   fontMono: "ui-monospace, Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace",
@@ -58,13 +69,13 @@ export const T = {
 // ─── Input / Select base styles ───────────────────────────────────────────────
 export const INP = {
   width: '100%',
-  padding: '7px 10px',
-  borderRadius: T.r,
+  padding: '8px 12px',
+  borderRadius: '12px',
   border: `1px solid ${T.primaryBorder}`,
-  background: 'rgba(225, 245, 238, 0.5)',
-  fontSize: '12px',
+  background: 'var(--surface)',
+  fontSize: '13px',
   fontFamily: T.fontBase,
-  color: T.text,
+  color: 'var(--text-primary)',
   outline: 'none',
   transition: 'border-color 0.15s, box-shadow 0.15s',
 };
@@ -84,18 +95,21 @@ export const PROTO = {
   csv:        { label: 'CSV Watch',  color: '#fbbf24', bg: 'rgba(251,191,36,0.12)',  glow: 'rgba(251,191,36,0.25)',  icon: '' },
 };
 
-// ─── Sensor card state ────────────────────────────────────────────────────────
+// ─── Sensor card state (3-tier threshold + offline + not configured) ──────────
 export const PARAM_STATE = {
-  offline:  { cls: 'sensor-card-offline',  badge: 'OFFLINE',  text: 'OFFLINE',  dot: T.error   },
-  critical: { cls: 'sensor-card-exceeded', badge: 'CRITICAL', text: 'CRITICAL', dot: '#E24B4A'  },
-  warning:  { cls: 'sensor-card-exceeded', badge: 'WARNING',  text: 'EXCEEDED', dot: '#EF9F27'  },
-  good:     { cls: 'sensor-card-good',     badge: 'VALID',    text: 'VALID',    dot: T.primary  },
+  offline:        { cls: 'sensor-card-offline',        badge: 'OFFLINE',        text: 'OFFLINE',        dot: '#E14D4D'  },
+  not_configured: { cls: 'sensor-card-unconfigured',   badge: 'NOT CONFIGURED', text: 'NOT CONFIGURED', dot: '#94A3B8'  },
+  critical:       { cls: 'sensor-card-critical',       badge: 'EXCEEDED',       text: 'EXCEEDED',       dot: '#E24B4A'  },
+  warning:        { cls: 'sensor-card-warning',        badge: 'WARNING',        text: 'WARNING',        dot: '#EF9F27'  },
+  good:           { cls: 'sensor-card-good',           badge: 'NOMINAL',        text: 'NOMINAL',        dot: '#1D9E75'  },
 };
 
 export const getParamState = (param, livePoint) => {
   if (!livePoint || livePoint.status !== 'online') return PARAM_STATE.offline;
+  if (!param || (param.device_id === null && param.device_id === undefined)) return PARAM_STATE.not_configured;
   const val = parseFloat(livePoint.value);
-  if (!param.alarm_enabled || isNaN(val)) return PARAM_STATE.good;
+  if (isNaN(val)) return PARAM_STATE.offline;
+  if (!param.alarm_enabled) return PARAM_STATE.good;
   if (
     (param.alarm_high_high != null && val >= param.alarm_high_high) ||
     (param.alarm_low_low  != null && val <= param.alarm_low_low)
@@ -113,7 +127,7 @@ export const BTN = {
     background: `linear-gradient(135deg, ${T.primary}, ${T.primaryAccent})`,
     color: '#fff',
     border: 'none',
-    borderRadius: T.r,
+    borderRadius: '12px',
     padding: '8px 18px',
     fontSize: '12px',
     fontWeight: '700',
@@ -125,7 +139,7 @@ export const BTN = {
     background: 'transparent',
     color: T.textLabel,
     border: `1px solid ${T.primaryBorder}`,
-    borderRadius: T.r,
+    borderRadius: '12px',
     padding: '7px 14px',
     fontSize: '12px',
     fontWeight: '700',
@@ -135,7 +149,7 @@ export const BTN = {
     background: T.errorBg,
     color: T.error,
     border: `1.5px solid rgba(239,68,68,0.2)`,
-    borderRadius: T.r,
+    borderRadius: '12px',
     padding: '7px 13px',
     fontSize: '11px',
     fontWeight: '700',
@@ -149,19 +163,19 @@ export const GLASS_CARD = {
   backdropFilter: 'blur(16px)',
   WebkitBackdropFilter: 'blur(16px)',
   border: `1px solid ${T.border}`,
-  borderRadius: T.rLg,
+  borderRadius: T.rCard,
 };
 
 // ─── Parameter category theme colors ──────────────────────────────────────────
 export const PARAM_THEMES = {
-  pm:      { color: '#0F6E56', bg: 'rgba(15, 110, 86, 0.07)',   border: 'rgba(15, 110, 86, 0.25)',   glow: 'rgba(15, 110, 86, 0.2)'   },
-  co:      { color: '#EF9F27', bg: 'rgba(239, 159, 39, 0.07)',  border: 'rgba(239, 159, 39, 0.25)',  glow: 'rgba(239, 159, 39, 0.2)'  },
-  nox:     { color: '#378ADD', bg: 'rgba(55, 138, 221, 0.07)',  border: 'rgba(55, 138, 221, 0.25)',  glow: 'rgba(55, 138, 221, 0.2)'  },
-  so2:     { color: T.warningDark, bg: 'rgba(192, 126, 18, 0.07)', border: 'rgba(192, 126, 18, 0.25)', glow: 'rgba(192, 126, 18, 0.2)' },
-  o3:      { color: '#378ADD', bg: 'rgba(55, 138, 221, 0.07)',  border: 'rgba(55, 138, 221, 0.25)',  glow: 'rgba(55, 138, 221, 0.2)'  },
-  ambient: { color: '#1D9E75', bg: 'rgba(29, 158, 117, 0.07)',  border: 'rgba(29, 158, 117, 0.25)',  glow: 'rgba(29, 158, 117, 0.2)'  },
-  wind:    { color: '#1D9E75', bg: 'rgba(29, 158, 117, 0.07)',  border: 'rgba(29, 158, 117, 0.25)',  glow: 'rgba(29, 158, 117, 0.2)'  },
-  default: { color: '#0F6E56', bg: 'rgba(15, 110, 86, 0.07)',  border: 'rgba(15, 110, 86, 0.18)',  glow: 'rgba(15, 110, 86, 0.2)'  },
+  pm:      { color: '#0F6E56', bg: 'rgba(15, 110, 86, 0.08)',   border: 'rgba(15, 110, 86, 0.25)',   glow: 'rgba(15, 110, 86, 0.2)'   },
+  co:      { color: '#EF9F27', bg: 'rgba(239, 159, 39, 0.08)',  border: 'rgba(239, 159, 39, 0.25)',  glow: 'rgba(239, 159, 39, 0.2)'  },
+  nox:     { color: '#378ADD', bg: 'rgba(55, 138, 221, 0.08)',  border: 'rgba(55, 138, 221, 0.25)',  glow: 'rgba(55, 138, 221, 0.2)'  },
+  so2:     { color: T.warningDark, bg: 'rgba(192, 126, 18, 0.08)', border: 'rgba(192, 126, 18, 0.25)', glow: 'rgba(192, 126, 18, 0.2)' },
+  o3:      { color: '#378ADD', bg: 'rgba(55, 138, 221, 0.08)',  border: 'rgba(55, 138, 221, 0.25)',  glow: 'rgba(55, 138, 221, 0.2)'  },
+  ambient: { color: '#1D9E75', bg: 'rgba(29, 158, 117, 0.08)',  border: 'rgba(29, 158, 117, 0.25)',  glow: 'rgba(29, 158, 117, 0.2)'  },
+  wind:    { color: '#1D9E75', bg: 'rgba(29, 158, 117, 0.08)',  border: 'rgba(29, 158, 117, 0.25)',  glow: 'rgba(29, 158, 117, 0.2)'  },
+  default: { color: '#0F6E56', bg: 'rgba(15, 110, 86, 0.08)',  border: 'rgba(15, 110, 86, 0.18)',  glow: 'rgba(15, 110, 86, 0.2)'  },
 };
 
 export const getParamTheme = (tagName?: string) => {
@@ -175,4 +189,3 @@ export const getParamTheme = (tagName?: string) => {
   if (t.includes('wind') || t.includes('ws') || t.includes('wd') || t.includes('dir') || t.includes('speed')) return PARAM_THEMES.wind;
   return PARAM_THEMES.default;
 };
-

@@ -25,6 +25,7 @@ const revMap = Object.fromEntries(
 );
 const CUSTOM_PROTOCOLS = ['tcp_custom', 'udp_custom'];
 const NON_MODBUS_PROTOCOLS = ['tcp_custom', 'udp_custom', 'serial_ascii'];
+const BAUD_RATES = [1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600, 115200, 128000, 230400, 256000, 460800, 921600];
 
 const getDataTypeLabel = (dt, bo) => revMap[dt + '|' + bo] || 'Float point';
 
@@ -829,12 +830,38 @@ export const DevicesScreen = React.memo(() => {
                             <div>
                               <label htmlFor="param_baud_rate" style={s()}>Baud Rate</label>
                               <select id="param_baud_rate" name="baud_rate" value={form.baud_rate || 9600} onChange={handleChange} style={ipt}>
-                                {[9600, 19200, 38400, 57600, 115200].map(b => <option key={b} value={b}>{b}</option>)}
+                                {Array.from(new Set([...BAUD_RATES, Number(form.baud_rate) || 9600])).sort((a, b) => a - b).map(b => (
+                                  <option key={b} value={b}>{b} bps</option>
+                                ))}
                               </select>
                             </div>
                             <div>
                               <label htmlFor="param_slave_id" style={s()}>Slave ID</label>
                               <input id="param_slave_id" type="number" name="slave_id" value={form.slave_id} onChange={handleChange} style={ipt} />
+                            </div>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                            <div>
+                              <label htmlFor="param_data_bits" style={s()}>Data Bits</label>
+                              <select id="param_data_bits" name="data_bits" value={form.data_bits || 8} onChange={handleChange} style={ipt}>
+                                <option value={8}>8 Data Bits</option>
+                                <option value={7}>7 Data Bits</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label htmlFor="param_parity" style={s()}>Parity</label>
+                              <select id="param_parity" name="parity" value={form.parity || 'N'} onChange={handleChange} style={ipt}>
+                                <option value="N">None (N)</option>
+                                <option value="E">Even (E)</option>
+                                <option value="O">Odd (O)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label htmlFor="param_stop_bits" style={s()}>Stop Bits</label>
+                              <select id="param_stop_bits" name="stop_bits" value={form.stop_bits || 1} onChange={handleChange} style={ipt}>
+                                <option value={1}>1 Stop Bit</option>
+                                <option value={2}>2 Stop Bits</option>
+                              </select>
                             </div>
                           </div>
                         </div>
@@ -849,7 +876,9 @@ export const DevicesScreen = React.memo(() => {
                             <div>
                               <label htmlFor="param_baud_rate" style={s()}>Baud Rate</label>
                               <select id="param_baud_rate" name="baud_rate" value={form.baud_rate || 9600} onChange={handleChange} style={ipt}>
-                                {[9600, 19200, 38400, 57600, 115200].map(b => <option key={b} value={b}>{b}</option>)}
+                                {Array.from(new Set([...BAUD_RATES, Number(form.baud_rate) || 9600])).sort((a, b) => a - b).map(b => (
+                                  <option key={b} value={b}>{b} bps</option>
+                                ))}
                               </select>
                             </div>
                             <div>
@@ -858,6 +887,30 @@ export const DevicesScreen = React.memo(() => {
                                 <option value="ascii">ASCII</option>
                                 <option value="hex">HEX</option>
                                 <option value="auto">AUTO</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                            <div>
+                              <label htmlFor="param_data_bits" style={s()}>Data Bits</label>
+                              <select id="param_data_bits" name="data_bits" value={form.data_bits || 8} onChange={handleChange} style={ipt}>
+                                <option value={8}>8 Data Bits</option>
+                                <option value={7}>7 Data Bits</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label htmlFor="param_parity" style={s()}>Parity</label>
+                              <select id="param_parity" name="parity" value={form.parity || 'N'} onChange={handleChange} style={ipt}>
+                                <option value="N">None (N)</option>
+                                <option value="E">Even (E)</option>
+                                <option value="O">Odd (O)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label htmlFor="param_stop_bits" style={s()}>Stop Bits</label>
+                              <select id="param_stop_bits" name="stop_bits" value={form.stop_bits || 1} onChange={handleChange} style={ipt}>
+                                <option value={1}>1 Stop Bit</option>
+                                <option value={2}>2 Stop Bits</option>
                               </select>
                             </div>
                           </div>
